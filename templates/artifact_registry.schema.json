@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Artifact Registry Record",
+  "type": "object",
+  "required": ["timestamp", "type"],
+  "properties": {
+    "timestamp": { "type": "string" },
+    "type": { "type": "string" },
+    "id": { "type": "string" },
+    "kind": { "type": "string" },
+    "title": { "type": ["string", "null"] },
+    "path": { "type": ["string", "null"] },
+    "source": { "type": ["string", "null"] },
+    "sha256": { "type": ["string", "null"] },
+    "command": { "type": ["string", "null"] },
+    "exit_code": { "type": ["integer", "null"] },
+    "run_directory": { "type": ["string", "null"] }
+  }
+}

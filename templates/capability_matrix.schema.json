@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Capability Matrix",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "shared_nodes",
+    "subchains",
+    "available_capabilities",
+    "missing_tools"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "shared_nodes": { "type": "array", "items": { "type": "object" } },
+    "subchains": { "type": "array", "items": { "type": "object" } },
+    "available_capabilities": { "type": "array", "items": { "type": "object" } },
+    "missing_tools": { "type": "array", "items": { "type": "object" } }
+  }
+}

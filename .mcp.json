@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "codex_research_loop": {
+      "command": "python",
+      "args": [
+        "./scripts/mcp_server.py"
+      ],
+      "cwd": "."
+    }
+  }
+}

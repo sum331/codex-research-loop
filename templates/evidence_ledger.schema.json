@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Evidence Ledger Record",
+  "type": "object",
+  "required": ["id", "type", "timestamp", "kind", "source", "status"],
+  "properties": {
+    "id": { "type": "string" },
+    "type": { "enum": ["evidence", "evidence_update", "claim", "claim_update"] },
+    "timestamp": { "type": "string" },
+    "kind": { "type": "string" },
+    "source": { "type": "string" },
+    "locator": { "type": ["string", "null"] },
+    "claim_id": { "type": ["string", "null"] },
+    "status": { "enum": ["verified", "partial", "unverified", "failed", "proposed", "supported", "contested", "retracted"] },
+    "note": { "type": ["string", "null"] }
+  }
+}

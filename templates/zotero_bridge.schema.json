@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Zotero Bridge",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "timestamp",
+    "project_root",
+    "collection",
+    "source_material_count",
+    "item_count",
+    "collection_plan",
+    "exports",
+    "attachment_plan",
+    "wiki_plan"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "project_root": { "type": "string" },
+    "collection": { "type": "string" },
+    "source_material_count": { "type": "integer" },
+    "item_count": { "type": "integer" },
+    "dedupe_enabled": { "type": "boolean" },
+    "duplicate_groups": { "type": "array", "items": { "type": "object" } },
+    "items": { "type": "array", "items": { "type": "object" } },
+    "collection_plan": {
+      "type": "object",
+      "required": ["collection_name", "mode", "direct_zotero_write", "items", "attachments"],
+      "properties": {
+        "collection_name": { "type": "string" },
+        "mode": { "type": "string" },
+        "direct_zotero_write": { "type": "boolean" },
+        "direct_write_reason": { "type": "string" },
+        "items": { "type": "array", "items": { "type": "object" } },
+        "attachments": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "exports": {
+      "type": "object",
+      "required": ["csl_json", "bibtex"],
+      "properties": {
+        "csl_json": { "type": "array", "items": { "type": "object" } },
+        "bibtex": { "type": "string" }
+      }
+    },
+    "attachment_plan": { "type": "array", "items": { "type": "object" } },
+    "wiki_plan": {
+      "type": "object",
+      "required": ["enabled", "mode"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "wiki_root": { "type": ["string", "null"] },
+        "page_count": { "type": "integer" },
+        "mode": { "type": "string" }
+      }
+    },
+    "written_paths": { "type": "object" },
+    "wiki_result": { "type": "object" },
+    "zotero_api_notes": { "type": "array", "items": { "type": "string" } }
+  }
+}

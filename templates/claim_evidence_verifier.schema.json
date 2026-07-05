@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Claim Evidence Verification Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "timestamp",
+    "project_root",
+    "stage",
+    "claim_count",
+    "evidence_count",
+    "summary",
+    "severity_counts",
+    "issues",
+    "claims"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "project_root": { "type": "string" },
+    "stage": { "type": "string" },
+    "claim_count": { "type": "integer" },
+    "evidence_count": { "type": "integer" },
+    "require_source_material": { "type": "boolean" },
+    "summary": {
+      "type": "object",
+      "required": ["verified", "partial", "unsupported", "failed"],
+      "properties": {
+        "verified": { "type": "integer" },
+        "partial": { "type": "integer" },
+        "unsupported": { "type": "integer" },
+        "failed": { "type": "integer" }
+      }
+    },
+    "severity_counts": {
+      "type": "object",
+      "properties": {
+        "high": { "type": "integer" },
+        "medium": { "type": "integer" },
+        "low": { "type": "integer" }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "code", "claim_id", "text"],
+        "properties": {
+          "severity": { "type": "string" },
+          "code": { "type": "string" },
+          "claim_id": { "type": "string" },
+          "evidence_id": { "type": "string" },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim_id", "verdict", "evidence_ids", "evidence_checks", "issues"],
+        "properties": {
+          "claim_id": { "type": "string" },
+          "text": { "type": ["string", "null"] },
+          "status": { "type": ["string", "null"] },
+          "stage": { "type": ["string", "null"] },
+          "verdict": { "enum": ["verified", "partial", "unsupported", "failed"] },
+          "evidence_ids": { "type": "array", "items": { "type": "string" } },
+          "evidence_checks": { "type": "array", "items": { "type": "object" } },
+          "issues": { "type": "array", "items": { "type": "object" } }
+        }
+      }
+    }
+  }
+}

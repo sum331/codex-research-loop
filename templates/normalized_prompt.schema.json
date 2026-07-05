@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Normalized Prompt",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "timestamp",
+    "raw_input",
+    "routing_intent",
+    "working_prompt",
+    "task_type",
+    "depth_level",
+    "project_context",
+    "missing_slots",
+    "downstream_prompt"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "raw_input": { "type": "string" },
+    "routing_intent": { "type": "string" },
+    "working_prompt": { "type": "string" },
+    "task_type": { "type": "string" },
+    "depth_level": { "type": "string" },
+    "project_context": { "type": "object" },
+    "missing_slots": { "type": "array", "items": { "type": "object" } },
+    "blockers": { "type": "array", "items": { "type": "object" } },
+    "warnings": { "type": "array", "items": { "type": "object" } },
+    "downstream_prompt": { "type": "string" }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Content Ingest Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "timestamp",
+    "project_root",
+    "mode",
+    "recorded_materials",
+    "items"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "project_root": { "type": "string" },
+    "mode": { "enum": ["auto", "article", "data", "file"] },
+    "recorded_materials": { "type": "integer" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "family",
+          "raw_path",
+          "package_path",
+          "metadata_path",
+          "sha256",
+          "route_target"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "source": { "type": "string" },
+          "family": { "enum": ["article", "data", "file"] },
+          "title": { "type": ["string", "null"] },
+          "content_type": { "type": ["string", "null"] },
+          "raw_path": { "type": "string" },
+          "content_path": { "type": ["string", "null"] },
+          "package_path": { "type": "string" },
+          "metadata_path": { "type": "string" },
+          "sha256": { "type": "string" },
+          "summary": { "type": "string" },
+          "storage_bucket": { "type": "string" },
+          "storage_policy": { "type": "string" },
+          "route_target": {
+            "enum": [
+              "article-processing-chain",
+              "standard-data-package",
+              "material-registry"
+            ]
+          },
+          "material_id": { "type": "string" },
+          "wiki_page": { "type": "string" }
+        }
+      }
+    }
+  }
+}

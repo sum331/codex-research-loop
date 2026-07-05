@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Decision Log Record",
+  "type": "object",
+  "required": ["id", "timestamp", "type", "stage"],
+  "properties": {
+    "id": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "type": {
+      "enum": [
+        "decision",
+        "decision_update",
+        "checkpoint",
+        "passport_update",
+        "profile_update",
+        "question",
+        "question_update",
+        "risk",
+        "risk_update",
+        "next_action",
+        "next_action_update",
+        "route_plan"
+      ]
+    },
+    "stage": { "type": "string" },
+    "decision": { "type": "string" },
+    "rationale": { "type": ["string", "null"] },
+    "alternatives": { "type": "array", "items": { "type": "string" } },
+    "status": { "type": "string" }
+  }
+}

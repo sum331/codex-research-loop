@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Route Plan",
+  "type": "object",
+  "required": ["timestamp", "stage", "task_type", "depth_level", "recommendations"],
+  "properties": {
+    "timestamp": { "type": "string" },
+    "project_root": { "type": "string" },
+    "stage": { "type": "string" },
+    "intent": { "type": ["string", "null"] },
+    "normalized_input": { "type": "object" },
+    "task_type": { "type": "string" },
+    "depth_level": { "type": "string" },
+    "profile": { "type": "object" },
+    "active_question": { "type": ["string", "null"] },
+    "output_targets": { "type": "array", "items": { "type": "string" } },
+    "material_kinds": { "type": "array", "items": { "type": "string" } },
+    "blockers": { "type": "array", "items": { "type": "object" } },
+    "warnings": { "type": "array", "items": { "type": "object" } },
+    "shared_nodes": { "type": "array", "items": { "type": "object" } },
+    "subchains": { "type": "array", "items": { "type": "object" } },
+    "edges": { "type": "array", "items": { "type": "object" } },
+    "recommendations": { "type": "array", "items": { "type": "object" } },
+    "capability_map": { "type": "array", "items": { "type": "object" } },
+    "missing_tools": { "type": "array", "items": { "type": "object" } }
+  }
+}

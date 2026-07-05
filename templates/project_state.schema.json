@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Project State",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "project_id",
+    "project_root",
+    "created_at",
+    "updated_at",
+    "current_stage",
+    "counters"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "project_id": { "type": "string" },
+    "project_root": { "type": "string" },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "current_stage": {
+      "enum": [
+        "INTAKE",
+        "SCOPING",
+        "LITERATURE",
+        "DESIGN",
+        "EXECUTION",
+        "ANALYSIS",
+        "SYNTHESIS",
+        "WRITING",
+        "REVIEW",
+        "REVISION_FINALIZE"
+      ]
+    },
+    "active_run_id": { "type": ["string", "null"] },
+    "latest_checkpoint": { "type": ["string", "null"] },
+    "latest_handoff": { "type": ["string", "null"] },
+    "sessions": { "type": "object" },
+    "counters": { "type": "object" }
+  }
+}

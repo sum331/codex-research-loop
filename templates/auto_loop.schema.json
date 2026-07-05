@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Auto Loop Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "timestamp",
+    "project_root",
+    "goal",
+    "status",
+    "run_directory",
+    "round_count",
+    "rounds"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "project_root": { "type": "string" },
+    "goal": { "type": "string" },
+    "status": {
+      "enum": ["running", "passed", "failed", "no-progress", "timeout", "round-limit"]
+    },
+    "run_directory": { "type": "string" },
+    "max_rounds": { "type": ["integer", "null"] },
+    "max_minutes": { "type": "number" },
+    "test_commands": { "type": "array", "items": { "type": "string" } },
+    "repair_commands": { "type": "array", "items": { "type": "string" } },
+    "round_count": { "type": "integer" },
+    "elapsed_seconds": { "type": "number" },
+    "final_message": { "type": "string" },
+    "rounds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["round", "round_directory", "tests", "repairs", "status"],
+        "properties": {
+          "round": { "type": "integer" },
+          "round_directory": { "type": "string" },
+          "status": { "type": "string" },
+          "tests": { "type": "array", "items": { "type": "object" } },
+          "repairs": { "type": "array", "items": { "type": "object" } },
+          "route_path": { "type": "string" },
+          "next_prompt": { "type": "string" }
+        }
+      }
+    },
+    "completion_records": { "type": "object" },
+    "report_json": { "type": "string" },
+    "report_markdown": { "type": "string" }
+  }
+}

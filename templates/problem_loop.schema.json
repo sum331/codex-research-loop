@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Problem Loop Case",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "timestamp",
+    "case_id",
+    "project_root",
+    "problem",
+    "lab_directory",
+    "experts",
+    "evaluations",
+    "tests",
+    "gate",
+    "isolation"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "case_id": { "type": "string" },
+    "project_root": { "type": "string" },
+    "problem": { "type": "string" },
+    "lab_directory": { "type": "string" },
+    "context_path": { "type": "string" },
+    "expert_panel_path": { "type": "string" },
+    "expert_prompt_paths": { "type": "array", "items": { "type": "string" } },
+    "adjustment_plan_path": { "type": "string" },
+    "gate_path": { "type": "string" },
+    "report_path": { "type": "string" },
+    "experts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "source", "focus", "evaluation_questions"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "source": { "type": "string" },
+          "focus": { "type": "array", "items": { "type": "string" } },
+          "evaluation_questions": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "evaluations": { "type": "array", "items": { "type": "object" } },
+    "tests": { "type": "array", "items": { "type": "object" } },
+    "gate": {
+      "type": "object",
+      "required": ["threshold", "score", "status", "promotion_allowed"],
+      "properties": {
+        "threshold": { "type": "number" },
+        "score": { "type": "number" },
+        "status": { "enum": ["approved", "hold", "analysis_only"] },
+        "test_score": { "type": "number" },
+        "expert_score": { "type": "number" },
+        "passed_tests": { "type": "integer" },
+        "failed_tests": { "type": "integer" },
+        "approved_experts": { "type": "integer" },
+        "expert_count": { "type": "integer" },
+        "promotion_allowed": { "type": "boolean" },
+        "promotion_rule": { "type": "string" }
+      }
+    },
+    "isolation": {
+      "type": "object",
+      "required": ["mode", "core_files_mutated", "promotion_required_before_core_change"],
+      "properties": {
+        "mode": { "type": "string" },
+        "core_files_mutated": { "type": "boolean" },
+        "promotion_required_before_core_change": { "type": "boolean" }
+      }
+    }
+  }
+}

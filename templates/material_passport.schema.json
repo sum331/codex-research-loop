@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Material Passport",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "project_id",
+    "project_root",
+    "updated_at",
+    "stage",
+    "materials",
+    "key_claims",
+    "open_questions",
+    "risks",
+    "next_actions"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "project_id": { "type": "string" },
+    "project_root": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "stage": { "type": "string" },
+    "project_title": { "type": ["string", "null"] },
+    "domain": { "type": ["string", "null"] },
+    "profile": {
+      "type": "object",
+      "properties": {
+        "target_venue": { "type": ["string", "null"] },
+        "citation_style": { "type": ["string", "null"] },
+        "preferred_language": { "type": ["string", "null"] },
+        "data_sensitivity": { "enum": ["normal", "sensitive", "restricted"] },
+        "verification_strictness": { "enum": ["quick", "standard", "strict"] },
+        "route_mode": { "enum": ["quick", "standard", "strict"] }
+      }
+    },
+    "output_targets": { "type": "array", "items": { "type": "string" } },
+    "research_question": { "type": ["string", "null"] },
+    "research_questions": { "type": "array", "items": { "type": "object" } },
+    "active_question_id": { "type": ["string", "null"] },
+    "project_summary": { "type": ["string", "null"] },
+    "materials": { "type": "array", "items": { "type": "object" } },
+    "hypotheses": { "type": "array", "items": { "type": "object" } },
+    "methods": { "type": "array", "items": { "type": "object" } },
+    "experiments": { "type": "array", "items": { "type": "object" } },
+    "key_claims": { "type": "array", "items": { "type": "object" } },
+    "evidence_summary": { "type": "object" },
+    "open_questions": { "type": "array", "items": { "type": "object" } },
+    "risks": { "type": "array", "items": { "type": "object" } },
+    "next_actions": { "type": "array", "items": { "type": "object" } },
+    "integrity_flags": { "type": "array", "items": { "type": "object" } },
+    "latest_checkpoint": { "type": ["string", "null"] },
+    "latest_handoff": { "type": ["string", "null"] }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Source Hub Result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "timestamp",
+    "query",
+    "provider",
+    "rows",
+    "lookups"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "query": { "type": "string" },
+    "provider": { "type": "string" },
+    "rows": { "type": "integer" },
+    "recorded_materials": { "type": "integer" },
+    "lookups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["provider", "status"],
+        "properties": {
+          "provider": { "type": "string" },
+          "status": { "type": "string" },
+          "error": { "type": "string" },
+          "results": { "type": "array", "items": { "type": "object" } }
+        }
+      }
+    }
+  }
+}

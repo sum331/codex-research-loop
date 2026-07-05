@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Research Loop Storage Policy",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "style",
+    "project_root",
+    "policy_path",
+    "rules",
+    "buckets"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "style": { "enum": ["adaptive", "canonical", "minimal", "loop-local"] },
+    "project_root": { "type": "string" },
+    "policy_path": { "type": "string" },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "rules": {
+      "type": "object",
+      "properties": {
+        "control_plane": { "type": "string" },
+        "do_not_move_existing_files": { "type": "boolean" },
+        "prefer_relative_project_paths": { "type": "boolean" },
+        "large_file_policy": { "type": "string" }
+      }
+    },
+    "buckets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "path",
+          "absolute_path",
+          "purpose",
+          "create_by_default",
+          "git_policy",
+          "exists"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "path": { "type": "string" },
+          "absolute_path": { "type": "string" },
+          "path_source": { "type": "string" },
+          "purpose": { "type": "string" },
+          "create_by_default": { "type": "boolean" },
+          "git_policy": { "type": "string" },
+          "internal": { "type": "boolean" },
+          "exists": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}
