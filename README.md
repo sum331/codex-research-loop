@@ -17,6 +17,7 @@ It provides:
   promotion before core project edits.
 - Unattended `auto-loop` validation/test/repair cycles connected to deep-loop
   dispatch.
+- Auto-routed subchain startup through configurable agent command templates.
 - MCP tools and a Codex skill entrypoint.
 
 ## Layout
@@ -33,6 +34,34 @@ It provides:
 ```powershell
 python scripts/research_loop.py --cwd "D:\Loop\scratch\research-loop-smoke" auto-loop --goal "smoke test" --skip-validate --test-command "cmd /c exit /b 0" --current-subchain P5 --next-subchain P6 --format json
 ```
+
+## Auto-Routed Agent Startup
+
+`auto-loop` can consume a `deep-loop` `route_next` decision and start the next
+subchain in the same unattended run:
+
+```powershell
+python scripts/research_loop.py --cwd "D:\Project" auto-loop `
+  --goal "finish current research stage" `
+  --test-command "python -m pytest" `
+  --current-subchain P7 `
+  --next-subchain P8 `
+  --auto-route-next `
+  --route-depth-budget 3 `
+  --route-agent codex
+```
+
+The command template is executed at the start of each auto-routed subchain.
+Available variables are `{cwd}`, `{subchain}`, `{goal}`, `{prompt}`,
+`{prompt_file}`, and `{round}`. Prefer `{prompt_file}` for Codex or other agent
+CLIs because deep-loop prompts are multiline.
+
+The built-in `--route-agent codex` executor auto-discovers the user-level
+Codex CLI, then runs the generated prompt through `codex exec -` with
+`--cd "{cwd}"`, `--sandbox workspace-write`, and `--ask-for-approval never`.
+It passes `--skip-git-repo-check` by default so non-Git research folders can
+run; add `--route-codex-require-git` when you want Codex's Git-root guard.
+Override discovery with `--route-codex-path` or `RESEARCH_LOOP_CODEX_CLI`.
 
 ## Notes
 

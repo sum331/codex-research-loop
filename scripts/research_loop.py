@@ -2884,6 +2884,8 @@ DEEP_LOOP_GATE_DECISIONS = {
     "pause_for_human",
 }
 
+ROUTE_AGENT_CHOICES = {"none", "codex"}
+
 DEEP_LOOP_PASS_TRANSITIONS: dict[str, list[str]] = {
     "P1": ["P2", "P4"],
     "P2": ["P3", "P4"],
@@ -5275,7 +5277,16 @@ def run_problem_test_commands(cwd: Path, lab_dir: Path, commands: list[dict[str,
         stdout_path = tests_dir / f"{safe_name}.stdout.log"
         stderr_path = tests_dir / f"{safe_name}.stderr.log"
         started = time.monotonic()
-        proc = subprocess.run(command, cwd=str(cwd), text=True, shell=True, capture_output=True, check=False)
+        proc = subprocess.run(
+            command,
+            cwd=str(cwd),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            shell=True,
+            capture_output=True,
+            check=False,
+        )
         elapsed = time.monotonic() - started
         stdout_path.write_text(proc.stdout or "", encoding="utf-8")
         stderr_path.write_text(proc.stderr or "", encoding="utf-8")
@@ -6122,9 +6133,27 @@ def run_auto_command(cwd: Path, round_dir: Path, kind: str, command: str, index:
     name = f"{kind}-{index:02d}-{slug(command.split()[0] if command.split() else kind, kind)}"
     started = time.monotonic()
     if shell:
-        proc = subprocess.run(command, cwd=str(cwd), text=True, shell=True, capture_output=True, check=False)
+        proc = subprocess.run(
+            command,
+            cwd=str(cwd),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            shell=True,
+            capture_output=True,
+            check=False,
+        )
     else:
-        proc = subprocess.run(command.split(), cwd=str(cwd), text=True, shell=False, capture_output=True, check=False)
+        proc = subprocess.run(
+            command.split(),
+            cwd=str(cwd),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            shell=False,
+            capture_output=True,
+            check=False,
+        )
     elapsed = time.monotonic() - started
     stdout_path = round_dir / f"{name}-stdout.log"
     stderr_path = round_dir / f"{name}-stderr.log"
@@ -6151,6 +6180,8 @@ def run_auto_validate(cwd: Path, round_dir: Path, index: int) -> dict[str, Any]:
         [sys.executable, str(Path(__file__).resolve()), "--cwd", str(cwd), "validate", "--fail-on-issue"],
         cwd=str(cwd),
         text=True,
+        encoding="utf-8",
+        errors="replace",
         capture_output=True,
         check=False,
     )
@@ -6281,7 +6312,15 @@ def auto_loop_problem_escalation(
     for command_text in validation_commands:
         command.extend(["--test-command", command_text])
     started = time.monotonic()
-    proc = subprocess.run(command, cwd=str(cwd), text=True, capture_output=True, check=False)
+    proc = subprocess.run(
+        command,
+        cwd=str(cwd),
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
     elapsed = time.monotonic() - started
     stdout_path = round_dir / "problem-loop-stdout.log"
     stderr_path = round_dir / "problem-loop-stderr.log"
@@ -6323,6 +6362,91 @@ def summarize_deep_loop_dispatch(deep_payload: dict[str, Any]) -> dict[str, Any]
     }
 
 
+def auto_route_template_value(
+    value: str,
+    *,
+    cwd: Path,
+    subchain: str,
+    goal: str,
+    prompt: str,
+    prompt_file: Path | None,
+    round_index: int,
+) -> str:
+    return value.format(
+        cwd=str(cwd),
+        subchain=subchain,
+        goal=goal,
+        prompt=prompt,
+        prompt_file=str(prompt_file) if prompt_file else "",
+        round=round_index,
+    )
+
+
+def cmd_quote(value: str | Path) -> str:
+    text = str(value)
+    return '"' + text.replace('"', r'\"') + '"'
+
+
+def discover_codex_cli() -> Path | None:
+    override = os.environ.get("RESEARCH_LOOP_CODEX_CLI") or os.environ.get("CODEX_CLI")
+    if override:
+        path = Path(override).expanduser()
+        if path.exists():
+            return path
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    candidates: list[Path] = []
+    if local_appdata:
+        root = Path(local_appdata) / "OpenAI" / "Codex" / "bin"
+        if root.exists():
+            candidates.extend(path for path in root.glob("*/codex.exe") if path.exists())
+    for name in ["codex.exe", "codex"]:
+        found = shutil.which(name)
+        if found:
+            path = Path(found)
+            if "WindowsApps" not in str(path):
+                candidates.append(path)
+    if not candidates:
+        return None
+    candidates = sorted(set(candidates), key=lambda path: path.stat().st_mtime if path.exists() else 0, reverse=True)
+    return candidates[0]
+
+
+def build_codex_route_agent_command(args: argparse.Namespace, cwd: Path, prompt_file: Path) -> str:
+    codex_path = Path(args.route_codex_path).expanduser() if args.route_codex_path else discover_codex_cli()
+    if not codex_path or not codex_path.exists():
+        raise ValueError("Codex CLI executable was not found. Set --route-codex-path or RESEARCH_LOOP_CODEX_CLI.")
+    parts = [
+        "type",
+        cmd_quote(prompt_file),
+        "|",
+        cmd_quote(codex_path),
+        "--ask-for-approval",
+        str(args.route_codex_approval),
+        "exec",
+        "--cd",
+        cmd_quote(cwd),
+        "--sandbox",
+        str(args.route_codex_sandbox),
+    ]
+    if args.route_codex_skip_git_check:
+        parts.append("--skip-git-repo-check")
+    if args.route_codex_ephemeral:
+        parts.append("--ephemeral")
+    if args.route_codex_json:
+        parts.append("--json")
+    if args.route_codex_output:
+        parts.extend(["--output-last-message", cmd_quote(Path(args.route_codex_output))])
+    parts.append("-")
+    return " ".join(parts)
+
+
+def auto_loop_route_agent_commands(args: argparse.Namespace, cwd: Path, prompt_file: Path) -> list[str]:
+    commands = list(args.route_agent_command or [])
+    if args.route_agent == "codex":
+        commands.insert(0, build_codex_route_agent_command(args, cwd, prompt_file))
+    return commands
+
+
 def auto_loop_report_markdown(payload: dict[str, Any]) -> list[str]:
     lines = [
         "# Research Auto Loop Report",
@@ -6338,6 +6462,11 @@ def auto_loop_report_markdown(payload: dict[str, Any]) -> list[str]:
     ]
     for round_item in payload.get("rounds") or []:
         lines.append(f"- Round {round_item['round']}: {round_item['status']}")
+        if round_item.get("subchain") or round_item.get("goal"):
+            lines.append(f"  - subchain: `{round_item.get('subchain') or '(unset)'}`")
+            lines.append(f"  - goal: {command_excerpt(str(round_item.get('goal') or ''), 220)}")
+        for result in round_item.get("executors") or []:
+            lines.append(f"  - executor `{result['command']}` exit={result['exit_code']} signature={result['signature']}")
         for result in round_item.get("tests") or []:
             lines.append(f"  - test `{result['command']}` exit={result['exit_code']} signature={result['signature']}")
         for result in round_item.get("repairs") or []:
@@ -6358,6 +6487,19 @@ def auto_loop_report_markdown(payload: dict[str, Any]) -> list[str]:
                 lines.append(f"  - problem-loop report: `{problem_loop.get('report_path')}`")
         if round_item.get("next_prompt"):
             lines.append(f"  - next prompt: {round_item['next_prompt']}")
+        if round_item.get("auto_route"):
+            route = round_item["auto_route"]
+            lines.append(
+                f"  - auto-route: `{route.get('from_subchain') or '(unset)'}` -> `{route.get('to_subchain') or '(unset)'}` remaining_budget={route.get('remaining_budget')}"
+            )
+    if payload.get("routed_transitions"):
+        lines.extend(["", "## Routed Transitions", ""])
+        for item in payload.get("routed_transitions") or []:
+            lines.append(
+                f"- Round {item.get('round')}: `{item.get('from_subchain') or '(unset)'}` -> `{item.get('to_subchain') or '(unset)'}`"
+            )
+            if item.get("next_goal"):
+                lines.append(f"  - next goal: {command_excerpt(str(item.get('next_goal')), 260)}")
     if payload.get("final_message"):
         lines.extend(["", "## Final Message", "", payload["final_message"]])
     return lines
@@ -6374,6 +6516,10 @@ def command_auto_loop(args: argparse.Namespace) -> int:
         raise ValueError("auto-loop needs validation or at least one --test-command")
     if args.max_rounds <= 0 and not args.allow_unbounded:
         raise ValueError("--max-rounds must be positive unless --allow-unbounded is set")
+    if args.route_depth_budget < 0:
+        raise ValueError("--route-depth-budget must be non-negative")
+    if args.route_agent not in ROUTE_AGENT_CHOICES:
+        raise ValueError(f"--route-agent must be one of: {', '.join(sorted(ROUTE_AGENT_CHOICES))}")
     if args.allow_unbounded and not repair_commands and not args.max_minutes:
         raise ValueError("--allow-unbounded requires at least one --repair-command or --max-minutes")
     round_limit = 10**9 if args.allow_unbounded else int(args.max_rounds)
@@ -6395,19 +6541,69 @@ def command_auto_loop(args: argparse.Namespace) -> int:
         "deep_loop_enabled": not args.skip_deep_loop,
         "current_subchain": args.current_subchain,
         "next_subchains": list(args.next_subchain or []),
+        "auto_route_next": bool(args.auto_route_next),
+        "route_depth_budget": args.route_depth_budget,
+        "route_agent": args.route_agent,
+        "route_codex_path": str(args.route_codex_path or discover_codex_cli() or "") if args.route_agent == "codex" else None,
+        "route_agent_commands": list(args.route_agent_command or []),
+        "routed_transitions": [],
         "rounds": [],
     }
     seen_failure_signatures: dict[str, int] = {}
     status = "failed"
     final_message = ""
+    active_goal = str(args.goal)
+    active_subchain = args.current_subchain
+    active_next_subchains = list(args.next_subchain or [])
+    pending_agent_prompt: str | None = None
+    pending_route: dict[str, Any] | None = None
+    remaining_route_budget = int(args.route_depth_budget or 0) if args.auto_route_next else 0
 
     for round_index in range(1, round_limit + 1):
         if args.max_minutes and (time.monotonic() - started) / 60.0 > float(args.max_minutes):
             status = "timeout"
             final_message = "Stopped because max_minutes was reached before the next round."
             break
+        args.goal = active_goal
+        args.deep_loop_intent = active_goal
+        args.current_subchain = active_subchain
+        args.next_subchain = list(active_next_subchains)
         round_dir = auto_dir / f"round-{round_index:02d}"
         ensure_dir(round_dir)
+        executors: list[dict[str, Any]] = []
+        if pending_agent_prompt:
+            prompt_file = round_dir / "route-agent-prompt.md"
+            prompt_file.write_text(pending_agent_prompt, encoding="utf-8")
+            route_commands = auto_loop_route_agent_commands(args, cwd, prompt_file)
+            if not route_commands:
+                status = "route-next-executor-missing"
+                final_message = "Deep-loop requested route_next, but no route agent was configured for automatic subchain execution."
+                payload["rounds"].append(
+                    {
+                        "round": round_index,
+                        "round_directory": psafe(round_dir),
+                        "goal": active_goal,
+                        "subchain": active_subchain,
+                        "executors": [],
+                        "tests": [],
+                        "repairs": [],
+                        "status": status,
+                        "auto_route": pending_route,
+                    }
+                )
+                break
+            for executor_index, command_template in enumerate(route_commands, start=1):
+                command = auto_route_template_value(
+                    str(command_template),
+                    cwd=cwd,
+                    subchain=str(active_subchain or ""),
+                    goal=active_goal,
+                    prompt=pending_agent_prompt,
+                    prompt_file=prompt_file,
+                    round_index=round_index,
+                )
+                executors.append(run_auto_command(cwd, round_dir, "route-executor", command, executor_index))
+            pending_agent_prompt = None
         tests: list[dict[str, Any]] = []
         test_number = 1
         if not args.skip_validate:
@@ -6416,17 +6612,24 @@ def command_auto_loop(args: argparse.Namespace) -> int:
         for command in test_commands:
             tests.append(run_auto_command(cwd, round_dir, "test", command, test_number))
             test_number += 1
-        failures = [item for item in tests if item.get("exit_code") != 0]
+        gate_results = executors + tests
+        failures = [item for item in gate_results if item.get("exit_code") != 0]
         round_record: dict[str, Any] = {
             "round": round_index,
             "round_directory": psafe(round_dir),
+            "goal": active_goal,
+            "subchain": active_subchain,
+            "executors": executors,
             "tests": tests,
             "repairs": [],
             "status": "passed" if not failures else "failed",
         }
+        if pending_route:
+            round_record["auto_route"] = pending_route
+            pending_route = None
         if not failures:
             if not args.skip_deep_loop:
-                result_summary = f"Auto-loop round {round_index} passed all validation and test gates for goal: {args.goal}"
+                result_summary = f"Auto-loop round {round_index} passed all validation and test gates for goal: {active_goal}"
                 deep_payload = auto_loop_deep_loop_payload(
                     args,
                     cwd,
@@ -6437,11 +6640,45 @@ def command_auto_loop(args: argparse.Namespace) -> int:
                     round_dir=round_dir,
                     gate_result="pass",
                     result_summary=result_summary,
-                    test_results=tests,
+                    test_results=gate_results,
                 )
                 deep_dispatch = summarize_deep_loop_dispatch(deep_payload)
                 round_record["deep_loop"] = deep_dispatch
                 decision = deep_dispatch.get("decision")
+                if decision == "route_next" and args.auto_route_next:
+                    target_subchains = list(deep_dispatch.get("target_subchains") or [])
+                    if not target_subchains:
+                        status = "passed"
+                        final_message = "All validation and test commands passed; no next subchain is available."
+                        payload["rounds"].append(round_record)
+                        break
+                    if remaining_route_budget <= 0:
+                        status = "route-depth-budget-exhausted"
+                        final_message = "Deep-loop requested route_next, but route_depth_budget was exhausted."
+                        payload["rounds"].append(round_record)
+                        break
+                    next_subchain = str(target_subchains[0])
+                    handoff = deep_payload.get("handoff_package") or {}
+                    next_prompt = str(handoff.get("next_work_prompt") or deep_dispatch.get("next_work_prompt") or active_goal)
+                    route_record = {
+                        "round": round_index,
+                        "from_subchain": active_subchain,
+                        "to_subchain": next_subchain,
+                        "remaining_budget": remaining_route_budget - 1,
+                        "next_goal": next_prompt,
+                        "deep_loop_report": deep_payload.get("report_markdown") or deep_payload.get("report_json"),
+                    }
+                    round_record["auto_route"] = route_record
+                    payload["routed_transitions"].append(route_record)
+                    active_goal = next_prompt
+                    active_subchain = next_subchain
+                    active_next_subchains = []
+                    pending_agent_prompt = next_prompt
+                    pending_route = route_record
+                    remaining_route_budget -= 1
+                    round_record["status"] = "route-next-auto-started"
+                    payload["rounds"].append(round_record)
+                    continue
                 if decision == "retry_same_route":
                     if repair_commands:
                         for repair_index, command in enumerate(repair_commands, start=1):
@@ -6476,7 +6713,7 @@ def command_auto_loop(args: argparse.Namespace) -> int:
         failure = failures[0]
         failure_signature = str(failure["signature"])
         seen_failure_signatures[failure_signature] = seen_failure_signatures.get(failure_signature, 0) + 1
-        failure_text = f"Auto-loop test failed: {failure['command']} exit={failure['exit_code']} signature={failure_signature}"
+        failure_text = f"Auto-loop gate failed: {failure['command']} exit={failure['exit_code']} signature={failure_signature}"
         route_intent = f"Repair failed test for goal: {args.goal}\n\nFailure: {failure_text}\n\nstderr excerpt:\n{failure.get('stderr_excerpt') or '(none)'}"
         graph = build_route_graph(cwd, state, passport, route_intent)
         route_path = round_dir / "failure-route.json"
@@ -6528,7 +6765,7 @@ def command_auto_loop(args: argparse.Namespace) -> int:
                 gate_result="fail",
                 result_summary=route_intent,
                 gate_issues=gate_issues,
-                test_results=tests,
+                test_results=gate_results,
                 extra_paths=[psafe(route_path)],
             )
             deep_dispatch = summarize_deep_loop_dispatch(deep_payload)
@@ -6577,6 +6814,8 @@ def command_auto_loop(args: argparse.Namespace) -> int:
             [sys.executable, str(Path(__file__).resolve()), "--cwd", str(cwd), "checkpoint", "--name", "auto-loop-pass", "--note", checkpoint_note],
             cwd=str(cwd),
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             check=False,
         )
@@ -6584,6 +6823,8 @@ def command_auto_loop(args: argparse.Namespace) -> int:
             [sys.executable, str(Path(__file__).resolve()), "--cwd", str(cwd), "handoff", "--name", "auto-loop-pass", "--note", checkpoint_note],
             cwd=str(cwd),
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             check=False,
         )
@@ -7295,7 +7536,16 @@ def command_run(args: argparse.Namespace) -> int:
     before = {"created_at": utc_now(), "working_directory": psafe(cwd), "inventory": inventory(cwd), "git": git_info(cwd)}
     write_json(run_dir / "pre-snapshot.json", before)
     started = time.monotonic()
-    proc = subprocess.run(command, cwd=str(cwd), text=True, shell=True, capture_output=True, check=False)
+    proc = subprocess.run(
+        command,
+        cwd=str(cwd),
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        shell=True,
+        capture_output=True,
+        check=False,
+    )
     elapsed = time.monotonic() - started
     (run_dir / "stdout.log").write_text(proc.stdout or "", encoding="utf-8")
     (run_dir / "stderr.log").write_text(proc.stderr or "", encoding="utf-8")
@@ -7600,6 +7850,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_auto_loop.add_argument("--deep-loop-intent", help="Optional intent prompt used by deep-loop. Defaults to --goal.")
     p_auto_loop.add_argument("--current-subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="Current P1-P10 subchain for deep-loop dispatch.")
     p_auto_loop.add_argument("--next-subchain", action="append", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="Force a next P1-P10 subchain when the deep-loop gate passes.")
+    p_auto_loop.add_argument("--auto-route-next", action="store_true", help="Automatically consume route_next by starting the next subchain inside this auto-loop.")
+    p_auto_loop.add_argument("--route-depth-budget", type=int, default=3, help="Maximum automatic route_next transitions when --auto-route-next is enabled.")
+    p_auto_loop.add_argument("--route-agent", choices=sorted(ROUTE_AGENT_CHOICES), default="none", help="Built-in route_next executor to run at the start of auto-routed subchains.")
+    p_auto_loop.add_argument(
+        "--route-agent-command",
+        action="append",
+        help="Shell command template to execute at the start of an auto-routed subchain. Variables: {cwd}, {subchain}, {goal}, {prompt}, {prompt_file}, {round}. Repeat for multiple commands.",
+    )
+    p_auto_loop.add_argument("--route-codex-path", help="Explicit Codex CLI executable path for --route-agent codex. Defaults to auto-discovery.")
+    p_auto_loop.add_argument("--route-codex-sandbox", choices=["read-only", "workspace-write", "danger-full-access"], default="workspace-write", help="Sandbox mode passed to `codex exec` for auto-routed subchains.")
+    p_auto_loop.add_argument("--route-codex-approval", choices=["untrusted", "on-request", "never"], default="never", help="Approval policy passed to `codex exec` for auto-routed subchains.")
+    p_auto_loop.add_argument("--route-codex-skip-git-check", action="store_true", default=True, help="Pass --skip-git-repo-check to `codex exec` (default).")
+    p_auto_loop.add_argument("--route-codex-require-git", action="store_false", dest="route_codex_skip_git_check", help="Do not pass --skip-git-repo-check to `codex exec`.")
+    p_auto_loop.add_argument("--route-codex-ephemeral", action="store_true", help="Pass --ephemeral to `codex exec`.")
+    p_auto_loop.add_argument("--route-codex-json", action="store_true", help="Pass --json to `codex exec` and capture JSONL in executor logs.")
+    p_auto_loop.add_argument("--route-codex-output", help="Pass --output-last-message to `codex exec` with this file path.")
     p_auto_loop.add_argument("--deep-loop-quality-score", type=float, help="Optional per-round quality score for deep-loop gates, 0-1 or 0-100.")
     p_auto_loop.add_argument("--deep-loop-pass-threshold", type=float, help="Optional deep-loop pass threshold, 0-1 or 0-100.")
     p_auto_loop.add_argument("--deep-loop-max-rounds", type=int, help="Override deep-loop retry budget before escalation.")

@@ -334,14 +334,18 @@ next round instead of stopping after the first failure:
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "project tests pass" --test-command "python -m pytest -q" --max-rounds 5
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "lint and tests pass" --test-command "python -m pytest -q" --test-command "python -m ruff check ." --repair-command "python scripts/repair.py" --max-rounds 8
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "data pipeline is reproducible" --current-subchain P5 --test-command "python -m pytest tests/data -q" --repair-command "python scripts/repair_data_pipeline.py" --max-rounds 5
+python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "finish current research stage" --current-subchain P7 --next-subchain P8 --auto-route-next --route-depth-budget 3 --route-agent codex --test-command "python -m pytest -q" --max-rounds 8
 ```
 
 Each round runs `validate --fail-on-issue` unless `--skip-validate` is set, then
 runs every `--test-command`. By default, every round also writes a `deep-loop`
 gate under `.research-loop/deep-loops/` and acts on its decision:
 
-- `route_next`: stop the current auto-loop as passed, create the checkpoint and
-  handoff, and record the next subchain prompt.
+- `route_next`: by default, stop the current auto-loop as passed, create the
+  checkpoint and handoff, and record the next subchain prompt. With
+  `--auto-route-next`, consume the generated prompt, start the next subchain
+  inside the same run, and execute each `--route-agent-command` before running
+  validation/tests for that subchain.
 - `retry_same_route`: run any `--repair-command` and start the next round inside
   the same subchain.
 - `escalate_problem_loop`: automatically create an isolated `problem-loop` case
@@ -354,6 +358,21 @@ gate. Use `--skip-deep-loop` only for legacy one-level retry behavior. Defaults
 are bounded by `--max-rounds`; the deep-loop retry budget can be overridden with
 `--deep-loop-max-rounds`, while `--allow-unbounded` still requires an explicit
 repair command or time limit.
+
+Use `--route-agent codex` for the built-in Codex CLI executor. It auto-discovers
+the user-level Codex CLI, passes the generated deep-loop prompt through stdin to
+`codex exec -`, and runs with `--cd`, `--sandbox workspace-write`, and
+`--ask-for-approval never` unless overridden. It also passes
+`--skip-git-repo-check` by default so non-Git research folders can run; add
+`--route-codex-require-git` for Git-root enforcement. Use `--route-codex-path`
+or `RESEARCH_LOOP_CODEX_CLI` when auto-discovery finds the wrong executable.
+
+Custom agent command templates receive `{cwd}`, `{subchain}`, `{goal}`,
+`{prompt}`, `{prompt_file}`, and `{round}`. Prefer `{prompt_file}` for CLIs
+because deep-loop prompts are multiline. If `--auto-route-next` is enabled and
+neither `--route-agent codex` nor `--route-agent-command` is configured, the
+loop stops with `route-next-executor-missing` rather than pretending the next
+subchain ran.
 
 ## Routing Protocol
 
