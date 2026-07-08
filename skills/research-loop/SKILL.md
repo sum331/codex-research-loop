@@ -336,6 +336,7 @@ python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd 
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "data pipeline is reproducible" --current-subchain P5 --test-command "python -m pytest tests/data -q" --repair-command "python scripts/repair_data_pipeline.py" --max-rounds 5
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "finish current research stage" --current-subchain P7 --next-subchain P8 --route-depth-budget 3 --test-command "python -m pytest -q" --max-rounds 8
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "complete the research project end to end" --current-subchain P1 --test-command "python -m pytest -q" --allow-unbounded-routes --max-minutes 360
+python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "complete the research project end to end" --current-subchain P1 --test-command "python -m pytest -q" --allow-unbounded-routes --max-minutes 360 --max-resumes 6 --resume-extra-rounds 8 --resume-extra-route-depth 4
 ```
 
 Each round runs `validate --fail-on-issue` unless `--skip-validate` is set, then
@@ -382,7 +383,11 @@ run, the loop stops with `route-next-executor-missing` rather than pretending
 the next subchain ran. If a configured route agent starts but exits non-zero,
 the loop stops with `route-agent-failed` and records the executor logs and
 target subchain in the auto-loop report before any downstream validation gates
-run.
+run. If the route agent becomes silent longer than
+`--route-agent-idle-timeout`, auto-loop kills the process tree and reports
+`route-agent-timeout`; this is a resumable state, not a terminal project
+failure. Use `--route-agent-idle-timeout 0` only for executors that can be
+silent for a long time and are supervised outside this loop.
 
 When an unattended run stops for a resumable control reason, resume it instead
 of asking the user for the next manual command:
@@ -393,11 +398,22 @@ python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd 
 
 Use `auto-loop-resume` for `route-depth-budget-exhausted`, `round-limit`,
 `timeout`, `route-next-handoff-required`,
-`retry-same-route-handoff-required`, `route-agent-failed`, and compatible
-approved problem-loop handoffs. The resume command reads the previous
+`retry-same-route-handoff-required`, `route-agent-failed`,
+`route-agent-timeout`, and compatible approved problem-loop handoffs. The resume
+command reads the previous
 `*-auto-loop.json`, reconstructs the next prompt from the continuation contract
 or last auto-route record, starts the route agent first, then runs validation and
 deep-loop gates again.
+
+For long unattended work, prefer `auto-loop-watchdog` over a bare `auto-loop`.
+The watchdog starts `auto-loop`, reads the child report, and automatically runs
+`auto-loop-resume --latest` while the child status is resumable. It records live
+state in `.research-loop/watchdog/active-run.json` and writes a
+`*-auto-loop-watchdog.json` report. Use `--max-resumes`,
+`--resume-extra-rounds`, and `--resume-extra-route-depth` to control how deep
+the supervision tree may continue. Use `--child-idle-timeout` or
+`--child-wall-timeout` when the parent auto-loop process itself must be killed
+if it hangs before writing a report.
 
 ## Routing Protocol
 
@@ -514,7 +530,8 @@ needs to be added. The matrix separates available skills/apps from missing tool
 gaps. Built-in local tools now include `prompt-normalizer`,
 `storage-policy`, `research-source-hub`, `content-ingest`, `zotero-bridge`,
 `claim-evidence-verifier`, `deep-loop-router`, `problem-loop`, and
-`auto-loop-runner`. Current missing tool gaps are advisory until implemented:
+`auto-loop-runner` with `auto-loop-watchdog`. Current missing tool gaps are
+advisory until implemented:
 
 - `repository-publisher` for Zenodo/OSF release and DOI/provenance backfill.
 - `research-kg-builder` for project knowledge graphs.

@@ -18,7 +18,7 @@ It provides:
 - Isolated problem-loop diagnosis with generated expert panels and gated
   promotion before core project edits.
 - Unattended `auto-loop` validation/test/repair cycles connected to deep-loop
-  dispatch.
+  dispatch, plus `auto-loop-watchdog` supervision for resumable long runs.
 - Auto-routed subchain startup through configurable agent command templates.
 - MCP tools and a Codex skill entrypoint.
 
@@ -75,6 +75,11 @@ If the next-subchain route agent cannot be configured, the run stops as
 `route-next-executor-missing`. If the configured route agent starts but exits
 non-zero, the run stops as `route-agent-failed` and records the executor command,
 stdout/stderr logs, target subchain, and route handoff in the auto-loop report.
+If the route agent becomes silent longer than `--route-agent-idle-timeout`, the
+process tree is killed and the run stops as `route-agent-timeout`, which is
+treated as resumable by `auto-loop-resume` and `auto-loop-watchdog`. Set
+`--route-agent-idle-timeout 0` only for executors that are expected to be silent
+for a long time and are supervised elsewhere.
 
 The same continuation mechanism now applies to all unattended-safe gate
 decisions:
@@ -113,6 +118,29 @@ python scripts/research_loop.py --cwd "D:\Project" auto-loop-resume `
 subchain or same-subchain retry prompt from the stored continuation contract,
 starts the route agent before validation, and records the source report under
 `resume` in the new auto-loop report.
+
+For fully unattended sessions, prefer `auto-loop-watchdog`. It starts the first
+`auto-loop`, reads the produced report, and automatically calls
+`auto-loop-resume --latest` while the child status is resumable:
+
+```powershell
+python scripts/research_loop.py --cwd "D:\Project" auto-loop-watchdog `
+  --goal "complete the research project end to end" `
+  --test-command "python -m pytest" `
+  --current-subchain P1 `
+  --allow-unbounded-routes `
+  --max-minutes 360 `
+  --max-resumes 6 `
+  --resume-extra-rounds 8 `
+  --resume-extra-route-depth 4
+```
+
+The watchdog writes `.research-loop/watchdog/active-run.json` while running and
+a `*-auto-loop-watchdog.json` report when it stops. It resumes statuses such as
+`route-depth-budget-exhausted`, `route-agent-failed`, `route-agent-timeout`,
+`round-limit`, `timeout`, and route handoff states. If the child process itself
+hangs before it can write a report, `--child-idle-timeout` and
+`--child-wall-timeout` can terminate it and leave a watchdog failure report.
 
 ## Subchain Head Agents
 

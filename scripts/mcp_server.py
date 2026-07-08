@@ -228,6 +228,9 @@ TOOLS: list[dict[str, Any]] = [
                 "route_codex_ephemeral": {"type": "boolean", "description": "Pass --ephemeral to codex exec."},
                 "route_codex_json": {"type": "boolean", "description": "Pass --json to codex exec."},
                 "route_codex_output": {"type": "string", "description": "Path for --output-last-message from codex exec."},
+                "route_agent_idle_timeout": {"type": "number", "description": "Kill a route executor after this many silent seconds. 0 disables idle timeout."},
+                "route_agent_wall_timeout": {"type": "number", "description": "Kill a route executor after this many wall-clock seconds. 0 disables wall timeout."},
+                "route_agent_poll_seconds": {"type": "number", "description": "Polling interval for route executor liveness checks."},
                 "deep_loop_quality_score": {"type": "number", "description": "Optional deep-loop quality score, 0-1 or 0-100."},
                 "deep_loop_pass_threshold": {"type": "number", "description": "Optional deep-loop pass threshold, 0-1 or 0-100."},
                 "deep_loop_max_rounds": {"type": "integer", "description": "Override deep-loop retry budget before escalation."},
@@ -264,11 +267,64 @@ TOOLS: list[dict[str, Any]] = [
                 "route_codex_ephemeral": {"type": "boolean", "description": "Pass --ephemeral to codex exec."},
                 "route_codex_json": {"type": "boolean", "description": "Pass --json to codex exec."},
                 "route_codex_output": {"type": "string", "description": "Path for --output-last-message from codex exec."},
+                "route_agent_idle_timeout": {"type": "number", "description": "Override route executor idle timeout for the resumed run."},
+                "route_agent_wall_timeout": {"type": "number", "description": "Override route executor wall timeout for the resumed run."},
+                "route_agent_poll_seconds": {"type": "number", "description": "Override route executor liveness polling interval."},
                 "deep_loop_max_rounds": {"type": "integer", "description": "Override deep-loop retry budget in the resumed run."},
                 "skip_problem_escalation": {"type": "boolean", "description": "Do not automatically create problem-loop cases in the resumed run."},
                 "problem_promote_threshold": {"type": "number", "description": "Promotion threshold used for automatic problem-loop cases."},
             },
             ["cwd"],
+        ),
+    },
+    {
+        "name": "research_loop_auto_loop_watchdog",
+        "description": "Supervise auto-loop and auto-loop-resume so unattended runs keep advancing across resumable stops.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "goal": {"type": "string", "description": "Completion goal for this supervised unattended loop."},
+                "test_commands": {"type": "array", "items": {"type": "string"}, "description": "Shell test commands."},
+                "repair_commands": {"type": "array", "items": {"type": "string"}, "description": "Shell repair commands run after failed gates."},
+                "max_rounds": {"type": "integer", "description": "Maximum rounds for the initial auto-loop."},
+                "max_minutes": {"type": "number", "description": "Optional wall-clock limit passed to child loops."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "skip_validate": {"type": "boolean", "description": "Skip structural validation gate."},
+                "allow_unbounded": {"type": "boolean", "description": "Allow unbounded child round counts with guardrails."},
+                "skip_deep_loop": {"type": "boolean", "description": "Disable per-round deep-loop gate dispatch."},
+                "deep_loop_intent": {"type": "string", "description": "Optional intent prompt used by deep-loop. Defaults to goal."},
+                "current_subchain": {"type": "string", "description": "Current P1-P10 subchain for deep-loop dispatch."},
+                "next_subchains": {"type": "array", "items": {"type": "string"}, "description": "Forced next P1-P10 subchains when the deep-loop gate passes."},
+                "auto_route_next": {"type": "boolean", "description": "Explicitly enable automatic route_next consumption. Enabled by default."},
+                "no_auto_route_next": {"type": "boolean", "description": "Disable automatic route_next consumption."},
+                "route_depth_budget": {"type": "integer", "description": "Maximum route_next transitions for the initial auto-loop."},
+                "allow_unbounded_routes": {"type": "boolean", "description": "Allow unlimited route_next transitions in child loops."},
+                "route_agent": {"type": "string", "description": "Built-in route executor, such as codex or none."},
+                "route_agent_commands": {"type": "array", "items": {"type": "string"}, "description": "Route-agent command templates for child loops."},
+                "route_codex_path": {"type": "string", "description": "Explicit Codex CLI executable path."},
+                "route_codex_sandbox": {"type": "string", "description": "Sandbox mode passed to codex exec."},
+                "route_codex_approval": {"type": "string", "description": "Approval mode passed to codex exec."},
+                "route_codex_require_git": {"type": "boolean", "description": "Do not pass --skip-git-repo-check to codex exec."},
+                "route_codex_ephemeral": {"type": "boolean", "description": "Pass --ephemeral to codex exec."},
+                "route_codex_json": {"type": "boolean", "description": "Pass --json to codex exec."},
+                "route_codex_output": {"type": "string", "description": "Path for --output-last-message from codex exec."},
+                "route_agent_idle_timeout": {"type": "number", "description": "Kill a route executor after this many silent seconds. 0 disables idle timeout."},
+                "route_agent_wall_timeout": {"type": "number", "description": "Kill a route executor after this many wall-clock seconds. 0 disables wall timeout."},
+                "route_agent_poll_seconds": {"type": "number", "description": "Polling interval for route executor liveness checks."},
+                "deep_loop_quality_score": {"type": "number", "description": "Optional deep-loop quality score, 0-1 or 0-100."},
+                "deep_loop_pass_threshold": {"type": "number", "description": "Optional deep-loop pass threshold, 0-1 or 0-100."},
+                "deep_loop_max_rounds": {"type": "integer", "description": "Override deep-loop retry budget before escalation."},
+                "skip_problem_escalation": {"type": "boolean", "description": "Record escalation without automatically creating a problem-loop case."},
+                "problem_promote_threshold": {"type": "number", "description": "Promotion threshold used for automatic problem-loop cases."},
+                "max_resumes": {"type": "integer", "description": "Maximum automatic auto-loop-resume attempts."},
+                "resume_extra_rounds": {"type": "integer", "description": "Additional max rounds for each resume attempt."},
+                "resume_extra_route_depth": {"type": "integer", "description": "Additional route_next transitions for each resume attempt."},
+                "resume_max_minutes": {"type": "number", "description": "Optional max_minutes override for resumed child loops."},
+                "child_idle_timeout": {"type": "number", "description": "Kill child auto-loop after this many silent seconds. 0 disables child idle timeout."},
+                "child_wall_timeout": {"type": "number", "description": "Kill child auto-loop after this many wall-clock seconds. 0 disables child wall timeout."},
+                "poll_seconds": {"type": "number", "description": "Polling interval for child auto-loop supervision."},
+            },
+            ["cwd", "goal"],
         ),
     },
     {
@@ -692,6 +748,9 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
         if as_bool(args.get("route_codex_json")):
             command.append("--route-codex-json")
         add_option(command, "--route-codex-output", args.get("route_codex_output"))
+        add_option(command, "--route-agent-idle-timeout", args.get("route_agent_idle_timeout"))
+        add_option(command, "--route-agent-wall-timeout", args.get("route_agent_wall_timeout"))
+        add_option(command, "--route-agent-poll-seconds", args.get("route_agent_poll_seconds"))
         add_option(command, "--deep-loop-quality-score", args.get("deep_loop_quality_score"))
         add_option(command, "--deep-loop-pass-threshold", args.get("deep_loop_pass_threshold"))
         add_option(command, "--deep-loop-max-rounds", args.get("deep_loop_max_rounds"))
@@ -739,10 +798,70 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
         if as_bool(args.get("route_codex_json")):
             command.append("--route-codex-json")
         add_option(command, "--route-codex-output", args.get("route_codex_output"))
+        add_option(command, "--route-agent-idle-timeout", args.get("route_agent_idle_timeout"))
+        add_option(command, "--route-agent-wall-timeout", args.get("route_agent_wall_timeout"))
+        add_option(command, "--route-agent-poll-seconds", args.get("route_agent_poll_seconds"))
         add_option(command, "--deep-loop-max-rounds", args.get("deep_loop_max_rounds"))
         if as_bool(args.get("skip_problem_escalation")):
             command.append("--skip-problem-escalation")
         add_option(command, "--problem-promote-threshold", args.get("problem_promote_threshold"))
+        return command
+    if name == "research_loop_auto_loop_watchdog":
+        command.append("auto-loop-watchdog")
+        add_option(command, "--goal", args.get("goal"))
+        for test_command in args.get("test_commands") or []:
+            add_option(command, "--test-command", test_command)
+        for repair_command in args.get("repair_commands") or []:
+            add_option(command, "--repair-command", repair_command)
+        add_option(command, "--max-rounds", args.get("max_rounds"))
+        add_option(command, "--max-minutes", args.get("max_minutes"))
+        add_option(command, "--format", args.get("format"))
+        add_option(command, "--deep-loop-intent", args.get("deep_loop_intent"))
+        add_option(command, "--current-subchain", args.get("current_subchain"))
+        for next_subchain in args.get("next_subchains") or []:
+            add_option(command, "--next-subchain", next_subchain)
+        if args.get("auto_route_next") is False or as_bool(args.get("no_auto_route_next")):
+            command.append("--no-auto-route-next")
+        elif as_bool(args.get("auto_route_next")):
+            command.append("--auto-route-next")
+        add_option(command, "--route-depth-budget", args.get("route_depth_budget"))
+        if as_bool(args.get("allow_unbounded_routes")):
+            command.append("--allow-unbounded-routes")
+        add_option(command, "--route-agent", args.get("route_agent"))
+        for route_command in args.get("route_agent_commands") or []:
+            add_option(command, "--route-agent-command", route_command)
+        add_option(command, "--route-codex-path", args.get("route_codex_path"))
+        add_option(command, "--route-codex-sandbox", args.get("route_codex_sandbox"))
+        add_option(command, "--route-codex-approval", args.get("route_codex_approval"))
+        if as_bool(args.get("route_codex_require_git")):
+            command.append("--route-codex-require-git")
+        if as_bool(args.get("route_codex_ephemeral")):
+            command.append("--route-codex-ephemeral")
+        if as_bool(args.get("route_codex_json")):
+            command.append("--route-codex-json")
+        add_option(command, "--route-codex-output", args.get("route_codex_output"))
+        add_option(command, "--route-agent-idle-timeout", args.get("route_agent_idle_timeout"))
+        add_option(command, "--route-agent-wall-timeout", args.get("route_agent_wall_timeout"))
+        add_option(command, "--route-agent-poll-seconds", args.get("route_agent_poll_seconds"))
+        add_option(command, "--deep-loop-quality-score", args.get("deep_loop_quality_score"))
+        add_option(command, "--deep-loop-pass-threshold", args.get("deep_loop_pass_threshold"))
+        add_option(command, "--deep-loop-max-rounds", args.get("deep_loop_max_rounds"))
+        add_option(command, "--problem-promote-threshold", args.get("problem_promote_threshold"))
+        add_option(command, "--max-resumes", args.get("max_resumes"))
+        add_option(command, "--resume-extra-rounds", args.get("resume_extra_rounds"))
+        add_option(command, "--resume-extra-route-depth", args.get("resume_extra_route_depth"))
+        add_option(command, "--resume-max-minutes", args.get("resume_max_minutes"))
+        add_option(command, "--child-idle-timeout", args.get("child_idle_timeout"))
+        add_option(command, "--child-wall-timeout", args.get("child_wall_timeout"))
+        add_option(command, "--poll-seconds", args.get("poll_seconds"))
+        if as_bool(args.get("skip_validate")):
+            command.append("--skip-validate")
+        if as_bool(args.get("allow_unbounded")):
+            command.append("--allow-unbounded")
+        if as_bool(args.get("skip_deep_loop")):
+            command.append("--skip-deep-loop")
+        if as_bool(args.get("skip_problem_escalation")):
+            command.append("--skip-problem-escalation")
         return command
     if name == "research_claim_evidence_verify":
         command.append("claim-evidence")

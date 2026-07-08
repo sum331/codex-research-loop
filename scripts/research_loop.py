@@ -9,6 +9,7 @@ on a long conversation transcript.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import csv
 import hashlib
 import html
@@ -18,6 +19,7 @@ import json
 import mimetypes
 import os
 import re
+import signal
 import shutil
 import subprocess
 import sys
@@ -37,6 +39,24 @@ PAYLOAD_LIMIT = 24000
 INVENTORY_LIMIT = int(os.environ.get("RESEARCH_LOOP_INVENTORY_LIMIT", "1200"))
 INVENTORY_SECONDS = float(os.environ.get("RESEARCH_LOOP_INVENTORY_SECONDS", "2.0"))
 HASH_LIMIT_BYTES = int(os.environ.get("RESEARCH_LOOP_HASH_LIMIT_BYTES", "2097152"))
+DEFAULT_ROUTE_AGENT_IDLE_TIMEOUT_SECONDS = float(os.environ.get("RESEARCH_LOOP_ROUTE_AGENT_IDLE_TIMEOUT_SECONDS", "900"))
+DEFAULT_ROUTE_AGENT_WALL_TIMEOUT_SECONDS = float(os.environ.get("RESEARCH_LOOP_ROUTE_AGENT_WALL_TIMEOUT_SECONDS", "0"))
+DEFAULT_ROUTE_AGENT_POLL_SECONDS = float(os.environ.get("RESEARCH_LOOP_ROUTE_AGENT_POLL_SECONDS", "1"))
+DEFAULT_WATCHDOG_CHILD_IDLE_TIMEOUT_SECONDS = float(os.environ.get("RESEARCH_LOOP_WATCHDOG_CHILD_IDLE_TIMEOUT_SECONDS", "0"))
+DEFAULT_WATCHDOG_CHILD_WALL_TIMEOUT_SECONDS = float(os.environ.get("RESEARCH_LOOP_WATCHDOG_CHILD_WALL_TIMEOUT_SECONDS", "0"))
+DEFAULT_WATCHDOG_POLL_SECONDS = float(os.environ.get("RESEARCH_LOOP_WATCHDOG_POLL_SECONDS", "5"))
+TIMEOUT_EXIT_CODE = -124
+
+RESUMABLE_AUTO_LOOP_STATUSES = {
+    "route-agent-failed",
+    "route-agent-timeout",
+    "route-next-executor-missing",
+    "route-depth-budget-exhausted",
+    "route-next-handoff-required",
+    "retry-same-route-handoff-required",
+    "round-limit",
+    "timeout",
+}
 
 SKIP_DIRS = {
     ".git",
@@ -1001,6 +1021,11 @@ def record_id(prefix: str, text: str) -> str:
     return f"{prefix}-{datetime.now().strftime('%Y%m%d%H%M%S')}-{short_digest(text)}"
 
 
+def run_name(prefix: str, text: str, fallback: str = "goal") -> str:
+    readable = slug(text, fallback)[:36].strip("-") or fallback
+    return f"{timestamp()}-{prefix}-{short_digest(text)}-{readable}"
+
+
 def split_multi(value: str | None) -> list[str]:
     if not value:
         return []
@@ -1143,6 +1168,10 @@ def handoffs_root(cwd: Path) -> Path:
 
 def reports_root(cwd: Path) -> Path:
     return loop_root(cwd) / "reports"
+
+
+def watchdog_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "watchdog"
 
 
 def deep_loops_root(cwd: Path) -> Path:
@@ -1761,7 +1790,7 @@ def save_passport(cwd: Path, passport: dict[str, Any]) -> None:
 
 def init_project(cwd: Path, stage: str | None = None, storage_style: str | None = None, init_storage: bool = False) -> dict[str, Any]:
     root = loop_root(cwd)
-    for child in ["runs", "checkpoints", "handoffs", "reports", "storage-reports", "deep-loops", "problem-cases", "problem-reports", "promotions"]:
+    for child in ["runs", "checkpoints", "handoffs", "reports", "storage-reports", "deep-loops", "problem-cases", "problem-reports", "promotions", "watchdog"]:
         ensure_dir(root / child)
     policy = load_storage_policy(cwd, storage_style)
     if init_storage:
@@ -6558,49 +6587,262 @@ def command_excerpt(text: str, limit: int = 1800) -> str:
     return value[:limit] + "\n... truncated ..."
 
 
-def run_auto_command(cwd: Path, round_dir: Path, kind: str, command: str, index: int, shell: bool = True) -> dict[str, Any]:
-    ensure_dir(round_dir)
-    name = f"{kind}-{index:02d}-{slug(command.split()[0] if command.split() else kind, kind)}"
+def create_windows_kill_job() -> Any | None:
+    if os.name != "nt":
+        return None
+
+    class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("PerProcessUserTimeLimit", ctypes.c_longlong),
+            ("PerJobUserTimeLimit", ctypes.c_longlong),
+            ("LimitFlags", ctypes.c_uint32),
+            ("MinimumWorkingSetSize", ctypes.c_size_t),
+            ("MaximumWorkingSetSize", ctypes.c_size_t),
+            ("ActiveProcessLimit", ctypes.c_uint32),
+            ("Affinity", ctypes.c_size_t),
+            ("PriorityClass", ctypes.c_uint32),
+            ("SchedulingClass", ctypes.c_uint32),
+        ]
+
+    class IO_COUNTERS(ctypes.Structure):
+        _fields_ = [
+            ("ReadOperationCount", ctypes.c_ulonglong),
+            ("WriteOperationCount", ctypes.c_ulonglong),
+            ("OtherOperationCount", ctypes.c_ulonglong),
+            ("ReadTransferCount", ctypes.c_ulonglong),
+            ("WriteTransferCount", ctypes.c_ulonglong),
+            ("OtherTransferCount", ctypes.c_ulonglong),
+        ]
+
+    class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
+            ("IoInfo", IO_COUNTERS),
+            ("ProcessMemoryLimit", ctypes.c_size_t),
+            ("JobMemoryLimit", ctypes.c_size_t),
+            ("PeakProcessMemoryUsed", ctypes.c_size_t),
+            ("PeakJobMemoryUsed", ctypes.c_size_t),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateJobObjectW.restype = ctypes.c_void_p
+    job_handle = kernel32.CreateJobObjectW(None, None)
+    if not job_handle:
+        return None
+    info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+    info.BasicLimitInformation.LimitFlags = 0x00002000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    ok = kernel32.SetInformationJobObject(
+        ctypes.c_void_p(job_handle),
+        9,  # JobObjectExtendedLimitInformation
+        ctypes.byref(info),
+        ctypes.sizeof(info),
+    )
+    if not ok:
+        kernel32.CloseHandle(ctypes.c_void_p(job_handle))
+        return None
+    return job_handle
+
+
+def assign_windows_job(job_handle: Any | None, proc: subprocess.Popen[Any]) -> bool:
+    if os.name != "nt" or not job_handle:
+        return False
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    return bool(kernel32.AssignProcessToJobObject(ctypes.c_void_p(job_handle), ctypes.c_void_p(proc._handle)))
+
+
+def terminate_windows_job(job_handle: Any | None) -> None:
+    if os.name != "nt" or not job_handle:
+        return
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    try:
+        kernel32.TerminateJobObject(ctypes.c_void_p(job_handle), 1)
+    except Exception:
+        pass
+
+
+def close_windows_handle(handle: Any | None) -> None:
+    if os.name != "nt" or not handle:
+        return
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    try:
+        kernel32.CloseHandle(ctypes.c_void_p(handle))
+    except Exception:
+        pass
+
+
+def kill_process_tree(proc: subprocess.Popen[Any], job_handle: Any | None = None) -> None:
+    if proc.poll() is not None:
+        return
+    if os.name == "nt":
+        if job_handle:
+            terminate_windows_job(job_handle)
+            time.sleep(0.1)
+            if proc.poll() is not None:
+                return
+        try:
+            proc.send_signal(signal.CTRL_BREAK_EVENT)
+            time.sleep(0.2)
+        except Exception:
+            pass
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        if proc.poll() is None:
+            try:
+                subprocess.Popen(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+            except Exception:
+                pass
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except Exception:
+        proc.kill()
+
+
+def monitored_popen_kwargs() -> dict[str, Any]:
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def command_to_text(command: str | list[str]) -> str:
+    if isinstance(command, str):
+        return command
+    return " ".join(str(part) for part in command)
+
+
+def run_monitored_process(
+    cwd: Path,
+    output_dir: Path,
+    kind: str,
+    command: str | list[str],
+    index: int,
+    *,
+    shell: bool = True,
+    idle_timeout_seconds: float = 0.0,
+    wall_timeout_seconds: float = 0.0,
+    poll_interval_seconds: float = 0.25,
+) -> dict[str, Any]:
+    ensure_dir(output_dir)
+    command_text = command_to_text(command)
+    name = f"{kind}-{index:02d}-{short_digest(command_text)}"
+    stdout_path = output_dir / f"{name}-stdout.log"
+    stderr_path = output_dir / f"{name}-stderr.log"
     started = time.monotonic()
+    last_activity = started
+    timed_out = False
+    timeout_reason: str | None = None
+    poll_seconds = max(float(poll_interval_seconds or 0.25), 0.05)
+    popen_command: str | list[str]
     if shell:
-        proc = subprocess.run(
-            command,
-            cwd=str(cwd),
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            shell=True,
-            capture_output=True,
-            check=False,
-        )
+        popen_command = command_text
+    elif isinstance(command, list):
+        popen_command = [str(part) for part in command]
     else:
-        proc = subprocess.run(
-            command.split(),
+        popen_command = command.split()
+    stdout_size = 0
+    stderr_size = 0
+    job_handle: Any | None = None
+    with stdout_path.open("w", encoding="utf-8", errors="replace") as stdout_handle, stderr_path.open(
+        "w", encoding="utf-8", errors="replace"
+    ) as stderr_handle:
+        proc = subprocess.Popen(
+            popen_command,
             cwd=str(cwd),
             text=True,
             encoding="utf-8",
             errors="replace",
-            shell=False,
-            capture_output=True,
-            check=False,
+            shell=shell,
+            stdout=stdout_handle,
+            stderr=stderr_handle,
+            **monitored_popen_kwargs(),
         )
+        job_handle = create_windows_kill_job()
+        if job_handle and not assign_windows_job(job_handle, proc):
+            close_windows_handle(job_handle)
+            job_handle = None
+        try:
+            while proc.poll() is None:
+                now = time.monotonic()
+                stdout_handle.flush()
+                stderr_handle.flush()
+                current_stdout_size = stdout_path.stat().st_size if stdout_path.exists() else 0
+                current_stderr_size = stderr_path.stat().st_size if stderr_path.exists() else 0
+                if current_stdout_size != stdout_size or current_stderr_size != stderr_size:
+                    stdout_size = current_stdout_size
+                    stderr_size = current_stderr_size
+                    last_activity = now
+                if wall_timeout_seconds and now - started >= float(wall_timeout_seconds):
+                    timed_out = True
+                    timeout_reason = "wall"
+                    kill_process_tree(proc, job_handle)
+                    break
+                if idle_timeout_seconds and now - last_activity >= float(idle_timeout_seconds):
+                    timed_out = True
+                    timeout_reason = "idle"
+                    kill_process_tree(proc, job_handle)
+                    break
+                time.sleep(poll_seconds)
+            try:
+                proc.wait(timeout=1 if timed_out else 5)
+            except subprocess.TimeoutExpired:
+                kill_process_tree(proc, job_handle)
+                proc.wait(timeout=1)
+        finally:
+            close_windows_handle(job_handle)
     elapsed = time.monotonic() - started
-    stdout_path = round_dir / f"{name}-stdout.log"
-    stderr_path = round_dir / f"{name}-stderr.log"
-    stdout_path.write_text(proc.stdout or "", encoding="utf-8")
-    stderr_path.write_text(proc.stderr or "", encoding="utf-8")
-    signature_text = f"{command}\n{proc.returncode}\n{command_excerpt(proc.stdout or '', 1200)}\n{command_excerpt(proc.stderr or '', 1200)}"
+    stdout_text = stdout_path.read_text(encoding="utf-8", errors="replace") if stdout_path.exists() else ""
+    stderr_text = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
+    exit_code = proc.returncode if proc.returncode is not None else TIMEOUT_EXIT_CODE
+    if timed_out and exit_code == 0:
+        exit_code = TIMEOUT_EXIT_CODE
+    signature_text = f"{command_text}\n{exit_code}\n{command_excerpt(stdout_text, 1200)}\n{command_excerpt(stderr_text, 1200)}"
     return {
         "kind": kind,
-        "command": command,
-        "exit_code": proc.returncode,
+        "command": command_text,
+        "exit_code": exit_code,
         "elapsed_seconds": round(elapsed, 3),
         "stdout_log": psafe(stdout_path),
         "stderr_log": psafe(stderr_path),
-        "stdout_excerpt": command_excerpt(proc.stdout or "", 1200),
-        "stderr_excerpt": command_excerpt(proc.stderr or "", 1200),
+        "stdout_excerpt": command_excerpt(stdout_text, 1200),
+        "stderr_excerpt": command_excerpt(stderr_text, 1200),
+        "timed_out": timed_out,
+        "timeout_reason": timeout_reason,
+        "idle_timeout_seconds": float(idle_timeout_seconds or 0.0) or None,
+        "wall_timeout_seconds": float(wall_timeout_seconds or 0.0) or None,
+        "last_activity_seconds": round(time.monotonic() - last_activity, 3),
         "signature": short_digest(signature_text),
     }
+
+
+def run_auto_command(
+    cwd: Path,
+    round_dir: Path,
+    kind: str,
+    command: str,
+    index: int,
+    shell: bool = True,
+    idle_timeout_seconds: float = 0.0,
+    wall_timeout_seconds: float = 0.0,
+    poll_interval_seconds: float = 0.25,
+) -> dict[str, Any]:
+    return run_monitored_process(
+        cwd,
+        round_dir,
+        kind,
+        command,
+        index,
+        shell=shell,
+        idle_timeout_seconds=idle_timeout_seconds,
+        wall_timeout_seconds=wall_timeout_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
 
 
 def run_auto_validate(cwd: Path, round_dir: Path, index: int) -> dict[str, Any]:
@@ -7002,7 +7244,7 @@ def auto_loop_resume_seed(payload: dict[str, Any]) -> dict[str, Any]:
     target_subchains = list(continuation.get("target_subchains") or deep_loop.get("target_subchains") or [])
     source_subchain = last_round.get("subchain")
 
-    if status in {"route-agent-failed", "route-next-executor-missing", "round-limit", "timeout"} and last_route:
+    if status in RESUMABLE_AUTO_LOOP_STATUSES and last_route:
         target = str(last_route.get("to_subchain") or source_subchain or "")
         prompt = str(last_route.get("next_goal") or last_round.get("goal") or payload.get("goal") or "")
         decision = str(last_route.get("decision") or decision or "route_next")
@@ -7098,6 +7340,21 @@ def command_auto_loop_resume(args: argparse.Namespace) -> int:
         route_codex_ephemeral=bool(args.route_codex_ephemeral),
         route_codex_json=bool(args.route_codex_json),
         route_codex_output=args.route_codex_output,
+        route_agent_idle_timeout=float(
+            args.route_agent_idle_timeout
+            if args.route_agent_idle_timeout is not None
+            else previous.get("route_agent_idle_timeout", DEFAULT_ROUTE_AGENT_IDLE_TIMEOUT_SECONDS)
+        ),
+        route_agent_wall_timeout=float(
+            args.route_agent_wall_timeout
+            if args.route_agent_wall_timeout is not None
+            else previous.get("route_agent_wall_timeout", DEFAULT_ROUTE_AGENT_WALL_TIMEOUT_SECONDS)
+        ),
+        route_agent_poll_seconds=float(
+            args.route_agent_poll_seconds
+            if args.route_agent_poll_seconds is not None
+            else previous.get("route_agent_poll_seconds", DEFAULT_ROUTE_AGENT_POLL_SECONDS)
+        ),
         deep_loop_quality_score=None,
         deep_loop_pass_threshold=None,
         deep_loop_max_rounds=args.deep_loop_max_rounds,
@@ -7135,7 +7392,7 @@ def command_auto_loop(args: argparse.Namespace) -> int:
         raise ValueError("--allow-unbounded requires at least one --repair-command or --max-minutes")
     round_limit = 10**9 if args.allow_unbounded else int(args.max_rounds)
     started = time.monotonic()
-    auto_dir = runs_root(cwd) / f"{timestamp()}-auto-loop-{slug(args.goal, 'goal')}"
+    auto_dir = runs_root(cwd) / run_name("auto-loop", args.goal, "goal")
     ensure_dir(auto_dir)
     write_json(auto_dir / "pre-snapshot.json", {"created_at": utc_now(), "inventory": inventory(cwd), "git": git_info(cwd)})
     payload: dict[str, Any] = {
@@ -7159,6 +7416,9 @@ def command_auto_loop(args: argparse.Namespace) -> int:
         "route_agent": args.route_agent,
         "route_codex_path": str(args.route_codex_path or discover_codex_cli() or "") if args.route_agent == "codex" else None,
         "route_agent_commands": list(args.route_agent_command or []),
+        "route_agent_idle_timeout": float(getattr(args, "route_agent_idle_timeout", 0.0) or 0.0),
+        "route_agent_wall_timeout": float(getattr(args, "route_agent_wall_timeout", 0.0) or 0.0),
+        "route_agent_poll_seconds": float(getattr(args, "route_agent_poll_seconds", DEFAULT_ROUTE_AGENT_POLL_SECONDS) or DEFAULT_ROUTE_AGENT_POLL_SECONDS),
         "routed_transitions": [],
         "rounds": [],
     }
@@ -7218,14 +7478,31 @@ def command_auto_loop(args: argparse.Namespace) -> int:
                     prompt_file=prompt_file,
                     round_index=round_index,
                 )
-                executors.append(run_auto_command(cwd, round_dir, "route-executor", command, executor_index))
+                executors.append(
+                    run_auto_command(
+                        cwd,
+                        round_dir,
+                        "route-executor",
+                        command,
+                        executor_index,
+                        idle_timeout_seconds=float(getattr(args, "route_agent_idle_timeout", 0.0) or 0.0),
+                        wall_timeout_seconds=float(getattr(args, "route_agent_wall_timeout", 0.0) or 0.0),
+                        poll_interval_seconds=float(
+                            getattr(args, "route_agent_poll_seconds", DEFAULT_ROUTE_AGENT_POLL_SECONDS)
+                            or DEFAULT_ROUTE_AGENT_POLL_SECONDS
+                        ),
+                    )
+                )
             pending_agent_prompt = None
             route_executor_failures = [item for item in executors if item.get("exit_code") != 0]
             if route_executor_failures:
                 failure = route_executor_failures[0]
-                status = "route-agent-failed"
+                status = "route-agent-timeout" if failure.get("timed_out") else "route-agent-failed"
                 final_message = (
-                    "Auto-routed subchain executor failed before validation. "
+                    "Auto-routed subchain executor timed out before validation. "
+                    if failure.get("timed_out")
+                    else "Auto-routed subchain executor failed before validation. "
+                ) + (
                     f"Target subchain: {active_subchain or '(unset)'}. "
                     f"Command exit={failure.get('exit_code')} signature={failure.get('signature')}."
                 )
@@ -7247,13 +7524,15 @@ def command_auto_loop(args: argparse.Namespace) -> int:
                     {
                         "id": record_id("auto-loop-route-agent-failure", final_message),
                         "timestamp": utc_now(),
-                        "type": "auto_loop_route_agent_failure",
+                        "type": "auto_loop_route_agent_timeout" if failure.get("timed_out") else "auto_loop_route_agent_failure",
                         "goal": active_goal,
                         "subchain": active_subchain,
                         "round": round_index,
                         "failure": final_message,
                         "command": failure.get("command"),
                         "exit_code": failure.get("exit_code"),
+                        "timed_out": bool(failure.get("timed_out")),
+                        "timeout_reason": failure.get("timeout_reason"),
                         "signature": failure.get("signature"),
                         "stdout_log": failure.get("stdout_log"),
                         "stderr_log": failure.get("stderr_log"),
@@ -7643,6 +7922,279 @@ def command_auto_loop(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
     else:
         print("\n".join(auto_loop_report_markdown(payload)).rstrip() + "\n")
+    return 0 if status == "passed" else 1
+
+
+def add_cli_option(command: list[str], flag: str, value: Any) -> None:
+    if value is None:
+        return
+    if isinstance(value, str) and value == "":
+        return
+    command.extend([flag, str(value)])
+
+
+def add_cli_repeated(command: list[str], flag: str, values: list[Any] | None) -> None:
+    for value in values or []:
+        add_cli_option(command, flag, value)
+
+
+def append_auto_loop_common_cli_options(command: list[str], args: argparse.Namespace, *, include_goal: bool) -> None:
+    if include_goal:
+        add_cli_option(command, "--goal", args.goal)
+    add_cli_repeated(command, "--test-command", list(args.test_command or []))
+    add_cli_repeated(command, "--repair-command", list(args.repair_command or []))
+    add_cli_option(command, "--max-minutes", args.max_minutes)
+    command.extend(["--format", "json"])
+    if getattr(args, "skip_validate", False):
+        command.append("--skip-validate")
+    if getattr(args, "allow_unbounded", False):
+        command.append("--allow-unbounded")
+    if getattr(args, "skip_deep_loop", False):
+        command.append("--skip-deep-loop")
+    add_cli_option(command, "--deep-loop-intent", getattr(args, "deep_loop_intent", None))
+    add_cli_option(command, "--current-subchain", getattr(args, "current_subchain", None))
+    add_cli_repeated(command, "--next-subchain", list(getattr(args, "next_subchain", None) or []))
+    if not getattr(args, "auto_route_next", True):
+        command.append("--no-auto-route-next")
+    add_cli_option(command, "--route-depth-budget", getattr(args, "route_depth_budget", None))
+    if getattr(args, "allow_unbounded_routes", False):
+        command.append("--allow-unbounded-routes")
+    add_cli_option(command, "--route-agent", getattr(args, "route_agent", None))
+    add_cli_repeated(command, "--route-agent-command", list(getattr(args, "route_agent_command", None) or []))
+    add_cli_option(command, "--route-codex-path", getattr(args, "route_codex_path", None))
+    add_cli_option(command, "--route-codex-sandbox", getattr(args, "route_codex_sandbox", None))
+    add_cli_option(command, "--route-codex-approval", getattr(args, "route_codex_approval", None))
+    if getattr(args, "route_codex_require_git", False):
+        command.append("--route-codex-require-git")
+    if getattr(args, "route_codex_ephemeral", False):
+        command.append("--route-codex-ephemeral")
+    if getattr(args, "route_codex_json", False):
+        command.append("--route-codex-json")
+    add_cli_option(command, "--route-codex-output", getattr(args, "route_codex_output", None))
+    add_cli_option(command, "--route-agent-idle-timeout", getattr(args, "route_agent_idle_timeout", None))
+    add_cli_option(command, "--route-agent-wall-timeout", getattr(args, "route_agent_wall_timeout", None))
+    add_cli_option(command, "--route-agent-poll-seconds", getattr(args, "route_agent_poll_seconds", None))
+    add_cli_option(command, "--deep-loop-quality-score", getattr(args, "deep_loop_quality_score", None))
+    add_cli_option(command, "--deep-loop-pass-threshold", getattr(args, "deep_loop_pass_threshold", None))
+    add_cli_option(command, "--deep-loop-max-rounds", getattr(args, "deep_loop_max_rounds", None))
+    if getattr(args, "skip_problem_escalation", False):
+        command.append("--skip-problem-escalation")
+    add_cli_option(command, "--problem-promote-threshold", getattr(args, "problem_promote_threshold", None))
+
+
+def build_watchdog_auto_loop_command(args: argparse.Namespace, cwd: Path) -> list[str]:
+    command = [sys.executable, str(Path(__file__).resolve()), "--cwd", str(cwd), "auto-loop"]
+    append_auto_loop_common_cli_options(command, args, include_goal=True)
+    add_cli_option(command, "--max-rounds", args.max_rounds)
+    return command
+
+
+def build_watchdog_resume_command(args: argparse.Namespace, cwd: Path) -> list[str]:
+    command = [sys.executable, str(Path(__file__).resolve()), "--cwd", str(cwd), "auto-loop-resume", "--latest"]
+    add_cli_option(command, "--extra-rounds", args.resume_extra_rounds)
+    add_cli_option(command, "--extra-route-depth", args.resume_extra_route_depth)
+    resume_minutes = args.resume_max_minutes if args.resume_max_minutes is not None else args.max_minutes
+    add_cli_option(command, "--max-minutes", resume_minutes)
+    command.extend(["--format", "json"])
+    if getattr(args, "skip_validate", False):
+        command.append("--skip-validate")
+    if getattr(args, "allow_unbounded", False):
+        command.append("--allow-unbounded")
+    if getattr(args, "allow_unbounded_routes", False):
+        command.append("--allow-unbounded-routes")
+    if not getattr(args, "auto_route_next", True):
+        command.append("--no-auto-route-next")
+    add_cli_option(command, "--route-agent", getattr(args, "route_agent", None))
+    add_cli_repeated(command, "--route-agent-command", list(getattr(args, "route_agent_command", None) or []))
+    add_cli_option(command, "--route-codex-path", getattr(args, "route_codex_path", None))
+    add_cli_option(command, "--route-codex-sandbox", getattr(args, "route_codex_sandbox", None))
+    add_cli_option(command, "--route-codex-approval", getattr(args, "route_codex_approval", None))
+    if getattr(args, "route_codex_require_git", False):
+        command.append("--route-codex-require-git")
+    if getattr(args, "route_codex_ephemeral", False):
+        command.append("--route-codex-ephemeral")
+    if getattr(args, "route_codex_json", False):
+        command.append("--route-codex-json")
+    add_cli_option(command, "--route-codex-output", getattr(args, "route_codex_output", None))
+    add_cli_option(command, "--route-agent-idle-timeout", getattr(args, "route_agent_idle_timeout", None))
+    add_cli_option(command, "--route-agent-wall-timeout", getattr(args, "route_agent_wall_timeout", None))
+    add_cli_option(command, "--route-agent-poll-seconds", getattr(args, "route_agent_poll_seconds", None))
+    add_cli_option(command, "--deep-loop-max-rounds", getattr(args, "deep_loop_max_rounds", None))
+    if getattr(args, "skip_problem_escalation", False):
+        command.append("--skip-problem-escalation")
+    add_cli_option(command, "--problem-promote-threshold", getattr(args, "problem_promote_threshold", None))
+    return command
+
+
+def parse_child_auto_loop_payload(result: dict[str, Any]) -> dict[str, Any] | None:
+    stdout_log = result.get("stdout_log")
+    if not stdout_log:
+        return None
+    try:
+        text = Path(str(stdout_log)).read_text(encoding="utf-8", errors="replace")
+        value = json.loads(text or "{}")
+    except Exception:
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def report_path_from_child_payload(payload: dict[str, Any] | None) -> Path | None:
+    if not payload:
+        return None
+    report = payload.get("report_json")
+    if not report:
+        return None
+    path = Path(str(report))
+    return path if path.exists() else None
+
+
+def watchdog_report_markdown(payload: dict[str, Any]) -> list[str]:
+    lines = [
+        "# Research Auto Loop Watchdog Report",
+        "",
+        f"- Created at UTC: {payload['timestamp']}",
+        f"- Goal: {payload['goal']}",
+        f"- Status: {payload['status']}",
+        f"- Attempts: {payload['attempt_count']}",
+        f"- Resumes: {payload['resume_count']}",
+        f"- Watchdog directory: `{payload['watchdog_directory']}`",
+        "",
+        "## Attempts",
+        "",
+    ]
+    for item in payload.get("attempts") or []:
+        lines.append(
+            f"- Attempt {item.get('attempt')}: {item.get('kind')} exit={item.get('exit_code')} status={item.get('source_status') or '(unknown)'}"
+        )
+        if item.get("timed_out"):
+            lines.append(f"  - timeout: {item.get('timeout_reason')}")
+        if item.get("report_json"):
+            lines.append(f"  - report: `{item.get('report_json')}`")
+        if item.get("stdout_log"):
+            lines.append(f"  - stdout: `{item.get('stdout_log')}`")
+        if item.get("stderr_log"):
+            lines.append(f"  - stderr: `{item.get('stderr_log')}`")
+    if payload.get("final_message"):
+        lines.extend(["", "## Final Message", "", payload["final_message"]])
+    return lines
+
+
+def command_auto_loop_watchdog(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd)
+    if args.max_resumes < 0:
+        raise ValueError("--max-resumes must be non-negative")
+    watchdog_dir = watchdog_root(cwd) / run_name("auto-loop-watchdog", args.goal, "goal")
+    ensure_dir(watchdog_dir)
+    active_path = watchdog_root(cwd) / "active-run.json"
+    started = time.monotonic()
+    payload: dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION,
+        "timestamp": utc_now(),
+        "project_root": psafe(cwd),
+        "goal": args.goal,
+        "status": "running",
+        "watchdog_directory": psafe(watchdog_dir),
+        "max_resumes": args.max_resumes,
+        "resume_extra_rounds": args.resume_extra_rounds,
+        "resume_extra_route_depth": args.resume_extra_route_depth,
+        "child_idle_timeout": float(args.child_idle_timeout or 0.0),
+        "child_wall_timeout": float(args.child_wall_timeout or 0.0),
+        "poll_seconds": float(args.poll_seconds or DEFAULT_WATCHDOG_POLL_SECONDS),
+        "attempts": [],
+        "resume_count": 0,
+    }
+    write_json(active_path, payload)
+    command = build_watchdog_auto_loop_command(args, cwd)
+    kind = "auto-loop"
+    status = "failed"
+    final_message = ""
+    resume_count = 0
+
+    while True:
+        attempt_index = len(payload["attempts"]) + 1
+        result = run_monitored_process(
+            cwd,
+            watchdog_dir,
+            f"watchdog-{kind}",
+            command,
+            attempt_index,
+            shell=False,
+            idle_timeout_seconds=float(args.child_idle_timeout or 0.0),
+            wall_timeout_seconds=float(args.child_wall_timeout or 0.0),
+            poll_interval_seconds=float(args.poll_seconds or DEFAULT_WATCHDOG_POLL_SECONDS),
+        )
+        child_payload = parse_child_auto_loop_payload(result)
+        report_path = report_path_from_child_payload(child_payload)
+        source_status = str((child_payload or {}).get("status") or "")
+        attempt = {
+            "attempt": attempt_index,
+            "kind": kind,
+            "command": result.get("command"),
+            "exit_code": result.get("exit_code"),
+            "timed_out": bool(result.get("timed_out")),
+            "timeout_reason": result.get("timeout_reason"),
+            "stdout_log": result.get("stdout_log"),
+            "stderr_log": result.get("stderr_log"),
+            "source_status": source_status or None,
+            "report_json": psafe(report_path) if report_path else None,
+            "resumable": bool(source_status in RESUMABLE_AUTO_LOOP_STATUSES),
+        }
+        payload["attempts"].append(attempt)
+        payload["attempt_count"] = len(payload["attempts"])
+        payload["resume_count"] = resume_count
+        payload["elapsed_seconds"] = round(time.monotonic() - started, 3)
+        write_json(active_path, payload)
+
+        if result.get("timed_out") and not report_path:
+            status = "watchdog-child-timeout"
+            final_message = "Watchdog stopped because the child auto-loop process timed out before writing a resumable report."
+            break
+        if source_status == "passed":
+            status = "passed"
+            final_message = "The watched auto-loop reached a passed terminal state."
+            break
+        if source_status in RESUMABLE_AUTO_LOOP_STATUSES:
+            if resume_count >= int(args.max_resumes):
+                status = "watchdog-max-resumes-exhausted"
+                final_message = f"Watchdog stopped because max_resumes={args.max_resumes} was exhausted at status {source_status}."
+                break
+            resume_count += 1
+            payload["resume_count"] = resume_count
+            command = build_watchdog_resume_command(args, cwd)
+            kind = "auto-loop-resume"
+            continue
+        status = source_status or ("watchdog-child-failed" if result.get("exit_code") else "watchdog-stopped")
+        final_message = f"Watchdog stopped at non-resumable child status: {status}."
+        break
+
+    payload["status"] = status
+    payload["resume_count"] = resume_count
+    payload["attempt_count"] = len(payload["attempts"])
+    payload["elapsed_seconds"] = round(time.monotonic() - started, 3)
+    payload["final_message"] = final_message
+    report_json = reports_root(cwd) / f"{timestamp()}-auto-loop-watchdog.json"
+    report_md = reports_root(cwd) / f"{timestamp()}-auto-loop-watchdog.md"
+    write_json(report_json, payload)
+    write_lines(report_md, watchdog_report_markdown(payload))
+    payload["report_json"] = psafe(report_json)
+    payload["report_markdown"] = psafe(report_md)
+    write_json(active_path, payload)
+    append_jsonl(
+        artifacts_path(cwd),
+        {
+            "timestamp": utc_now(),
+            "type": "auto_loop_watchdog",
+            "goal": args.goal,
+            "status": status,
+            "watchdog_directory": psafe(watchdog_dir),
+            "report": psafe(report_md),
+        },
+    )
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(watchdog_report_markdown(payload)).rstrip() + "\n")
     return 0 if status == "passed" else 1
 
 
@@ -8650,6 +9202,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_auto_loop.add_argument("--route-codex-ephemeral", action="store_true", help="Pass --ephemeral to `codex exec`.")
     p_auto_loop.add_argument("--route-codex-json", action="store_true", help="Pass --json to `codex exec` and capture JSONL in executor logs.")
     p_auto_loop.add_argument("--route-codex-output", help="Pass --output-last-message to `codex exec` with this file path.")
+    p_auto_loop.add_argument("--route-agent-idle-timeout", type=float, default=DEFAULT_ROUTE_AGENT_IDLE_TIMEOUT_SECONDS, help="Kill a route executor after this many seconds without stdout/stderr activity. 0 disables idle timeout.")
+    p_auto_loop.add_argument("--route-agent-wall-timeout", type=float, default=DEFAULT_ROUTE_AGENT_WALL_TIMEOUT_SECONDS, help="Kill a route executor after this many wall-clock seconds. 0 disables wall timeout.")
+    p_auto_loop.add_argument("--route-agent-poll-seconds", type=float, default=DEFAULT_ROUTE_AGENT_POLL_SECONDS, help="Polling interval for route executor liveness checks.")
     p_auto_loop.add_argument("--deep-loop-quality-score", type=float, help="Optional per-round quality score for deep-loop gates, 0-1 or 0-100.")
     p_auto_loop.add_argument("--deep-loop-pass-threshold", type=float, help="Optional deep-loop pass threshold, 0-1 or 0-100.")
     p_auto_loop.add_argument("--deep-loop-max-rounds", type=int, help="Override deep-loop retry budget before escalation.")
@@ -8679,10 +9234,60 @@ def build_parser() -> argparse.ArgumentParser:
     p_auto_loop_resume.add_argument("--route-codex-ephemeral", action="store_true", help="Pass --ephemeral to `codex exec`.")
     p_auto_loop_resume.add_argument("--route-codex-json", action="store_true", help="Pass --json to `codex exec`.")
     p_auto_loop_resume.add_argument("--route-codex-output", help="Pass --output-last-message to `codex exec` with this file path.")
+    p_auto_loop_resume.add_argument("--route-agent-idle-timeout", type=float, help="Override route executor idle timeout for the resumed run. 0 disables idle timeout.")
+    p_auto_loop_resume.add_argument("--route-agent-wall-timeout", type=float, help="Override route executor wall timeout for the resumed run. 0 disables wall timeout.")
+    p_auto_loop_resume.add_argument("--route-agent-poll-seconds", type=float, help="Override route executor liveness polling interval.")
     p_auto_loop_resume.add_argument("--deep-loop-max-rounds", type=int, help="Override deep-loop retry budget in the resumed run.")
     p_auto_loop_resume.add_argument("--skip-problem-escalation", action="store_true", help="Do not automatically create problem-loop cases in the resumed run.")
     p_auto_loop_resume.add_argument("--problem-promote-threshold", type=float, default=0.75, help="Promotion threshold used when resumed auto-loop escalates into problem-loop.")
     p_auto_loop_resume.set_defaults(func=command_auto_loop_resume)
+
+    p_auto_loop_watchdog = sub.add_parser("auto-loop-watchdog", help="Supervise auto-loop and auto-loop-resume so unattended runs keep advancing across resumable stops.")
+    p_auto_loop_watchdog.add_argument("--goal", required=True, help="Completion goal for this supervised unattended loop.")
+    p_auto_loop_watchdog.add_argument("--test-command", action="append", help="Shell test command. Repeat for multiple gates.")
+    p_auto_loop_watchdog.add_argument("--repair-command", action="append", help="Shell repair command to run after a failed gate. Repeat for multiple repairs.")
+    p_auto_loop_watchdog.add_argument("--max-rounds", type=int, default=5, help="Maximum loop rounds for the initial auto-loop.")
+    p_auto_loop_watchdog.add_argument("--max-minutes", type=float, default=0.0, help="Optional wall-clock limit passed to child auto-loop commands.")
+    p_auto_loop_watchdog.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output watchdog report format.")
+    p_auto_loop_watchdog.add_argument("--skip-validate", action="store_true", help="Skip research-loop structural validation as a test gate.")
+    p_auto_loop_watchdog.add_argument("--allow-unbounded", action="store_true", help="Allow unbounded child round counts with guardrails.")
+    p_auto_loop_watchdog.add_argument("--skip-deep-loop", action="store_true", help="Disable per-round deep-loop gate dispatch.")
+    p_auto_loop_watchdog.add_argument("--deep-loop-intent", help="Optional intent prompt used by deep-loop. Defaults to --goal.")
+    p_auto_loop_watchdog.add_argument("--current-subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="Current P1-P10 subchain for deep-loop dispatch.")
+    p_auto_loop_watchdog.add_argument("--next-subchain", action="append", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="Force a next P1-P10 subchain when the deep-loop gate passes.")
+    p_auto_loop_watchdog.add_argument("--auto-route-next", action="store_true", default=True, help="Automatically consume route_next decisions. Enabled by default.")
+    p_auto_loop_watchdog.add_argument("--no-auto-route-next", action="store_false", dest="auto_route_next", help="Disable automatic route_next consumption.")
+    p_auto_loop_watchdog.add_argument("--route-depth-budget", type=int, default=3, help="Maximum automatic route_next transitions for the initial auto-loop.")
+    p_auto_loop_watchdog.add_argument("--allow-unbounded-routes", action="store_true", help="Allow unlimited automatic route_next transitions inside child loops.")
+    p_auto_loop_watchdog.add_argument("--route-agent", choices=sorted(ROUTE_AGENT_CHOICES), default="codex", help="Built-in route_next executor for child loops.")
+    p_auto_loop_watchdog.add_argument(
+        "--route-agent-command",
+        action="append",
+        help="Shell command template to execute at the start of an auto-routed subchain. Variables: {cwd}, {subchain}, {goal}, {prompt}, {prompt_file}, {round}. Repeat for multiple commands.",
+    )
+    p_auto_loop_watchdog.add_argument("--route-codex-path", help="Explicit Codex CLI executable path for --route-agent codex.")
+    p_auto_loop_watchdog.add_argument("--route-codex-sandbox", choices=["read-only", "workspace-write", "danger-full-access"], default="workspace-write", help="Sandbox mode passed to `codex exec`.")
+    p_auto_loop_watchdog.add_argument("--route-codex-approval", choices=["untrusted", "on-request", "never"], default="never", help="Approval policy passed to `codex exec`.")
+    p_auto_loop_watchdog.add_argument("--route-codex-require-git", action="store_true", help="Do not pass --skip-git-repo-check to `codex exec`.")
+    p_auto_loop_watchdog.add_argument("--route-codex-ephemeral", action="store_true", help="Pass --ephemeral to `codex exec`.")
+    p_auto_loop_watchdog.add_argument("--route-codex-json", action="store_true", help="Pass --json to `codex exec`.")
+    p_auto_loop_watchdog.add_argument("--route-codex-output", help="Pass --output-last-message to `codex exec` with this file path.")
+    p_auto_loop_watchdog.add_argument("--route-agent-idle-timeout", type=float, default=DEFAULT_ROUTE_AGENT_IDLE_TIMEOUT_SECONDS, help="Kill a route executor after this many seconds without stdout/stderr activity. 0 disables idle timeout.")
+    p_auto_loop_watchdog.add_argument("--route-agent-wall-timeout", type=float, default=DEFAULT_ROUTE_AGENT_WALL_TIMEOUT_SECONDS, help="Kill a route executor after this many wall-clock seconds. 0 disables wall timeout.")
+    p_auto_loop_watchdog.add_argument("--route-agent-poll-seconds", type=float, default=DEFAULT_ROUTE_AGENT_POLL_SECONDS, help="Polling interval for route executor liveness checks.")
+    p_auto_loop_watchdog.add_argument("--deep-loop-quality-score", type=float, help="Optional per-round quality score for deep-loop gates, 0-1 or 0-100.")
+    p_auto_loop_watchdog.add_argument("--deep-loop-pass-threshold", type=float, help="Optional deep-loop pass threshold, 0-1 or 0-100.")
+    p_auto_loop_watchdog.add_argument("--deep-loop-max-rounds", type=int, help="Override deep-loop retry budget before escalation.")
+    p_auto_loop_watchdog.add_argument("--skip-problem-escalation", action="store_true", help="Record escalation without automatically creating a problem-loop case.")
+    p_auto_loop_watchdog.add_argument("--problem-promote-threshold", type=float, default=0.75, help="Promotion threshold used when auto-loop escalates into problem-loop.")
+    p_auto_loop_watchdog.add_argument("--max-resumes", type=int, default=3, help="Maximum automatic auto-loop-resume attempts after resumable child stops.")
+    p_auto_loop_watchdog.add_argument("--resume-extra-rounds", type=int, default=5, help="Additional max rounds for each auto-loop-resume attempt.")
+    p_auto_loop_watchdog.add_argument("--resume-extra-route-depth", type=int, default=3, help="Additional route_next transitions for each auto-loop-resume attempt.")
+    p_auto_loop_watchdog.add_argument("--resume-max-minutes", type=float, help="Optional max_minutes override for resumed child loops.")
+    p_auto_loop_watchdog.add_argument("--child-idle-timeout", type=float, default=DEFAULT_WATCHDOG_CHILD_IDLE_TIMEOUT_SECONDS, help="Kill the child auto-loop process after this many silent seconds. 0 disables child idle timeout.")
+    p_auto_loop_watchdog.add_argument("--child-wall-timeout", type=float, default=DEFAULT_WATCHDOG_CHILD_WALL_TIMEOUT_SECONDS, help="Kill the child auto-loop process after this many wall-clock seconds. 0 disables child wall timeout.")
+    p_auto_loop_watchdog.add_argument("--poll-seconds", type=float, default=DEFAULT_WATCHDOG_POLL_SECONDS, help="Polling interval for child auto-loop supervision.")
+    p_auto_loop_watchdog.set_defaults(func=command_auto_loop_watchdog)
 
     p_claim_evidence = sub.add_parser("claim-evidence", help="Verify claim-to-evidence structure over evidence ids, sources, locators, and statuses.")
     p_claim_evidence.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output claim-evidence report format.")

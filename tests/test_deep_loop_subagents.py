@@ -201,6 +201,52 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertEqual(command[command.index("--route-agent") + 1], "none")
         self.assertIn("--route-agent-command", command)
 
+    def test_mcp_auto_loop_watchdog_maps_resume_options(self):
+        command = mcp_server.tool_to_cli(
+            "research_loop_auto_loop_watchdog",
+            {
+                "cwd": "D:\\Project",
+                "goal": "finish unattended run",
+                "test_commands": ["python -m pytest -q"],
+                "current_subchain": "P5",
+                "next_subchains": ["P6"],
+                "route_agent": "none",
+                "route_agent_commands": ["cmd /c echo route"],
+                "route_agent_idle_timeout": 120,
+                "max_resumes": 3,
+                "resume_extra_rounds": 5,
+                "resume_extra_route_depth": 2,
+                "poll_seconds": 0.2,
+                "format": "json",
+            },
+        )
+
+        self.assertIn("auto-loop-watchdog", command)
+        self.assertEqual(command[command.index("--goal") + 1], "finish unattended run")
+        self.assertEqual(command[command.index("--route-agent-idle-timeout") + 1], "120")
+        self.assertEqual(command[command.index("--max-resumes") + 1], "3")
+        self.assertEqual(command[command.index("--resume-extra-rounds") + 1], "5")
+        self.assertEqual(command[command.index("--resume-extra-route-depth") + 1], "2")
+
+    def test_run_auto_command_kills_idle_executor_and_records_timeout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            round_dir = Path(tmp) / "round"
+            result = research_loop.run_auto_command(
+                Path(tmp),
+                round_dir,
+                "route-executor",
+                f'"{sys.executable}" -c "import time; time.sleep(5)"',
+                1,
+                idle_timeout_seconds=0.25,
+                poll_interval_seconds=0.05,
+            )
+
+            self.assertTrue(result["timed_out"])
+            self.assertEqual(result["timeout_reason"], "idle")
+            self.assertNotEqual(result["exit_code"], 0)
+            self.assertLess(result["elapsed_seconds"], 3)
+            self.assertTrue(Path(result["stdout_log"]).exists())
+
     def test_auto_loop_no_auto_route_reports_handoff_required_not_passed(self):
         with tempfile.TemporaryDirectory() as tmp:
             proc = subprocess.run(
@@ -276,6 +322,51 @@ class DeepLoopSubagentTests(unittest.TestCase):
             self.assertEqual(payload["rounds"][1]["status"], "route-agent-failed")
             self.assertEqual(payload["rounds"][1]["executors"][0]["exit_code"], 7)
             self.assertIn("P6", payload["final_message"])
+
+    def test_auto_loop_timed_out_route_agent_is_reported_as_resumable_timeout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    tmp,
+                    "auto-loop",
+                    "--goal",
+                    "route executor timeout smoke",
+                    "--skip-validate",
+                    "--test-command",
+                    "cmd /c exit /b 0",
+                    "--current-subchain",
+                    "P5",
+                    "--next-subchain",
+                    "P6",
+                    "--route-agent",
+                    "none",
+                    "--route-agent-command",
+                    f'"{sys.executable}" -c "import time; time.sleep(5)"',
+                    "--route-agent-idle-timeout",
+                    "0.25",
+                    "--route-agent-poll-seconds",
+                    "0.05",
+                    "--route-depth-budget",
+                    "1",
+                    "--format",
+                    "json",
+                ],
+                cwd=str(ROOT),
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=30,
+            )
+
+            self.assertNotEqual(proc.returncode, 0)
+            payload = json.loads(proc.stdout)
+            self.assertEqual(payload["status"], "route-agent-timeout")
+            self.assertEqual(payload["rounds"][1]["status"], "route-agent-timeout")
+            self.assertTrue(payload["rounds"][1]["executors"][0]["timed_out"])
+            self.assertEqual(payload["rounds"][1]["executors"][0]["timeout_reason"], "idle")
 
     def test_auto_loop_retry_same_route_runs_agent_before_next_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -433,6 +524,57 @@ class DeepLoopSubagentTests(unittest.TestCase):
             self.assertEqual(payload["rounds"][0]["executors"][0]["exit_code"], 0)
             self.assertTrue(marker.exists())
             self.assertEqual(payload["resume"]["source_status"], "route-depth-budget-exhausted")
+
+    def test_auto_loop_watchdog_resumes_resumable_auto_loop_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "watchdog-marker.txt"
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    tmp,
+                    "auto-loop-watchdog",
+                    "--goal",
+                    "watchdog resume smoke",
+                    "--skip-validate",
+                    "--test-command",
+                    "cmd /c exit /b 0",
+                    "--current-subchain",
+                    "P5",
+                    "--next-subchain",
+                    "P6",
+                    "--route-agent",
+                    "none",
+                    "--route-agent-command",
+                    f'cmd /c echo watched > "{marker}"',
+                    "--route-depth-budget",
+                    "0",
+                    "--resume-extra-rounds",
+                    "2",
+                    "--resume-extra-route-depth",
+                    "0",
+                    "--max-resumes",
+                    "1",
+                    "--poll-seconds",
+                    "0.05",
+                    "--format",
+                    "json",
+                ],
+                cwd=str(ROOT),
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=30,
+            )
+
+            payload = json.loads(proc.stdout)
+            self.assertGreaterEqual(payload["attempt_count"], 2)
+            self.assertEqual(payload["resume_count"], 1)
+            self.assertEqual(payload["attempts"][0]["kind"], "auto-loop")
+            self.assertEqual(payload["attempts"][0]["source_status"], "route-depth-budget-exhausted")
+            self.assertEqual(payload["attempts"][1]["kind"], "auto-loop-resume")
+            self.assertTrue(marker.exists())
 
     def test_persisted_deep_loop_decision_records_gate_vector_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
