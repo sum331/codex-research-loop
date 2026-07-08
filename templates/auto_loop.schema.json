@@ -18,13 +18,38 @@
     "project_root": { "type": "string" },
     "goal": { "type": "string" },
     "status": {
-      "enum": ["running", "passed", "failed", "no-progress", "timeout", "round-limit"]
+      "enum": [
+        "running",
+        "passed",
+        "failed",
+        "no-progress",
+        "timeout",
+        "round-limit",
+        "route-next-handoff-required",
+        "route-next-executor-missing",
+        "route-agent-failed",
+        "route-depth-budget-exhausted",
+        "deep-loop-retry-required",
+        "problem-loop-escalated",
+        "problem-loop-required",
+        "human-checkpoint"
+      ]
     },
     "run_directory": { "type": "string" },
     "max_rounds": { "type": ["integer", "null"] },
     "max_minutes": { "type": "number" },
     "test_commands": { "type": "array", "items": { "type": "string" } },
     "repair_commands": { "type": "array", "items": { "type": "string" } },
+    "deep_loop_enabled": { "type": "boolean" },
+    "current_subchain": { "type": ["string", "null"] },
+    "next_subchains": { "type": "array", "items": { "type": "string" } },
+    "auto_route_next": { "type": "boolean" },
+    "route_depth_budget": { "type": "integer" },
+    "allow_unbounded_routes": { "type": "boolean" },
+    "route_agent": { "type": "string" },
+    "route_codex_path": { "type": ["string", "null"] },
+    "route_agent_commands": { "type": "array", "items": { "type": "string" } },
+    "routed_transitions": { "type": "array", "items": { "type": "object" } },
     "round_count": { "type": "integer" },
     "elapsed_seconds": { "type": "number" },
     "final_message": { "type": "string" },
@@ -39,6 +64,21 @@
           "status": { "type": "string" },
           "tests": { "type": "array", "items": { "type": "object" } },
           "repairs": { "type": "array", "items": { "type": "object" } },
+          "executors": { "type": "array", "items": { "type": "object" } },
+          "deep_loop": {
+            "type": "object",
+            "properties": {
+              "decision": { "type": "string" },
+              "review_mode": { "type": "string" },
+              "subchain_agent": { "type": ["string", "null"] },
+              "target_subchains": { "type": "array", "items": { "type": "string" } },
+              "gate_vector": { "type": "object" },
+              "blocking_dimensions": { "type": "array", "items": { "type": "string" } },
+              "continuation_contract": { "type": "object" }
+            }
+          },
+          "problem_loop": { "type": "object" },
+          "auto_route": { "type": "object" },
           "route_path": { "type": "string" },
           "next_prompt": { "type": "string" }
         }

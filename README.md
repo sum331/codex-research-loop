@@ -11,6 +11,8 @@ It provides:
 - Content ingest for articles, local files, and standardized data packages.
 - Source lookup, Zotero/BibTeX/CSL-JSON export, and llm-wiki handoff support.
 - Claim-evidence structural verification.
+- P1-P10 subchain head agents with chain-specific missions, tool policies,
+  gate vectors, and handoff contracts.
 - Deep-loop gate decisions for `route_next`, `retry_same_route`,
   `escalate_problem_loop`, and `pause_for_human`.
 - Isolated problem-loop diagnosis with generated expert panels and gated
@@ -32,13 +34,13 @@ It provides:
 ## Quick Smoke Test
 
 ```powershell
-python scripts/research_loop.py --cwd "D:\Loop\scratch\research-loop-smoke" auto-loop --goal "smoke test" --skip-validate --test-command "cmd /c exit /b 0" --current-subchain P5 --next-subchain P6 --format json
+python scripts/research_loop.py --cwd "D:\Loop\scratch\research-loop-smoke" auto-loop --goal "smoke test" --skip-validate --skip-deep-loop --test-command "cmd /c exit /b 0" --format json
 ```
 
 ## Auto-Routed Agent Startup
 
-`auto-loop` can consume a `deep-loop` `route_next` decision and start the next
-subchain in the same unattended run:
+`auto-loop` consumes a `deep-loop` `route_next` decision by default and starts
+the next subchain in the same unattended run:
 
 ```powershell
 python scripts/research_loop.py --cwd "D:\Project" auto-loop `
@@ -46,9 +48,7 @@ python scripts/research_loop.py --cwd "D:\Project" auto-loop `
   --test-command "python -m pytest" `
   --current-subchain P7 `
   --next-subchain P8 `
-  --auto-route-next `
-  --route-depth-budget 3 `
-  --route-agent codex
+  --route-depth-budget 3
 ```
 
 The command template is executed at the start of each auto-routed subchain.
@@ -56,12 +56,60 @@ Available variables are `{cwd}`, `{subchain}`, `{goal}`, `{prompt}`,
 `{prompt_file}`, and `{round}`. Prefer `{prompt_file}` for Codex or other agent
 CLIs because deep-loop prompts are multiline.
 
-The built-in `--route-agent codex` executor auto-discovers the user-level
-Codex CLI, then runs the generated prompt through `codex exec -` with
+The built-in `--route-agent codex` executor is the default. It auto-discovers
+the user-level Codex CLI, then runs the generated prompt through `codex exec -`
+with
 `--cd "{cwd}"`, `--sandbox workspace-write`, and `--ask-for-approval never`.
 It passes `--skip-git-repo-check` by default so non-Git research folders can
 run; add `--route-codex-require-git` when you want Codex's Git-root guard.
 Override discovery with `--route-codex-path` or `RESEARCH_LOOP_CODEX_CLI`.
+
+Use `--no-auto-route-next` when you want a manual checkpoint after the current
+subchain instead of unattended continuation. When deep-loop has a next target,
+this exits as `route-next-handoff-required` rather than `passed`, so intermediate
+handoffs cannot be mistaken for completed projects. Use `--route-agent none`
+together with one or more `--route-agent-command` templates when another local
+runner should consume the generated prompt.
+
+If the next-subchain route agent cannot be configured, the run stops as
+`route-next-executor-missing`. If the configured route agent starts but exits
+non-zero, the run stops as `route-agent-failed` and records the executor command,
+stdout/stderr logs, target subchain, and route handoff in the auto-loop report.
+
+For long unattended runs where route depth should not be the stopping condition,
+combine automatic routing with an explicit wall-clock or round safety limit:
+
+```powershell
+python scripts/research_loop.py --cwd "D:\Project" auto-loop `
+  --goal "complete the research project end to end" `
+  --test-command "python -m pytest" `
+  --current-subchain P1 `
+  --allow-unbounded-routes `
+  --max-minutes 360
+```
+
+## Subchain Head Agents
+
+Every P1-P10 subchain is fronted by a head agent. The head agent reads the
+project state, defines the chain-specific work contract, selects allowed tools,
+and evaluates a multi-dimensional gate vector before handing off. Deep-loop
+reports now include:
+
+- `subchain_agent`: the active head agent id and contract.
+- `gate_vector`: objective gap, evidence integrity, artifact readiness, method
+  validity, analysis validity, novelty risk, uncertainty, failure-mode risk,
+  handoff completeness, and human blocker signals.
+- `continuation_contract`: the next target subchain, next agent, required
+  reads, artifact refs, blocking dimensions, and unattended safety flags.
+
+High-risk late-stage work in P6-P9 can escalate to P10 before repeated failures
+when the gate vector shows missing artifacts, analysis validity risk, evidence
+breaks, or unresolved uncertainty.
+
+The next work prompt consumed by `auto-loop` embeds the target Head Agent
+contract directly, so a routed Codex CLI or custom route executor receives the
+mission, required reads, tool policy, required outputs, quality vector, failure
+policy, and handoff contract before starting the next subchain.
 
 ## Notes
 

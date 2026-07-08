@@ -214,6 +214,20 @@ TOOLS: list[dict[str, Any]] = [
                 "deep_loop_intent": {"type": "string", "description": "Optional intent prompt used by deep-loop. Defaults to goal."},
                 "current_subchain": {"type": "string", "description": "Current P1-P10 subchain for deep-loop dispatch."},
                 "next_subchains": {"type": "array", "items": {"type": "string"}, "description": "Forced next P1-P10 subchains when the deep-loop gate passes."},
+                "auto_route_next": {"type": "boolean", "description": "Explicitly enable automatic route_next consumption. Enabled by the CLI by default."},
+                "no_auto_route_next": {"type": "boolean", "description": "Disable automatic route_next consumption and stop after handoff."},
+                "route_depth_budget": {"type": "integer", "description": "Maximum automatic route_next transitions when bounded routing is used."},
+                "allow_unbounded_routes": {"type": "boolean", "description": "Allow unlimited automatic route_next transitions with external safety limits."},
+                "route_agent": {"type": "string", "description": "Built-in route_next executor, such as codex or none."},
+                "route_agent_commands": {"type": "array", "items": {"type": "string"}, "description": "Shell command templates to run at the start of auto-routed subchains."},
+                "route_codex_path": {"type": "string", "description": "Explicit Codex CLI executable path."},
+                "route_codex_sandbox": {"type": "string", "description": "Sandbox mode passed to codex exec."},
+                "route_codex_approval": {"type": "string", "description": "Approval mode passed to codex exec."},
+                "route_codex_skip_git_check": {"type": "boolean", "description": "Pass --skip-git-repo-check to codex exec."},
+                "route_codex_require_git": {"type": "boolean", "description": "Do not pass --skip-git-repo-check to codex exec."},
+                "route_codex_ephemeral": {"type": "boolean", "description": "Pass --ephemeral to codex exec."},
+                "route_codex_json": {"type": "boolean", "description": "Pass --json to codex exec."},
+                "route_codex_output": {"type": "string", "description": "Path for --output-last-message from codex exec."},
                 "deep_loop_quality_score": {"type": "number", "description": "Optional deep-loop quality score, 0-1 or 0-100."},
                 "deep_loop_pass_threshold": {"type": "number", "description": "Optional deep-loop pass threshold, 0-1 or 0-100."},
                 "deep_loop_max_rounds": {"type": "integer", "description": "Override deep-loop retry budget before escalation."},
@@ -622,6 +636,28 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
         add_option(command, "--current-subchain", args.get("current_subchain"))
         for next_subchain in args.get("next_subchains") or []:
             add_option(command, "--next-subchain", next_subchain)
+        if args.get("auto_route_next") is False or as_bool(args.get("no_auto_route_next")):
+            command.append("--no-auto-route-next")
+        elif as_bool(args.get("auto_route_next")):
+            command.append("--auto-route-next")
+        add_option(command, "--route-depth-budget", args.get("route_depth_budget"))
+        if as_bool(args.get("allow_unbounded_routes")):
+            command.append("--allow-unbounded-routes")
+        add_option(command, "--route-agent", args.get("route_agent"))
+        for route_command in args.get("route_agent_commands") or []:
+            add_option(command, "--route-agent-command", route_command)
+        add_option(command, "--route-codex-path", args.get("route_codex_path"))
+        add_option(command, "--route-codex-sandbox", args.get("route_codex_sandbox"))
+        add_option(command, "--route-codex-approval", args.get("route_codex_approval"))
+        if as_bool(args.get("route_codex_skip_git_check")):
+            command.append("--route-codex-skip-git-check")
+        if as_bool(args.get("route_codex_require_git")):
+            command.append("--route-codex-require-git")
+        if as_bool(args.get("route_codex_ephemeral")):
+            command.append("--route-codex-ephemeral")
+        if as_bool(args.get("route_codex_json")):
+            command.append("--route-codex-json")
+        add_option(command, "--route-codex-output", args.get("route_codex_output"))
         add_option(command, "--deep-loop-quality-score", args.get("deep_loop_quality_score"))
         add_option(command, "--deep-loop-pass-threshold", args.get("deep_loop_pass_threshold"))
         add_option(command, "--deep-loop-max-rounds", args.get("deep_loop_max_rounds"))

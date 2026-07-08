@@ -2921,6 +2921,139 @@ DEEP_LOOP_HUMAN_REVIEW_KEYWORDS = [
 
 DEEP_LOOP_SUBCHAIN_BY_ID: dict[str, dict[str, Any]] = {str(rule["id"]): rule for rule in SUBCHAIN_RULES}
 
+SUBCHAIN_AGENT_SPECS: dict[str, dict[str, Any]] = {
+    "P1": {
+        "agent_id": "p1_scope_head_agent",
+        "subchain_id": "P1",
+        "title": "Scope and Research Question Head Agent",
+        "mission": "Convert rough goals into an answerable research question, scope boundary, and initial loop route.",
+        "entry_read": [".research-loop/state.json", ".research-loop/material-passport.json", "latest handoff/checkpoint if present"],
+        "planning_mode": "branch-and-bound scoping with explicit can-do and cannot-prove boundaries",
+        "tool_policy": ["prompt-normalizer", "storage-policy", "academic-research-suite", "nature-academic-search"],
+        "required_outputs": ["research question brief", "scope boundaries", "open questions", "initial route graph"],
+        "quality_vector": ["objective_gap", "method_validity", "uncertainty_level", "handoff_completeness"],
+        "failure_policy": "Retry P1 when the goal is ambiguous; escalate to P10 when the objective is internally inconsistent or infeasible.",
+        "handoff_contract": ["active research question", "scope boundaries", "known missing inputs", "recommended next subchains"],
+    },
+    "P2": {
+        "agent_id": "p2_literature_evidence_head_agent",
+        "subchain_id": "P2",
+        "title": "Literature and Evidence Head Agent",
+        "mission": "Turn search targets and source material into verified metadata, evidence records, and a reading matrix.",
+        "entry_read": [".research-loop/material-passport.json", ".research-loop/evidence-ledger.jsonl", "source-hub outputs", "ingest reports"],
+        "planning_mode": "source-first retrieval with dedupe and evidence ledger updates",
+        "tool_policy": ["research-source-hub", "content-ingest", "zotero-bridge", "nature-academic-search", "pdf", "nature-reader", "llm-wiki"],
+        "required_outputs": ["bibliography", "source metadata", "evidence ledger records", "reading matrix", "counterevidence notes"],
+        "quality_vector": ["evidence_integrity", "artifact_readiness", "uncertainty_level", "handoff_completeness"],
+        "failure_policy": "Retry P2 for weak search coverage; route to P3 for claim conflicts; escalate to P10 when evidence cannot support the objective.",
+        "handoff_contract": ["verified sources", "evidence ids", "unverified items", "claim candidates", "counterevidence"],
+    },
+    "P3": {
+        "agent_id": "p3_claim_contribution_head_agent",
+        "subchain_id": "P3",
+        "title": "Claim and Contribution Head Agent",
+        "mission": "Build auditable claims, novelty judgments, and claim-to-evidence links.",
+        "entry_read": [".research-loop/material-passport.json", ".research-loop/evidence-ledger.jsonl", "reading matrix", "latest literature handoff"],
+        "planning_mode": "multi-hypothesis claim mapping with competing explanations",
+        "tool_policy": ["claim-evidence-verifier", "academic-research-suite", "nature-citation", "nature-reviewer"],
+        "required_outputs": ["claim map", "novelty audit", "claim evidence links", "alternative explanations"],
+        "quality_vector": ["objective_gap", "evidence_integrity", "novelty_risk", "uncertainty_level", "failure_mode_risk"],
+        "failure_policy": "Route back to P2 for missing evidence; escalate to P10 when the claimed contribution collapses or conflicts persist.",
+        "handoff_contract": ["supported claims", "unsupported claims", "novelty risks", "citation requirements", "revision targets"],
+    },
+    "P4": {
+        "agent_id": "p4_method_compliance_head_agent",
+        "subchain_id": "P4",
+        "title": "Method and Compliance Head Agent",
+        "mission": "Design reproducible methods, experiments, statistics, and data/compliance plans.",
+        "entry_read": [".research-loop/state.json", ".research-loop/material-passport.json", "claim map", "data constraints"],
+        "planning_mode": "method selection with explicit feasibility, compliance, and metric checks",
+        "tool_policy": ["academic-research-suite", "nature-data", "prototype", "ethics-compliance-gate"],
+        "required_outputs": ["protocol", "experiment plan", "statistics plan", "data management plan", "compliance flags"],
+        "quality_vector": ["method_validity", "artifact_readiness", "human_blocker", "failure_mode_risk", "handoff_completeness"],
+        "failure_policy": "Route to P1/P3 for objective-method mismatch; escalate to P10 or human checkpoint for compliance blockers.",
+        "handoff_contract": ["method rationale", "metrics", "data requirements", "compliance status", "execution gate"],
+    },
+    "P5": {
+        "agent_id": "p5_execution_head_agent",
+        "subchain_id": "P5",
+        "title": "Execution and Provenance Head Agent",
+        "mission": "Run code, data processing, notebooks, and commands with captured provenance and failure logs.",
+        "entry_read": [".research-loop/state.json", ".research-loop/storage-policy.json", "command plan", "data/code materials"],
+        "planning_mode": "reproducible execution with run logs before interpretation",
+        "tool_policy": ["research-loop run", "auto-loop-runner", "content-ingest", "diagnose", "tdd", "github", "hugging-face"],
+        "required_outputs": ["run logs", "failure logs", "datasets", "code artifacts", "provenance records"],
+        "quality_vector": ["artifact_readiness", "failure_mode_risk", "handoff_completeness", "objective_gap"],
+        "failure_policy": "Retry P5 for command failures; route to P4 for design/data mismatch; escalate to P10 for environment or dependency blockers.",
+        "handoff_contract": ["commands run", "exit codes", "log paths", "produced artifacts", "known failures"],
+    },
+    "P6": {
+        "agent_id": "p6_analysis_figure_head_agent",
+        "subchain_id": "P6",
+        "title": "Analysis, Statistics, and Figure Head Agent",
+        "mission": "Transform results into valid analysis, uncertainty statements, tables, figures, and legends.",
+        "entry_read": ["run logs", "data/results artifacts", "analysis scripts", ".research-loop/evidence-ledger.jsonl"],
+        "planning_mode": "analysis validation with uncertainty and figure traceability checks",
+        "tool_policy": ["academic-research-suite", "nature-figure", "spreadsheets", "pdf"],
+        "required_outputs": ["analysis report", "tables", "figures", "figure legends", "uncertainty note"],
+        "quality_vector": ["analysis_validity", "artifact_readiness", "method_validity", "uncertainty_level", "failure_mode_risk"],
+        "failure_policy": "Route to P5 for data/run defects; route to P3 for interpretation defects; escalate to P10 for statistical or causal validity risks.",
+        "handoff_contract": ["validated results", "figure/table paths", "uncertainty limits", "interpretation constraints"],
+    },
+    "P7": {
+        "agent_id": "p7_writing_citation_head_agent",
+        "subchain_id": "P7",
+        "title": "Writing and Citation Head Agent",
+        "mission": "Write target-ready text under evidence, citation, and format constraints.",
+        "entry_read": ["research question", "claim map", ".research-loop/evidence-ledger.jsonl", "target output profile"],
+        "planning_mode": "evidence-constrained drafting with citation and format gates",
+        "tool_policy": ["claim-evidence-verifier", "academic-research-suite", "nature-writing", "nature-citation", "nature-polishing", "word", "latex", "pdf"],
+        "required_outputs": ["outline", "manuscript draft", "citations", "DOCX/LaTeX/PDF outputs"],
+        "quality_vector": ["evidence_integrity", "artifact_readiness", "novelty_risk", "handoff_completeness", "objective_gap"],
+        "failure_policy": "Route to P2/P3 for missing support; retry P7 for structure/format defects; escalate to P10 for unrecoverable narrative or integrity risk.",
+        "handoff_contract": ["draft path", "citation status", "unsupported segments", "format target", "review checklist"],
+    },
+    "P8": {
+        "agent_id": "p8_review_integrity_head_agent",
+        "subchain_id": "P8",
+        "title": "Review, Revision, and Integrity Head Agent",
+        "mission": "Simulate review, audit integrity, and produce revision strategy before finalization.",
+        "entry_read": ["draft artifacts", "figures/tables", ".research-loop/evidence-ledger.jsonl", "target venue", "review comments if present"],
+        "planning_mode": "multi-perspective critique with novelty, rigor, evidence, and limitation checks",
+        "tool_policy": ["claim-evidence-verifier", "academic-research-suite", "nature-reviewer", "nature-response", "nature-citation", "gmail", "google-drive"],
+        "required_outputs": ["review report", "revision roadmap", "integrity report", "response plan"],
+        "quality_vector": ["evidence_integrity", "analysis_validity", "novelty_risk", "failure_mode_risk", "handoff_completeness"],
+        "failure_policy": "Route to P2/P3/P6/P7 for local defects; escalate to P10 for system-level integrity, novelty, or rebuttal risks.",
+        "handoff_contract": ["review findings", "revision actions", "integrity risks", "accepted limitations", "release blockers"],
+    },
+    "P9": {
+        "agent_id": "p9_release_reuse_head_agent",
+        "subchain_id": "P9",
+        "title": "Submission, Publication, and Reuse Head Agent",
+        "mission": "Package final research outputs for submission, release, reuse, and follow-on work.",
+        "entry_read": ["final draft", "figures", "data/code availability", "submission target", "latest integrity report"],
+        "planning_mode": "release checklist with provenance and downstream reuse planning",
+        "tool_policy": ["zotero-bridge", "llm-wiki", "presentations", "nature-paper2ppt", "nature-paper-to-patent", "github", "google-drive", "gmail", "linear"],
+        "required_outputs": ["submission package", "cover letter", "slides", "release notes", "reuse seeds"],
+        "quality_vector": ["artifact_readiness", "evidence_integrity", "handoff_completeness", "failure_mode_risk", "human_blocker"],
+        "failure_policy": "Route to P7/P8 for package or integrity defects; escalate to P10 for publication, repository, or provenance blockers.",
+        "handoff_contract": ["package manifest", "release paths", "availability statements", "reuse opportunities", "remaining blockers"],
+    },
+    "P10": {
+        "agent_id": "p10_problem_expert_head_agent",
+        "subchain_id": "P10",
+        "title": "Problem Resolution and Expert Panel Head Agent",
+        "mission": "Diagnose blockers in isolation, construct experts, test candidate fixes, and gate promotion into the main loop.",
+        "entry_read": ["problem statement", "failure logs", ".research-loop/state.json", ".research-loop/material-passport.json", "available test commands"],
+        "planning_mode": "isolated lab diagnosis with expert panel and promotion gate",
+        "tool_policy": ["problem-loop", "storage-policy", "auto-loop-runner", "diagnose", "tdd", "research-loop"],
+        "required_outputs": ["problem context snapshot", "expert panel", "isolated lab artifacts", "test logs", "adjustment plan", "promotion gate"],
+        "quality_vector": ["failure_mode_risk", "artifact_readiness", "method_validity", "human_blocker", "handoff_completeness"],
+        "failure_policy": "Continue P10 until the problem is reproduced, resolved, or blocked by owner-only authority.",
+        "handoff_contract": ["root-cause hypothesis", "expert recommendations", "test evidence", "promotion decision", "safe patch scope"],
+    },
+}
+
 
 def active_next_actions(passport: dict[str, Any]) -> list[dict[str, Any]]:
     return [
@@ -3615,6 +3748,165 @@ def deep_loop_human_pause_needed(text: str, profile: dict[str, Any]) -> bool:
     return any(token in lowered for token in DEEP_LOOP_HUMAN_REVIEW_KEYWORDS)
 
 
+def subchain_agent_spec(subchain_id: str) -> dict[str, Any]:
+    spec = SUBCHAIN_AGENT_SPECS.get(subchain_id)
+    if spec:
+        return json.loads(json.dumps(spec, ensure_ascii=True))
+    fallback = DEEP_LOOP_SUBCHAIN_BY_ID.get(subchain_id, {})
+    return {
+        "agent_id": f"{subchain_id.lower()}_head_agent",
+        "subchain_id": subchain_id,
+        "title": f"{fallback.get('name', subchain_id)} Head Agent",
+        "mission": "Coordinate this research subchain and produce a valid handoff.",
+        "entry_read": [".research-loop/state.json", ".research-loop/material-passport.json"],
+        "planning_mode": "standard subchain planning",
+        "tool_policy": list(fallback.get("capability_ids") or []),
+        "required_outputs": list(fallback.get("outputs") or []),
+        "quality_vector": ["objective_gap", "artifact_readiness", "handoff_completeness"],
+        "failure_policy": "Retry the subchain or escalate to P10 when the failure is not locally recoverable.",
+        "handoff_contract": ["summary", "artifacts", "next action"],
+    }
+
+
+def gate_vector_item(level: str, signals: list[str]) -> dict[str, Any]:
+    return {"level": level, "signals": signals or ["No blocking signal detected."]}
+
+
+def gate_vector_has_high(gate_vector: dict[str, Any], dimensions: set[str]) -> bool:
+    return any((gate_vector.get(name) or {}).get("level") == "high" for name in dimensions)
+
+
+def build_gate_vector(
+    *,
+    gate_result: str,
+    current_subchain: dict[str, Any],
+    route_graph: dict[str, Any],
+    profile: dict[str, Any],
+    depth: str,
+    manual_issues: list[str],
+    result_summary: str | None,
+    artifacts: list[str],
+    next_subchains: list[dict[str, Any]],
+) -> dict[str, Any]:
+    current_id = str(current_subchain.get("id"))
+    task_type = str(route_graph.get("task_type") or "")
+    blockers = [item for item in route_graph.get("blockers") or [] if isinstance(item, dict)]
+    warnings = [item for item in route_graph.get("warnings") or [] if isinstance(item, dict)]
+    issue_text = "\n".join(
+        manual_issues
+        + [str(item.get("text") or "") for item in blockers]
+        + [str(item.get("text") or "") for item in warnings]
+        + [result_summary or ""]
+    ).lower()
+    summary_missing = not (result_summary or "").strip()
+    artifact_missing = not artifacts
+    incomplete_tokens = ["missing", "incomplete", "unclear", "unknown", "unsupported", "failed", "blocked", "cannot", "缺失", "不足", "无法", "不确定", "失败"]
+    uncertainty_tokens = ["uncertain", "unknown", "unclear", "ambiguous", "assumption", "limitation", "conflict", "不确定", "假设", "冲突", "局限"]
+    evidence_tokens = ["evidence", "claim", "citation", "source", "unsupported", "locator", "证据", "引用", "文献", "主张"]
+    method_tokens = ["method", "protocol", "statistics", "metric", "baseline", "compliance", "方法", "统计", "指标", "合规"]
+    analysis_tokens = ["analysis", "figure", "table", "uncertainty", "result", "plot", "分析", "图", "表", "结果"]
+
+    objective_signals: list[str] = []
+    if gate_result in {"fail", "block"}:
+        objective_signals.append(f"Gate result is {gate_result}.")
+    if blockers:
+        objective_signals.append(f"{len(blockers)} route blocker(s) remain.")
+    if summary_missing and current_id not in {"P1", "P5"}:
+        objective_signals.append("No result summary was supplied for a nontrivial subchain.")
+    if any(token in issue_text for token in incomplete_tokens):
+        objective_signals.append("Incomplete or blocked-work signal appears in gate text.")
+    objective_level = "high" if gate_result in {"fail", "block"} or (summary_missing and current_id in {"P6", "P7", "P8", "P9"}) else ("medium" if objective_signals else "low")
+
+    evidence_signals: list[str] = []
+    if current_id in {"P2", "P3", "P7", "P8"} or task_type in {"claim_synthesis", "writing_formatting", "review_revision", "submission_release"}:
+        evidence_signals.append("This subchain depends on explicit source, claim, or citation support.")
+    if any(token in issue_text for token in evidence_tokens):
+        evidence_signals.append("Evidence or citation issue signal appears in gate text.")
+    evidence_level = "high" if evidence_signals and any(token in issue_text for token in ["unsupported", "failed", "missing", "缺失", "失败"]) else ("medium" if evidence_signals else "low")
+
+    artifact_signals: list[str] = []
+    if artifacts:
+        artifact_signals.append(f"{len(artifacts)} artifact reference(s) were supplied.")
+    if artifact_missing and current_id in {"P6", "P7", "P8", "P9"}:
+        artifact_signals.append("This late-stage subchain needs concrete output artifacts before handoff.")
+    if artifact_missing and current_id == "P5" and summary_missing:
+        artifact_signals.append("Execution subchain lacks both artifact references and a result summary.")
+    artifact_level = "high" if artifact_missing and current_id in {"P6", "P7", "P8", "P9"} else ("medium" if artifact_missing and current_id == "P5" else "low")
+
+    method_signals: list[str] = []
+    if current_id in {"P4", "P6"}:
+        method_signals.append("This subchain depends on valid method, metric, or statistical design.")
+    if any(token in issue_text for token in method_tokens):
+        method_signals.append("Method, metric, statistics, or compliance signal appears in gate text.")
+    method_level = "high" if gate_result == "block" and method_signals else ("medium" if method_signals else "low")
+
+    analysis_signals: list[str] = []
+    if current_id in {"P6", "P8"}:
+        analysis_signals.append("This subchain must validate analysis, figures, interpretation, or review integrity.")
+    if any(token in issue_text for token in analysis_tokens):
+        analysis_signals.append("Analysis, figure, or result signal appears in gate text.")
+    analysis_level = "high" if current_id == "P6" and artifact_missing and summary_missing else ("medium" if analysis_signals else "low")
+
+    novelty_signals: list[str] = []
+    if current_id in {"P3", "P7", "P8"} or task_type in {"claim_synthesis", "review_revision"}:
+        novelty_signals.append("This subchain should check contribution, alternative explanations, or review novelty.")
+    if any(token in issue_text for token in ["novelty", "contribution", "alternative", "创新", "贡献", "反例"]):
+        novelty_signals.append("Novelty or alternative-explanation signal appears in gate text.")
+    novelty_level = "medium" if novelty_signals else "low"
+
+    uncertainty_signals: list[str] = []
+    if any(token in issue_text for token in uncertainty_tokens):
+        uncertainty_signals.append("Uncertainty, assumption, conflict, or limitation signal appears in gate text.")
+    if depth in {"L5", "L6"} and summary_missing:
+        uncertainty_signals.append("Deep task has no result summary for this round.")
+    uncertainty_level = "high" if uncertainty_signals and (summary_missing or gate_result in {"fail", "block"}) else ("medium" if uncertainty_signals else "low")
+
+    failure_signals: list[str] = []
+    if manual_issues:
+        failure_signals.append(f"{len(manual_issues)} manual gate issue(s) were supplied.")
+    if gate_result in {"fail", "block"}:
+        failure_signals.append(f"Gate result is {gate_result}.")
+    if warnings:
+        failure_signals.append(f"{len(warnings)} route warning(s) are present.")
+    failure_level = "high" if gate_result in {"fail", "block"} else ("medium" if failure_signals else "low")
+
+    handoff_signals: list[str] = []
+    if next_subchains:
+        handoff_signals.append(f"{len(next_subchains)} next subchain candidate(s) available.")
+    else:
+        handoff_signals.append("No next subchain candidate is available.")
+    handoff_level = "high" if not next_subchains and gate_result == "pass" else ("low" if next_subchains else "medium")
+
+    human_signals: list[str] = []
+    if deep_loop_human_pause_needed(issue_text, profile):
+        human_signals.append("Owner-only, restricted-data, credential, privacy, payment, or compliance signal detected.")
+    human_level = "high" if human_signals else "low"
+
+    return {
+        "objective_gap": gate_vector_item(objective_level, objective_signals),
+        "evidence_integrity": gate_vector_item(evidence_level, evidence_signals),
+        "artifact_readiness": gate_vector_item(artifact_level, artifact_signals),
+        "method_validity": gate_vector_item(method_level, method_signals),
+        "analysis_validity": gate_vector_item(analysis_level, analysis_signals),
+        "novelty_risk": gate_vector_item(novelty_level, novelty_signals),
+        "uncertainty_level": gate_vector_item(uncertainty_level, uncertainty_signals),
+        "failure_mode_risk": gate_vector_item(failure_level, failure_signals),
+        "handoff_completeness": gate_vector_item(handoff_level, handoff_signals),
+        "human_blocker": gate_vector_item(human_level, human_signals),
+    }
+
+
+def expert_escalation_reasons(current_subchain: dict[str, Any], depth: str, gate_vector: dict[str, Any]) -> list[str]:
+    current_id = str(current_subchain.get("id"))
+    critical = {"objective_gap", "evidence_integrity", "method_validity", "analysis_validity", "uncertainty_level", "failure_mode_risk"}
+    reasons: list[str] = []
+    if current_id in {"P6", "P7", "P8", "P9"} and gate_vector_has_high(gate_vector, critical):
+        reasons.append(f"{current_id} has high-risk gate-vector dimensions that need P10 expert review before continuing.")
+    if depth in {"L5", "L6"} and gate_vector_has_high(gate_vector, {"novelty_risk", "failure_mode_risk", "uncertainty_level"}):
+        reasons.append(f"Depth {depth} task has high uncertainty, novelty, or failure-mode risk.")
+    return reasons
+
+
 def deep_loop_gate_decision(
     *,
     gate_result: str,
@@ -3629,6 +3921,8 @@ def deep_loop_gate_decision(
     manual_issues: list[str],
     result_summary: str | None,
     next_subchains: list[dict[str, Any]],
+    gate_vector: dict[str, Any],
+    expert_reasons: list[str],
 ) -> dict[str, Any]:
     current_id = str(current_subchain.get("id"))
     reasons: list[str] = []
@@ -3673,6 +3967,19 @@ def deep_loop_gate_decision(
             "quality_score": quality_score,
             "reasons": reasons,
         }
+    if expert_reasons and current_id != "P10" and gate_result in {"pass", "auto"}:
+        reasons.extend(expert_reasons)
+        return {
+            "decision": "escalate_problem_loop",
+            "review_mode": "review_for_problem_escalation",
+            "round_index": round_index,
+            "max_rounds": max_rounds,
+            "pass_threshold": pass_threshold,
+            "quality_score": quality_score,
+            "gate_vector": gate_vector,
+            "expert_precheck_required": True,
+            "reasons": reasons,
+        }
     failing = bool(reasons) or gate_result == "fail"
     if gate_result == "pass":
         failing = False if not blocking_items and not (quality_score is not None and quality_score < pass_threshold) else True
@@ -3698,6 +4005,7 @@ def deep_loop_gate_decision(
             "max_rounds": max_rounds,
             "pass_threshold": pass_threshold,
             "quality_score": quality_score,
+            "gate_vector": gate_vector,
             "reasons": reasons,
         }
     if not next_subchains:
@@ -3709,6 +4017,7 @@ def deep_loop_gate_decision(
             "max_rounds": max_rounds,
             "pass_threshold": pass_threshold,
             "quality_score": quality_score,
+            "gate_vector": gate_vector,
             "reasons": reasons,
         }
     reasons.append("Gate passed; review should prepare the next subchain.")
@@ -3719,6 +4028,8 @@ def deep_loop_gate_decision(
         "max_rounds": max_rounds,
         "pass_threshold": pass_threshold,
         "quality_score": quality_score,
+        "gate_vector": gate_vector,
+        "expert_precheck_required": False,
         "reasons": reasons,
     }
 
@@ -3858,6 +4169,64 @@ def deep_loop_handoff_package(
     }
 
 
+def subchain_agent_prompt_block(agent: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            "## Subchain Head Agent Contract",
+            "",
+            f"- Agent id: `{agent.get('agent_id')}`",
+            f"- Subchain id: `{agent.get('subchain_id')}`",
+            f"- Title: {agent.get('title')}",
+            f"- Mission: {agent.get('mission')}",
+            f"- Planning mode: {agent.get('planning_mode')}",
+            "- Required reads: " + ", ".join(str(item) for item in agent.get("entry_read") or []),
+            "- Tool policy: " + ", ".join(str(item) for item in agent.get("tool_policy") or []),
+            "- Required outputs: " + ", ".join(str(item) for item in agent.get("required_outputs") or []),
+            "- Quality vector: " + ", ".join(str(item) for item in agent.get("quality_vector") or []),
+            f"- Failure policy: {agent.get('failure_policy')}",
+            "- Handoff contract: " + ", ".join(str(item) for item in agent.get("handoff_contract") or []),
+        ]
+    )
+
+
+def deep_loop_continuation_contract(
+    *,
+    current_subchain: dict[str, Any],
+    gate: dict[str, Any],
+    handoff: dict[str, Any],
+    subchain_agent: dict[str, Any],
+    gate_vector: dict[str, Any],
+) -> dict[str, Any]:
+    decision = str(gate.get("decision"))
+    target_ids = list(handoff.get("target_subchains") or [])
+    next_agent = subchain_agent_spec(str(target_ids[0])) if target_ids else None
+    blocking_dimensions = [
+        key
+        for key, value in gate_vector.items()
+        if isinstance(value, dict) and value.get("level") == "high"
+    ]
+    return {
+        "decision": decision,
+        "from_subchain": current_subchain.get("id"),
+        "from_agent": subchain_agent.get("agent_id"),
+        "target_subchains": target_ids,
+        "next_agent": next_agent,
+        "next_work_prompt": handoff.get("next_work_prompt"),
+        "required_reads": list(handoff.get("must_read") or []),
+        "artifact_refs": list(handoff.get("artifact_refs") or []),
+        "gate_vector_summary": {key: value.get("level") for key, value in gate_vector.items() if isinstance(value, dict)},
+        "blocking_dimensions": blocking_dimensions,
+        "stop_conditions": [
+            "pause_for_human only when owner-only authorization, credentials, restricted data, payment, or ethics approval is required",
+            "escalate_problem_loop when high-risk gate-vector dimensions remain unresolved",
+            "retry_same_route when issues are local to the current subchain and retry budget remains",
+        ],
+        "unattended_safe": decision in {"route_next", "retry_same_route", "escalate_problem_loop"},
+        "requires_human": decision == "pause_for_human",
+        "core_files_mutable": False,
+    }
+
+
 def deep_loop_next_work_prompt(
     route_graph: dict[str, Any],
     current_subchain: dict[str, Any],
@@ -3873,21 +4242,28 @@ def deep_loop_next_work_prompt(
         target = next_subchains[0] if next_subchains else {}
         target_id = target.get("id", "next-subchain")
         target_name = target.get("name", "next research subchain")
+        target_agent = subchain_agent_spec(str(target_id))
         return (
             f"Run subchain {target_id} ({target_name}) after review_for_transition. "
             f"Read the handoff, preserve verified outputs from {current_id}, then execute this project-grounded task:\n\n"
+            f"{subchain_agent_prompt_block(target_agent)}\n\n"
+            "## Project Task\n\n"
             f"{inherited_prompt}"
         )
     if decision == "retry_same_route":
+        current_agent = subchain_agent_spec(current_id)
         return (
             f"Retry subchain {current_id} ({current_subchain.get('name')}) after review_for_retry. "
-            "Limit the next round to the diagnosed failed gate criteria, then rerun the same gate."
+            "Limit the next round to the diagnosed failed gate criteria, then rerun the same gate.\n\n"
+            f"{subchain_agent_prompt_block(current_agent)}"
         )
     if decision == "escalate_problem_loop":
+        problem_agent = subchain_agent_spec("P10")
         return (
             "Run P10 problem-resolution-expert-chain in an isolated lab. "
             "Convert the failed gate into a precise problem-loop case, capture reproduction or validation commands, "
-            "and promote only after the threshold gate approves the adjustment plan."
+            "and promote only after the threshold gate approves the adjustment plan.\n\n"
+            f"{subchain_agent_prompt_block(problem_agent)}"
         )
     return (
         "Pause unattended execution. Record the required human decision in the decision log before retrying, "
@@ -3906,6 +4282,20 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
     round_index = int(args.round_index or (deep_loop_existing_round_count(cwd, str(current.get("id"))) + 1))
     next_subchains = deep_loop_next_subchains(graph, current, args.next_subchain)
     manual_issues = list(args.gate_issue or [])
+    artifacts = list(args.artifact or [])
+    subchain_agent = subchain_agent_spec(str(current.get("id")))
+    gate_vector = build_gate_vector(
+        gate_result=args.gate_result,
+        current_subchain=current,
+        route_graph=graph,
+        profile=profile,
+        depth=depth,
+        manual_issues=manual_issues,
+        result_summary=args.result_summary,
+        artifacts=artifacts,
+        next_subchains=next_subchains,
+    )
+    expert_reasons = expert_escalation_reasons(current, depth, gate_vector)
     gate = deep_loop_gate_decision(
         gate_result=args.gate_result,
         current_subchain=current,
@@ -3919,9 +4309,18 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         manual_issues=manual_issues,
         result_summary=args.result_summary,
         next_subchains=next_subchains,
+        gate_vector=gate_vector,
+        expert_reasons=expert_reasons,
     )
     review = deep_loop_review_directive(cwd, graph, current, next_subchains, gate, args.result_summary, manual_issues)
-    handoff = deep_loop_handoff_package(graph, current, next_subchains, gate, review, list(args.artifact or []))
+    handoff = deep_loop_handoff_package(graph, current, next_subchains, gate, review, artifacts)
+    continuation = deep_loop_continuation_contract(
+        current_subchain=current,
+        gate=gate,
+        handoff=handoff,
+        subchain_agent=subchain_agent,
+        gate_vector=gate_vector,
+    )
     loop_id = args.loop_id or f"deep-{timestamp()}-{slug(str(current.get('id', 'subchain')))}"
     return {
         "schema_version": SCHEMA_VERSION,
@@ -3931,6 +4330,7 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         "stage": state.get("current_stage", "INTAKE"),
         "intent": args.intent,
         "current_subchain": current,
+        "subchain_agent": subchain_agent,
         "depth_level": depth,
         "route_graph": graph,
         "gate_input": {
@@ -3941,10 +4341,12 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
             "manual_issues": manual_issues,
             "artifacts": list(args.artifact or []),
         },
+        "gate_vector": gate_vector,
         "gate": gate,
         "review_directive": review,
         "next_subchains": next_subchains if gate.get("decision") == "route_next" else [],
         "handoff_package": handoff,
+        "continuation_contract": continuation,
         "safety": {
             "unattended_safe": gate.get("decision") in {"route_next", "retry_same_route", "escalate_problem_loop"},
             "requires_human": gate.get("decision") == "pause_for_human",
@@ -3956,9 +4358,11 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
 
 def deep_loop_markdown(payload: dict[str, Any]) -> list[str]:
     current = payload.get("current_subchain") or {}
+    agent = payload.get("subchain_agent") or {}
     gate = payload.get("gate") or {}
     review = payload.get("review_directive") or {}
     handoff = payload.get("handoff_package") or {}
+    continuation = payload.get("continuation_contract") or {}
     lines = [
         "# Research Deep Loop Gate",
         "",
@@ -3967,6 +4371,7 @@ def deep_loop_markdown(payload: dict[str, Any]) -> list[str]:
         f"- Loop id: `{payload.get('loop_id')}`",
         f"- Stage: `{payload.get('stage')}`",
         f"- Current subchain: `{current.get('id')}` {current.get('name')}",
+        f"- Subchain agent: `{agent.get('agent_id')}` {agent.get('title') or ''}".rstrip(),
         f"- Depth: `{payload.get('depth_level')}`",
         f"- Gate decision: `{gate.get('decision')}`",
         f"- Review mode: `{review.get('mode')}`",
@@ -3988,6 +4393,16 @@ def deep_loop_markdown(payload: dict[str, Any]) -> list[str]:
     if gate_input.get("manual_issues"):
         lines.extend(["", "## Supplied Gate Issues", ""])
         lines.extend(f"- {item}" for item in gate_input.get("manual_issues") or [])
+    lines.extend(["", "## Gate Vector", ""])
+    for key, value in (payload.get("gate_vector") or {}).items():
+        if isinstance(value, dict):
+            signals = "; ".join(str(item) for item in value.get("signals") or [])
+            lines.append(f"- `{key}`: {value.get('level')} - {signals}")
+    lines.extend(["", "## Subchain Agent Contract", ""])
+    lines.append(f"- Mission: {agent.get('mission')}")
+    lines.append(f"- Planning mode: {agent.get('planning_mode')}")
+    lines.append("- Required outputs: " + ", ".join(agent.get("required_outputs") or []))
+    lines.append("- Handoff contract: " + ", ".join(agent.get("handoff_contract") or []))
     lines.extend(["", "## Review Directive", ""])
     lines.append(f"- Purpose: {review.get('purpose')}")
     lines.append("- Review roles: " + ", ".join(review.get("review_roles") or []))
@@ -4006,6 +4421,11 @@ def deep_loop_markdown(payload: dict[str, Any]) -> list[str]:
     else:
         lines.append("- No automatic target. Human checkpoint required.")
     lines.extend(["", "## Next Work Prompt", "", handoff.get("next_work_prompt") or "(not generated)"])
+    lines.extend(["", "## Continuation Contract", ""])
+    lines.append(f"- Decision: `{continuation.get('decision')}`")
+    lines.append(f"- From agent: `{continuation.get('from_agent')}`")
+    lines.append("- Target subchains: " + (", ".join(continuation.get("target_subchains") or []) or "(none)"))
+    lines.append("- Blocking dimensions: " + (", ".join(continuation.get("blocking_dimensions") or []) or "(none)"))
     lines.extend(["", "## Required Reads", ""])
     for item in handoff.get("must_read") or []:
         lines.append(f"- `{item}`")
@@ -4046,7 +4466,9 @@ def persist_deep_loop_payload(
     write_json(json_path, payload)
     gate = payload.get("gate") or {}
     current = payload.get("current_subchain") or {}
+    agent = payload.get("subchain_agent") or {}
     handoff = payload.get("handoff_package") or {}
+    continuation = payload.get("continuation_contract") or {}
     append_jsonl(
         decisions_path(cwd),
         {
@@ -4057,9 +4479,17 @@ def persist_deep_loop_payload(
             "loop_id": payload.get("loop_id"),
             "stage": payload.get("stage"),
             "current_subchain": current.get("id"),
+            "subchain_agent": agent.get("agent_id"),
             "gate_decision": gate.get("decision"),
             "review_mode": payload.get("review_directive", {}).get("mode"),
             "target_subchains": handoff.get("target_subchains") or [],
+            "gate_vector_summary": continuation.get("gate_vector_summary") or {},
+            "blocking_dimensions": continuation.get("blocking_dimensions") or [],
+            "continuation_contract": {
+                "target_subchains": continuation.get("target_subchains") or [],
+                "blocking_dimensions": continuation.get("blocking_dimensions") or [],
+                "requires_human": continuation.get("requires_human"),
+            },
             "path": psafe(md_path),
         },
     )
@@ -6269,25 +6699,7 @@ def auto_loop_problem_escalation(
     tests: list[dict[str, Any]],
     failures: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    gate = deep_payload.get("gate") or {}
-    handoff = deep_payload.get("handoff_package") or {}
-    issue_lines = [str(item) for item in gate.get("reasons") or []]
-    for failure in failures:
-        issue_lines.append(
-            f"Failed gate: {failure.get('command')} exit={failure.get('exit_code')} signature={failure.get('signature')}"
-        )
-        if failure.get("stderr_excerpt"):
-            issue_lines.append(f"stderr excerpt: {command_excerpt(str(failure.get('stderr_excerpt')), 900)}")
-    problem = "\n\n".join(
-        [
-            f"Auto-loop escalated by deep-loop for goal: {args.goal}",
-            f"Deep-loop decision: {gate.get('decision')}",
-            f"Review mode: {(deep_payload.get('review_directive') or {}).get('mode')}",
-            "Issues:\n" + "\n".join(f"- {item}" for item in issue_lines) if issue_lines else "Issues: none recorded.",
-            f"Next work prompt:\n{handoff.get('next_work_prompt') or '(not generated)'}",
-            f"Deep-loop report: {deep_payload.get('report_markdown') or deep_payload.get('report_json')}",
-        ]
-    )
+    problem = auto_loop_problem_statement(args.goal, deep_payload, failures)
     command = [
         sys.executable,
         str(Path(__file__).resolve()),
@@ -6334,7 +6746,7 @@ def auto_loop_problem_escalation(
     except Exception:
         parsed = None
     return {
-        "decision": gate.get("decision"),
+        "decision": (deep_payload.get("gate") or {}).get("decision"),
         "exit_code": proc.returncode,
         "elapsed_seconds": round(elapsed, 3),
         "stdout_log": psafe(stdout_path),
@@ -6348,15 +6760,66 @@ def auto_loop_problem_escalation(
     }
 
 
+def auto_loop_problem_statement(goal: str, deep_payload: dict[str, Any], failures: list[dict[str, Any]]) -> str:
+    gate = deep_payload.get("gate") or {}
+    handoff = deep_payload.get("handoff_package") or {}
+    continuation = deep_payload.get("continuation_contract") or {}
+    gate_vector = deep_payload.get("gate_vector") or {}
+    issue_lines = [str(item) for item in gate.get("reasons") or []]
+    for failure in failures:
+        issue_lines.append(
+            f"Failed gate: {failure.get('command')} exit={failure.get('exit_code')} signature={failure.get('signature')}"
+        )
+        if failure.get("stderr_excerpt"):
+            issue_lines.append(f"stderr excerpt: {command_excerpt(str(failure.get('stderr_excerpt')), 900)}")
+    vector_summary = continuation.get("gate_vector_summary") or {
+        key: value.get("level")
+        for key, value in gate_vector.items()
+        if isinstance(value, dict)
+    }
+    blocking_dimensions = list(continuation.get("blocking_dimensions") or [])
+    next_agent = continuation.get("next_agent") or {}
+    return "\n\n".join(
+        [
+            f"Auto-loop escalated by deep-loop for goal: {goal}",
+            f"Deep-loop decision: {gate.get('decision')}",
+            f"Review mode: {(deep_payload.get('review_directive') or {}).get('mode')}",
+            "Issues:\n" + "\n".join(f"- {item}" for item in issue_lines) if issue_lines else "Issues: none recorded.",
+            "Gate vector summary:\n" + "\n".join(f"- {key}: {value}" for key, value in vector_summary.items()),
+            "Gate vector blocking dimensions:\n" + ("\n".join(f"- {item}" for item in blocking_dimensions) if blocking_dimensions else "- none"),
+            "Continuation contract:\n" + json.dumps(
+                {
+                    "decision": continuation.get("decision"),
+                    "from_agent": continuation.get("from_agent"),
+                    "target_subchains": continuation.get("target_subchains") or [],
+                    "next_agent": next_agent.get("agent_id"),
+                    "requires_human": continuation.get("requires_human"),
+                    "unattended_safe": continuation.get("unattended_safe"),
+                },
+                indent=2,
+                ensure_ascii=True,
+            ),
+            f"Next work prompt:\n{handoff.get('next_work_prompt') or '(not generated)'}",
+            f"Deep-loop report: {deep_payload.get('report_markdown') or deep_payload.get('report_json')}",
+        ]
+    )
+
+
 def summarize_deep_loop_dispatch(deep_payload: dict[str, Any]) -> dict[str, Any]:
     gate = deep_payload.get("gate") or {}
     review = deep_payload.get("review_directive") or {}
     handoff = deep_payload.get("handoff_package") or {}
+    agent = deep_payload.get("subchain_agent") or {}
+    continuation = deep_payload.get("continuation_contract") or {}
     return {
         "decision": gate.get("decision"),
         "review_mode": review.get("mode"),
+        "subchain_agent": agent.get("agent_id"),
         "target_subchains": handoff.get("target_subchains") or [],
         "next_work_prompt": command_excerpt(handoff.get("next_work_prompt") or "", 900),
+        "gate_vector": continuation.get("gate_vector_summary") or {},
+        "blocking_dimensions": continuation.get("blocking_dimensions") or [],
+        "continuation_contract": continuation,
         "report_json": deep_payload.get("report_json"),
         "report_markdown": deep_payload.get("report_markdown"),
     }
@@ -6476,6 +6939,10 @@ def auto_loop_report_markdown(payload: dict[str, Any]) -> list[str]:
             lines.append(
                 f"  - deep-loop `{deep_loop.get('decision')}` review={deep_loop.get('review_mode')} targets={', '.join(deep_loop.get('target_subchains') or []) or '(none)'}"
             )
+            if deep_loop.get("subchain_agent"):
+                lines.append(f"  - subchain agent: `{deep_loop.get('subchain_agent')}`")
+            if deep_loop.get("blocking_dimensions"):
+                lines.append(f"  - blocking dimensions: {', '.join(deep_loop.get('blocking_dimensions') or [])}")
             if deep_loop.get("report_markdown"):
                 lines.append(f"  - deep-loop report: `{deep_loop.get('report_markdown')}`")
         problem_loop = round_item.get("problem_loop") or {}
@@ -6543,6 +7010,7 @@ def command_auto_loop(args: argparse.Namespace) -> int:
         "next_subchains": list(args.next_subchain or []),
         "auto_route_next": bool(args.auto_route_next),
         "route_depth_budget": args.route_depth_budget,
+        "allow_unbounded_routes": bool(args.allow_unbounded_routes),
         "route_agent": args.route_agent,
         "route_codex_path": str(args.route_codex_path or discover_codex_cli() or "") if args.route_agent == "codex" else None,
         "route_agent_commands": list(args.route_agent_command or []),
@@ -6557,6 +7025,7 @@ def command_auto_loop(args: argparse.Namespace) -> int:
     active_next_subchains = list(args.next_subchain or [])
     pending_agent_prompt: str | None = None
     pending_route: dict[str, Any] | None = None
+    unbounded_routes = bool(args.auto_route_next and args.allow_unbounded_routes)
     remaining_route_budget = int(args.route_depth_budget or 0) if args.auto_route_next else 0
 
     for round_index in range(1, round_limit + 1):
@@ -6604,6 +7073,47 @@ def command_auto_loop(args: argparse.Namespace) -> int:
                 )
                 executors.append(run_auto_command(cwd, round_dir, "route-executor", command, executor_index))
             pending_agent_prompt = None
+            route_executor_failures = [item for item in executors if item.get("exit_code") != 0]
+            if route_executor_failures:
+                failure = route_executor_failures[0]
+                status = "route-agent-failed"
+                final_message = (
+                    "Auto-routed subchain executor failed before validation. "
+                    f"Target subchain: {active_subchain or '(unset)'}. "
+                    f"Command exit={failure.get('exit_code')} signature={failure.get('signature')}."
+                )
+                round_record = {
+                    "round": round_index,
+                    "round_directory": psafe(round_dir),
+                    "goal": active_goal,
+                    "subchain": active_subchain,
+                    "executors": executors,
+                    "tests": [],
+                    "repairs": [],
+                    "status": status,
+                }
+                if pending_route:
+                    round_record["auto_route"] = pending_route
+                    pending_route = None
+                append_jsonl(
+                    decisions_path(cwd),
+                    {
+                        "id": record_id("auto-loop-route-agent-failure", final_message),
+                        "timestamp": utc_now(),
+                        "type": "auto_loop_route_agent_failure",
+                        "goal": active_goal,
+                        "subchain": active_subchain,
+                        "round": round_index,
+                        "failure": final_message,
+                        "command": failure.get("command"),
+                        "exit_code": failure.get("exit_code"),
+                        "signature": failure.get("signature"),
+                        "stdout_log": failure.get("stdout_log"),
+                        "stderr_log": failure.get("stderr_log"),
+                    },
+                )
+                payload["rounds"].append(round_record)
+                break
         tests: list[dict[str, Any]] = []
         test_number = 1
         if not args.skip_validate:
@@ -6652,7 +7162,7 @@ def command_auto_loop(args: argparse.Namespace) -> int:
                         final_message = "All validation and test commands passed; no next subchain is available."
                         payload["rounds"].append(round_record)
                         break
-                    if remaining_route_budget <= 0:
+                    if not unbounded_routes and remaining_route_budget <= 0:
                         status = "route-depth-budget-exhausted"
                         final_message = "Deep-loop requested route_next, but route_depth_budget was exhausted."
                         payload["rounds"].append(round_record)
@@ -6664,7 +7174,7 @@ def command_auto_loop(args: argparse.Namespace) -> int:
                         "round": round_index,
                         "from_subchain": active_subchain,
                         "to_subchain": next_subchain,
-                        "remaining_budget": remaining_route_budget - 1,
+                        "remaining_budget": None if unbounded_routes else remaining_route_budget - 1,
                         "next_goal": next_prompt,
                         "deep_loop_report": deep_payload.get("report_markdown") or deep_payload.get("report_json"),
                     }
@@ -6675,10 +7185,21 @@ def command_auto_loop(args: argparse.Namespace) -> int:
                     active_next_subchains = []
                     pending_agent_prompt = next_prompt
                     pending_route = route_record
-                    remaining_route_budget -= 1
+                    if not unbounded_routes:
+                        remaining_route_budget -= 1
                     round_record["status"] = "route-next-auto-started"
                     payload["rounds"].append(round_record)
                     continue
+                if decision == "route_next" and not args.auto_route_next:
+                    target_subchains = list(deep_dispatch.get("target_subchains") or [])
+                    target_text = ", ".join(target_subchains) if target_subchains else "(none)"
+                    status = "route-next-handoff-required"
+                    final_message = (
+                        "Deep-loop requested route_next, but automatic route consumption is disabled. "
+                        f"Next target subchain(s): {target_text}."
+                    )
+                    payload["rounds"].append(round_record)
+                    break
                 if decision == "retry_same_route":
                     if repair_commands:
                         for repair_index, command in enumerate(repair_commands, start=1):
@@ -7850,9 +8371,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_auto_loop.add_argument("--deep-loop-intent", help="Optional intent prompt used by deep-loop. Defaults to --goal.")
     p_auto_loop.add_argument("--current-subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="Current P1-P10 subchain for deep-loop dispatch.")
     p_auto_loop.add_argument("--next-subchain", action="append", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="Force a next P1-P10 subchain when the deep-loop gate passes.")
-    p_auto_loop.add_argument("--auto-route-next", action="store_true", help="Automatically consume route_next by starting the next subchain inside this auto-loop.")
-    p_auto_loop.add_argument("--route-depth-budget", type=int, default=3, help="Maximum automatic route_next transitions when --auto-route-next is enabled.")
-    p_auto_loop.add_argument("--route-agent", choices=sorted(ROUTE_AGENT_CHOICES), default="none", help="Built-in route_next executor to run at the start of auto-routed subchains.")
+    p_auto_loop.add_argument("--auto-route-next", action="store_true", default=True, help="Automatically consume route_next by starting the next subchain inside this auto-loop. Enabled by default.")
+    p_auto_loop.add_argument("--no-auto-route-next", action="store_false", dest="auto_route_next", help="Disable automatic route_next consumption and stop after writing the handoff.")
+    p_auto_loop.add_argument("--route-depth-budget", type=int, default=3, help="Maximum automatic route_next transitions when auto-routing is enabled.")
+    p_auto_loop.add_argument("--allow-unbounded-routes", action="store_true", help="Allow unlimited automatic route_next transitions. Use with explicit time, round, or external supervision limits for long unattended runs.")
+    p_auto_loop.add_argument("--route-agent", choices=sorted(ROUTE_AGENT_CHOICES), default="codex", help="Built-in route_next executor to run at the start of auto-routed subchains. Defaults to codex for unattended continuation.")
     p_auto_loop.add_argument(
         "--route-agent-command",
         action="append",
