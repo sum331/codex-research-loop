@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED_PATHS = [
     ROOT / "manifests" / "codex-portable-manifest.json",
+    ROOT / "manifests" / "plugin-install-channels.json",
     ROOT / "dispatch" / "codex_capability_dispatch_inventory_20260702.md",
     ROOT / "plugins" / "prompt-submit-skill-router" / ".codex-plugin" / "plugin.json",
     ROOT / "plugins" / "prompt-submit-skill-router" / "scripts" / "user_prompt_submit_router.py",
@@ -42,6 +43,7 @@ def main() -> int:
             errors.append(f"missing required path: {required.relative_to(ROOT)}")
 
     manifest_path = ROOT / "manifests" / "codex-portable-manifest.json"
+    channels_path = ROOT / "manifests" / "plugin-install-channels.json"
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         for skill in ["skill-plugin-router", "local-task-hooks", "z2-harness-loop"]:
@@ -49,6 +51,22 @@ def main() -> int:
                 errors.append(f"manifest missing skill: {skill}")
         if manifest.get("includes_secrets") is not False:
             errors.append("manifest must declare includes_secrets=false")
+    if channels_path.exists():
+        channels = json.loads(channels_path.read_text(encoding="utf-8"))
+        local_names = {item["name"] for item in channels.get("local_plugins", [])}
+        managed_ids = {item["id"] for item in channels.get("managed_plugins", [])}
+        runtime_ids = {item["id"] for item in channels.get("runtime_plugins", [])}
+        for required in ["codex-research-loop", "prompt-submit-skill-router"]:
+            if required not in local_names:
+                errors.append(f"plugin channels missing local plugin: {required}")
+        for required in ["github@openai-curated-remote", "google-drive@openai-curated-remote"]:
+            if required not in managed_ids:
+                errors.append(f"plugin channels missing managed plugin: {required}")
+        for required in ["documents@openai-primary-runtime", "browser@openai-bundled"]:
+            if required not in runtime_ids:
+                errors.append(f"plugin channels missing runtime plugin: {required}")
+        if channels.get("auto_install", {}).get("fail_open") is not True:
+            errors.append("plugin channels must be fail-open")
 
     for path in ROOT.rglob("*"):
         relative_parts = set(path.relative_to(ROOT).parts)

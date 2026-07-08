@@ -10,7 +10,8 @@ Included:
 - `dispatch/codex_capability_dispatch_inventory_20260702.md` - the routing table.
 - `hooks/local-task-hooks/` - reusable lifecycle hook scripts.
 - `scripts/install-codex-portable.ps1` - Windows installer for a fresh Codex home.
-- `manifests/` - package inventory and excluded managed-plugin cache summary.
+- `manifests/` - package inventory, plugin install channels, and excluded
+  managed-plugin cache summary.
 
 Not included:
 
@@ -36,10 +37,48 @@ paths, backs up any existing `hooks.json`, and registers:
 - local lifecycle task hooks;
 - research-loop lifecycle hooks pointing to this cloned repo.
 
+By default it also reads `manifests/plugin-install-channels.json` and configures
+plugin channels:
+
+- local marketplace entries in `%USERPROFILE%\.agents\plugins\marketplace.json`
+  for `codex-research-loop@personal` and
+  `prompt-submit-skill-router@personal`;
+- managed plugin install attempts through `codex plugin add`, including
+  `github@openai-curated-remote`, `google-drive@openai-curated-remote`,
+  `gmail@openai-curated-remote`, `figma@openai-curated-remote`,
+  `linear@openai-curated-remote`, `hugging-face@openai-curated-remote`,
+  `openai-developers@openai-curated-remote`,
+  `codex-security@openai-curated-remote`,
+  `creative-production@openai-curated-remote`, and
+  `superpowers@openai-curated-remote`;
+- runtime plugin enablement in `%CODEX_HOME%\config.toml`, including
+  `documents@openai-primary-runtime`, `pdf@openai-primary-runtime`,
+  `spreadsheets@openai-primary-runtime`, `presentations@openai-primary-runtime`,
+  `template-creator@openai-primary-runtime`, `browser@openai-bundled`,
+  `chrome@openai-bundled`, `computer-use@openai-bundled`, and
+  `latex@openai-bundled`.
+
+Plugin install is fail-open: if `codex` CLI is unavailable or a managed channel
+is not visible on that machine yet, the installer records the failure in its JSON
+result but still completes the local skills/hooks setup.
+
 Run without hook registration when you only want to copy the library:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\portable\scripts\install-codex-portable.ps1 -InstallHooks:$false
+powershell -ExecutionPolicy Bypass -File .\portable\scripts\install-codex-portable.ps1 -SkipHooks
+```
+
+Run without managed plugin auto-install when you want only marketplace/config
+setup:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\portable\scripts\install-codex-portable.ps1 -SkipAutoInstallPlugins
+```
+
+Run without any plugin-channel configuration:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\portable\scripts\install-codex-portable.ps1 -SkipPluginChannels
 ```
 
 ## External API Pairing

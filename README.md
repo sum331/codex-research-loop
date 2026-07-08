@@ -72,12 +72,17 @@ The portable installer copies local skills, the prompt-submit dispatch plugin,
 the dispatch table, and reusable lifecycle hook scripts into `%CODEX_HOME%`
 when set, otherwise `%USERPROFILE%\.codex`. It rewrites `hooks.json` with the
 new computer's paths and backs up the previous hooks file before changing it.
+It also reads `portable/manifests/plugin-install-channels.json` to configure
+local plugin marketplace entries, attempt managed plugin installs through
+`codex plugin add`, and enable bundled/runtime plugins in `config.toml`.
 
 Managed Codex plugin caches, appserver caches, runtime logs, orphan workspaces,
 databases, Git metadata, and API keys are intentionally excluded from the
 package. Reinstall official plugins/connectors through Codex on the new
 computer; see `portable/manifests/local-plugin-inventory.json` for the local
-cache inventory that was present on the source machine.
+cache inventory that was present on the source machine. The installer is
+fail-open: if a managed channel is unavailable, local skills/hooks and runtime
+configuration still complete.
 
 ## Quick Smoke Test
 

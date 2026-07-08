@@ -52,6 +52,7 @@
     "dispatch_tables":  [
                             "codex_capability_dispatch_inventory_20260702.md"
                         ],
+    "plugin_install_channels":  "portable/manifests/plugin-install-channels.json",
     "packaged_hooks":  [
                            "local-task-hooks"
                        ],

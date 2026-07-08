@@ -82,11 +82,13 @@ class DeepLoopSubagentTests(unittest.TestCase):
     def test_portable_bundle_contains_skills_dispatch_plugin_and_installer(self):
         portable = ROOT / "portable"
         manifest_path = portable / "manifests" / "codex-portable-manifest.json"
+        channels_path = portable / "manifests" / "plugin-install-channels.json"
         dispatch_path = portable / "dispatch" / "codex_capability_dispatch_inventory_20260702.md"
         installer_path = portable / "scripts" / "install-codex-portable.ps1"
         router_path = portable / "plugins" / "prompt-submit-skill-router" / "scripts" / "user_prompt_submit_router.py"
 
         self.assertTrue(manifest_path.exists())
+        self.assertTrue(channels_path.exists())
         self.assertTrue(dispatch_path.exists())
         self.assertTrue(installer_path.exists())
         self.assertTrue(router_path.exists())
@@ -99,6 +101,12 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("prompt-submit-skill-router", manifest["packaged_plugins"])
         self.assertIn("codex_capability_dispatch_inventory_20260702.md", manifest["dispatch_tables"])
         self.assertFalse(manifest["includes_secrets"])
+
+        channels = json.loads(channels_path.read_text(encoding="utf-8"))
+        self.assertIn("codex-research-loop", [item["name"] for item in channels["local_plugins"]])
+        self.assertIn("github@openai-curated-remote", [item["id"] for item in channels["managed_plugins"]])
+        self.assertIn("documents@openai-primary-runtime", [item["id"] for item in channels["runtime_plugins"]])
+        self.assertTrue(channels["auto_install"]["fail_open"])
 
     def test_every_subchain_has_head_agent_contract(self):
         self.assertEqual(set(research_loop.SUBCHAIN_AGENT_SPECS), set(research_loop.DEEP_LOOP_SUBCHAIN_BY_ID))

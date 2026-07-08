@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "auto_install": {
+    "local_marketplace": true,
+    "managed_plugins": true,
+    "runtime_plugins": true,
+    "fail_open": true
+  },
+  "personal_marketplace": {
+    "name": "personal",
+    "display_name": "Personal"
+  },
+  "local_plugins": [
+    {
+      "id": "codex-research-loop@personal",
+      "name": "codex-research-loop",
+      "channel": "local-repo",
+      "source": {
+        "source": "local",
+        "path_template": "{REPO_ROOT}"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
+      "auto_install": true
+    },
+    {
+      "id": "prompt-submit-skill-router@personal",
+      "name": "prompt-submit-skill-router",
+      "channel": "portable-local",
+      "source": {
+        "source": "local",
+        "path_template": "{CODEX_HOME}\\plugins\\prompt-submit-skill-router"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
+      "auto_install": true
+    }
+  ],
+  "managed_plugins": [
+    {
+      "id": "github@openai-curated-remote",
+      "name": "github",
+      "channel": "openai-curated-remote",
+      "candidate_install_specs": ["github@openai-curated-remote", "github@openai-curated"],
+      "purpose": "GitHub repositories, issues, pull requests, and publish workflows.",
+      "auto_install": true
+    },
+    {
+      "id": "google-drive@openai-curated-remote",
+      "name": "google-drive",
+      "channel": "openai-curated-remote",
+      "candidate_install_specs": ["google-drive@openai-curated-remote", "google-drive@openai-curated"],
+      "purpose": "Google Drive, Docs, Sheets, and Slides connectors.",
+      "auto_install": true
+    },
+    {
+      "id": "gmail@openai-curated-remote",
+      "name": "gmail",
+      "channel": "openai-curated-remote",
+      "candidate_install_specs": ["gmail@openai-curated-remote"],
+      "purpose": "Gmail search, reading, drafts, and mailbox triage.",
+      "auto_install": true
+    },
+    {
+      "id": "figma@openai-curated-remote",
+      "name": "figma",
+      "channel": "openai-curated-remote",
+      "candidate_install_specs": ["figma@openai-curated-remote", "figma@openai-curated"],
+      "purpose": "Figma design context and design generation workflows.",
+      "auto_install": true
+    },
+    {
+      "id": "linear@openai-curated-remote",
+      "name": "linear",
+      "channel": "openai-curated-remote",
+      "candidate_install_specs": ["linear@openai-curated-remote", "linear@openai-curated"],
+      "purpose": "Linear issue and product workflow integration.",
+      "auto_install": true
+    },
+    {
+      "id": "hugging-face@openai-curated-remote",
+      "name": "hugging-face",
+      "channel": "openai-curated-remote",
+      "candidate_install_specs": ["hugging-face@openai-curated-remote"],
+      "purpose": "Hugging Face models, datasets, papers, Spaces, and jobs.",
+      "auto_install": true
+    },
+    {
+      "id": "openai-developers@openai-curated-remote",
+      "name": "openai-developers",
+      "channel": "openai-curated-remote",
+      "candidate_install_specs": ["openai-developers@openai-curated-remote"],
+      "purpose": "OpenAI Platform/API app-building and troubleshooting skills.",
+      "auto_install": true
+    },
+    {
+      "id": "codex-security@openai-curated-remote",
+      "name": "codex-security",
+      "channel": "openai-curated-remote",
+      "candidate_install_specs": ["codex-security@openai-curated-remote"],
+      "purpose": "Security scan, threat model, finding triage, and validation skills.",
+      "auto_install": true
+    },
+    {
+      "id": "creative-production@openai-curated-remote",
+      "name": "creative-production",
+      "channel": "openai-curated-remote",
+      "candidate_install_specs": ["creative-production@openai-curated-remote"],
+      "purpose": "Business creative production, ads, logo, scene, and moodboard workflows.",
+      "auto_install": true
+    },
+    {
+      "id": "superpowers@openai-curated-remote",
+      "name": "superpowers",
+      "channel": "openai-curated-remote",
+      "candidate_install_specs": ["superpowers@openai-curated-remote"],
+      "purpose": "Planning, debugging, TDD, verification, and subagent workflow skills.",
+      "auto_install": true
+    }
+  ],
+  "runtime_plugins": [
+    {
+      "id": "documents@openai-primary-runtime",
+      "name": "documents",
+      "channel": "openai-primary-runtime",
+      "purpose": "DOCX and document creation/editing runtime.",
+      "enable_in_config": true
+    },
+    {
+      "id": "pdf@openai-primary-runtime",
+      "name": "pdf",
+      "channel": "openai-primary-runtime",
+      "purpose": "PDF reading, rendering, creation, and verification runtime.",
+      "enable_in_config": true
+    },
+    {
+      "id": "spreadsheets@openai-primary-runtime",
+      "name": "spreadsheets",
+      "channel": "openai-primary-runtime",
+      "purpose": "Spreadsheet creation, analysis, and editing runtime.",
+      "enable_in_config": true
+    },
+    {
+      "id": "presentations@openai-primary-runtime",
+      "name": "presentations",
+      "channel": "openai-primary-runtime",
+      "purpose": "PowerPoint and slide deck creation/editing runtime.",
+      "enable_in_config": true
+    },
+    {
+      "id": "template-creator@openai-primary-runtime",
+      "name": "template-creator",
+      "channel": "openai-primary-runtime",
+      "purpose": "Reusable artifact template creation runtime.",
+      "enable_in_config": true
+    },
+    {
+      "id": "browser@openai-bundled",
+      "name": "browser",
+      "channel": "openai-bundled",
+      "purpose": "In-app browser control.",
+      "enable_in_config": true
+    },
+    {
+      "id": "chrome@openai-bundled",
+      "name": "chrome",
+      "channel": "openai-bundled",
+      "purpose": "User Chrome control with existing logged-in state.",
+      "enable_in_config": true
+    },
+    {
+      "id": "computer-use@openai-bundled",
+      "name": "computer-use",
+      "channel": "openai-bundled",
+      "purpose": "Windows desktop app control from Codex.",
+      "enable_in_config": true
+    },
+    {
+      "id": "latex@openai-bundled",
+      "name": "latex",
+      "channel": "openai-bundled",
+      "purpose": "LaTeX compile and runtime management.",
+      "enable_in_config": true
+    }
+  ]
+}
