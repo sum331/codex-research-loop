@@ -46,7 +46,7 @@ def main() -> int:
     channels_path = ROOT / "manifests" / "plugin-install-channels.json"
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
-        for skill in ["skill-plugin-router", "local-task-hooks", "z2-harness-loop"]:
+        for skill in ["research-loop", "skill-plugin-router", "local-task-hooks", "z2-harness-loop"]:
             if skill not in manifest.get("packaged_skills", []):
                 errors.append(f"manifest missing skill: {skill}")
         if manifest.get("includes_secrets") is not False:

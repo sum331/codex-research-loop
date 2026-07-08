@@ -92,11 +92,13 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertTrue(dispatch_path.exists())
         self.assertTrue(installer_path.exists())
         self.assertTrue(router_path.exists())
+        self.assertTrue((portable / "skills" / "research-loop" / "SKILL.md").exists())
         self.assertTrue((portable / "skills" / "skill-plugin-router" / "SKILL.md").exists())
         self.assertTrue((portable / "skills" / "local-task-hooks" / "SKILL.md").exists())
         self.assertTrue((portable / "hooks" / "local-task-hooks" / "codex_lifecycle_hook.py").exists())
 
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+        self.assertIn("research-loop", manifest["packaged_skills"])
         self.assertIn("skill-plugin-router", manifest["packaged_skills"])
         self.assertIn("prompt-submit-skill-router", manifest["packaged_plugins"])
         self.assertIn("codex_capability_dispatch_inventory_20260702.md", manifest["dispatch_tables"])
