@@ -110,6 +110,58 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("documents@openai-primary-runtime", [item["id"] for item in channels["runtime_plugins"]])
         self.assertTrue(channels["auto_install"]["fail_open"])
 
+    def test_normalize_adds_standard_harness_protocol(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            research_loop.init_project(cwd)
+            state = research_loop.load_state(cwd)
+            passport = research_loop.load_passport(cwd, state)
+
+            payload = research_loop.normalize_task_input(cwd, state, passport, "continue the current research task")
+
+        self.assertEqual(payload["execution_profile"]["id"], "standard_loop")
+        self.assertIn("route plan", payload["harness_protocol"]["validation_surfaces"])
+        self.assertIn("grader", payload["harness_protocol"]["case_contract"]["fields"])
+        self.assertIn("failures_by_tag", payload["harness_protocol"]["feedback_summary"]["preferred_metrics"])
+        self.assertIn("Execution profile: standard_loop", payload["downstream_prompt"])
+        self.assertIn("If using reproducible cases", payload["downstream_prompt"])
+        self.assertTrue(any("inspect generated artifacts or logs directly" in item for item in payload["harness_protocol"]["guardrails"]))
+
+    def test_route_adds_research_experiment_harness_protocol(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            research_loop.init_project(cwd)
+            state = research_loop.load_state(cwd)
+            passport = research_loop.load_passport(cwd, state)
+
+            graph = research_loop.build_route_graph(cwd, state, passport, "run analysis and compare metrics against the baseline")
+
+        self.assertEqual(graph["execution_profile"]["id"], "research_experiment_loop")
+        self.assertIn("metric and target-transform lock", graph["harness_protocol"]["validation_surfaces"])
+        self.assertIn("deep-loop consumes pass/fail", "; ".join(graph["harness_protocol"]["integration_points"]))
+        self.assertTrue(any("Lock metric definitions" in item for item in graph["harness_protocol"]["guardrails"]))
+
+    def test_deep_loop_continuation_inherits_harness_protocol(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = research_loop.build_deep_loop_payload(
+                deep_args(
+                    intent="write manuscript with citations and formula preservation",
+                    current_subchain="P7",
+                    next_subchain=["P8"],
+                    result_summary="Draft and citation pass completed.",
+                    artifact=["manuscripts/draft.md"],
+                ),
+                Path(tmp),
+                minimal_state("WRITING"),
+                minimal_passport(),
+            )
+
+        harness = payload["continuation_contract"]["harness_protocol"]
+        self.assertEqual(harness["execution_profile"], "manuscript_artifact_loop")
+        self.assertIn("formula/text preservation audit", harness["validation_surfaces"])
+        self.assertIn("weighted_score", harness["feedback_summary"]["preferred_metrics"])
+        self.assertIn("Harness protocol", payload["continuation_contract"]["next_work_prompt"])
+
     def test_every_subchain_has_head_agent_contract(self):
         self.assertEqual(set(research_loop.SUBCHAIN_AGENT_SPECS), set(research_loop.DEEP_LOOP_SUBCHAIN_BY_ID))
         for subchain_id, spec in research_loop.SUBCHAIN_AGENT_SPECS.items():
@@ -170,6 +222,32 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("p6_analysis_figure_head_agent", prompt)
         self.assertIn("Required outputs", prompt)
         self.assertIn("analysis report", prompt)
+        self.assertIn("Harness protocol", prompt)
+        self.assertIn("wrapped command run log", prompt)
+
+    def test_retry_same_route_prompt_keeps_original_task_and_harness(self):
+        payload = research_loop.build_deep_loop_payload(
+            deep_args(
+                intent="run analysis and compare metrics against the baseline",
+                current_subchain="P5",
+                next_subchain=["P6"],
+                gate_result="fail",
+                gate_issue=["metric report is missing"],
+                result_summary="Validation did not produce a metric report.",
+                round_index=1,
+                max_rounds=3,
+            ),
+            ROOT,
+            minimal_state("EXECUTION"),
+            minimal_passport(),
+        )
+
+        prompt = payload["continuation_contract"]["next_work_prompt"]
+        self.assertEqual(payload["gate"]["decision"], "retry_same_route")
+        self.assertIn("Project Task And Harness", prompt)
+        self.assertIn("Harness protocol", prompt)
+        self.assertIn("failures_by_tag", prompt)
+        self.assertIn("metric and target-transform lock", prompt)
 
     def test_problem_escalation_prompt_embeds_p10_head_agent_contract(self):
         payload = research_loop.build_deep_loop_payload(
@@ -183,6 +261,8 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("Subchain Head Agent Contract", prompt)
         self.assertIn("p10_problem_expert_head_agent", prompt)
         self.assertIn("isolated lab diagnosis", prompt)
+        self.assertIn("Original Project Task And Harness", prompt)
+        self.assertIn("Harness protocol", prompt)
 
     def test_auto_loop_problem_escalation_problem_includes_gate_vector_context(self):
         payload = research_loop.build_deep_loop_payload(
@@ -198,6 +278,9 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("artifact_readiness", problem)
         self.assertIn("Continuation contract", problem)
         self.assertIn("p10_problem_expert_head_agent", problem)
+        self.assertIn("Harness protocol", problem)
+        self.assertIn("execution_profile", problem)
+        self.assertIn("feedback_metrics", problem)
 
     def test_mcp_auto_loop_maps_unattended_route_options(self):
         command = mcp_server.tool_to_cli(

@@ -31,6 +31,48 @@ skills such as `academic-research-suite`, `nature-writing`, `nature-figure`,
 writing, review, figures, and document production. Use this skill to preserve
 state, evidence, runs, decisions, checkpoints, and handoffs.
 
+## Harness Discipline
+
+Generalize the durable harness discipline from `z2-harness-loop` for every
+research-loop task:
+
+1. Scope the objective, files, metrics, deliverable, and stop condition.
+2. Map current project state and relevant artifacts before acting.
+3. Choose a validation surface before editing or running anything substantive.
+4. Build the smallest coherent increment.
+5. Test through the chosen harness.
+6. Read back outputs, reports, logs, renders, or diffs directly.
+7. Loop until the gate passes, a retry limit is reached, or a real blocker is
+   recorded.
+8. Report artifacts, validation evidence, remaining risks, and the next target.
+
+Use `normalize` or `route` to classify the execution profile before starting
+work. The generated `harness_protocol` distinguishes standard loops,
+manuscript/artifact loops, and research experiment loops.
+
+Typical validation surfaces include route plans, structural `validate`,
+claim-evidence checks, formula/citation/layout audits, document/PDF render
+inspection, metric recomputation, wrapped run logs, small representative
+shards, and artifact diffs. Always inspect the resulting artifacts or logs
+before claiming completion.
+
+Do not absorb the z2 harness as a whole runner. Its project-specific candidate
+selection is intentionally lightweight and weaker than this plugin's
+`auto-loop`, `deep-loop`, and `problem-loop`. Instead, split its useful pieces
+across the existing workflow:
+
+- `normalize` / `route`: choose the validation surface and, when useful, define
+  a case contract with id, target/input, expected gate, grader, tags, weight,
+  and timeout/budget.
+- `run` / `auto-loop`: execute the checks and capture logs, artifacts, stdout,
+  stderr, and exit status.
+- `deep-loop`: consume pass/fail, weighted score, failure tags, report paths,
+  and artifact refs as gate evidence.
+- `problem-loop`: use failed tags and logs to construct the expert panel and
+  isolated lab plan.
+- `handoff`: preserve report paths, failed tags, and next validation target for
+  the next subchain.
+
 When MCP tools from this plugin are available, prefer them for routine state
 operations instead of shelling out manually. Pass the active project directory
 as `cwd` for every tool call. Available tool names mirror the CLI surface:

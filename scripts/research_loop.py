@@ -827,6 +827,59 @@ TASK_KEYWORDS: dict[str, list[str]] = {
 ARTICLE_INGEST_KEYWORDS = ["article", "paper", "pdf", "html", "webpage", "text", "literature", "\u6587\u7ae0", "\u8bba\u6587", "\u6587\u732e", "\u7f51\u9875"]
 DATA_INGEST_KEYWORDS = ["data", "dataset", "csv", "tsv", "json", "jsonl", "parquet", "xlsx", "xls", "table", "\u6570\u636e", "\u6570\u636e\u96c6", "\u8868\u683c"]
 
+MANUSCRIPT_ARTIFACT_KEYWORDS = [
+    "formula",
+    "citation",
+    "reference",
+    "figure",
+    "table",
+    "caption",
+    "layout",
+    "word",
+    "docx",
+    "latex",
+    "pdf",
+    "manuscript",
+    "\u516c\u5f0f",
+    "\u5f15\u7528",
+    "\u53c2\u8003\u6587\u732e",
+    "\u56fe",
+    "\u8868",
+    "\u6392\u7248",
+]
+
+RESEARCH_EXPERIMENT_KEYWORDS = [
+    "metric",
+    "baseline",
+    "ablation",
+    "seed",
+    "validation set",
+    "target transform",
+    "reproducibility",
+    "controlled experiment",
+    "small shard",
+    "\u6307\u6807",
+    "\u57fa\u7ebf",
+    "\u6d88\u878d",
+    "\u968f\u673a\u79cd\u5b50",
+    "\u53ef\u590d\u73b0",
+]
+
+EXECUTION_PROFILE_DEFS: dict[str, dict[str, Any]] = {
+    "standard_loop": {
+        "label": "standard research loop",
+        "description": "Normal project work with a chosen validation surface, smallest coherent change, direct output readback, and report.",
+    },
+    "manuscript_artifact_loop": {
+        "label": "manuscript/artifact loop",
+        "description": "Writing, citation, figure, table, formula, DOCX, LaTeX, or PDF work with artifact-specific integrity checks.",
+    },
+    "research_experiment_loop": {
+        "label": "research experiment loop",
+        "description": "Method, data, code, analysis, figure, or experiment work that must lock metrics and validate with small representative checks before interpretation.",
+    },
+}
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -2701,6 +2754,100 @@ def has_deferred_secondary_signal(text: str) -> bool:
     )
 
 
+def classify_execution_profile(task_type: str, passport: dict[str, Any], intent: str | None = None) -> dict[str, Any]:
+    text = task_signal_text(intent, passport)
+    targets = target_values(passport)
+    profile_id = "standard_loop"
+    if task_type in {"writing_formatting", "review_revision", "submission_release"} or targets & {"paper", "manuscript", "docx", "pdf"} or any(
+        token in text for token in MANUSCRIPT_ARTIFACT_KEYWORDS
+    ):
+        profile_id = "manuscript_artifact_loop"
+    elif task_type in {"design_compliance", "execution", "analysis_visualization"} or any(token in text for token in RESEARCH_EXPERIMENT_KEYWORDS):
+        profile_id = "research_experiment_loop"
+    profile = dict(EXECUTION_PROFILE_DEFS[profile_id])
+    profile["id"] = profile_id
+    return profile
+
+
+def harness_protocol_for_profile(execution_profile: dict[str, Any], task_type: str, depth: str) -> dict[str, Any]:
+    profile_id = str(execution_profile.get("id") or "standard_loop")
+    sequence = [
+        "scope objective, files, metrics, deliverable, and stop condition",
+        "map current project state and relevant artifacts before acting",
+        "choose a validation surface before editing or running",
+        "build the smallest coherent increment",
+        "test through the selected harness",
+        "read back outputs, logs, renders, reports, or diffs directly",
+        "loop until the gate passes, a retry limit is reached, or a real blocker is recorded",
+        "report artifacts, validation evidence, remaining risks, and the next target",
+    ]
+    validation_surfaces = {
+        "standard_loop": [
+            "route plan",
+            "structural validate",
+            "artifact diff or report inspection",
+            "small representative command",
+        ],
+        "manuscript_artifact_loop": [
+            "claim-evidence verification",
+            "citation or bibliography reality check",
+            "formula/text preservation audit",
+            "document or PDF render plus representative visual inspection",
+            "artifact diff against the previous draft",
+        ],
+        "research_experiment_loop": [
+            "metric and target-transform lock",
+            "data/code material check",
+            "dry-run or small representative shard",
+            "wrapped command run log",
+            "metric recomputation or artifact diff",
+        ],
+    }.get(profile_id, ["route plan", "structural validate", "artifact diff or report inspection"])
+    guardrails = [
+        "Do not claim completion from memory; inspect generated artifacts or logs directly.",
+        "Prefer dry-runs or small representative validation before long-running commands.",
+        "Record assumptions, risks, and defer decisions instead of silently accepting weak inputs.",
+    ]
+    if profile_id == "manuscript_artifact_loop":
+        guardrails.append("Preserve LaTeX formulas, key numbers, figure/table markers, citation links, and paragraph coverage.")
+    if profile_id == "research_experiment_loop":
+        guardrails.append("Lock metric definitions, target transforms, validation sets, seeds, and compared training flows before interpreting deltas.")
+    return {
+        "source_pattern": "z2-harness-loop generalized harness discipline",
+        "execution_profile": profile_id,
+        "chain_depth": depth,
+        "task_type": task_type,
+        "sequence": sequence,
+        "validation_surfaces": validation_surfaces,
+        "case_contract": {
+            "use_when": "Use only when the chosen validation surface benefits from reproducible case-level checks.",
+            "fields": ["id", "input_or_target", "expected_or_gate", "grader", "tags", "weight", "timeout_or_budget"],
+            "grader_types": ["exact", "contains", "regex", "numeric_abs_error", "artifact_exists", "human_review_gate"],
+        },
+        "feedback_summary": {
+            "preferred_metrics": ["pass_rate", "weighted_score", "failures_by_tag", "avg_latency_or_runtime", "report_paths"],
+            "routing_use": "Deep-loop and problem-loop should use failure tags and weak metric dimensions to choose retry, next subchain, or expert escalation.",
+        },
+        "integration_points": [
+            "normalize/route choose the validation surface and case contract shape",
+            "run/auto-loop execute commands and capture logs or artifacts",
+            "deep-loop consumes pass/fail, scores, failure tags, and artifact refs as gate evidence",
+            "problem-loop uses failure tags and logs to construct the expert panel and isolated lab plan",
+            "handoff records report paths and remaining failed tags for the next subchain",
+        ],
+        "guardrails": guardrails,
+        "report_fields": [
+            "objective or hypothesis",
+            "files and artifacts inspected or changed",
+            "chosen validation surface",
+            "commands/tests/renders run and exit status",
+            "metrics, scores, counts, or direct readback evidence when available",
+            "report paths and output artifacts",
+            "remaining blockers or next revision target",
+        ],
+    }
+
+
 def classify_task_type(state: dict[str, Any], passport: dict[str, Any], intent: str | None = None) -> str:
     text = task_signal_text(intent, passport)
     targets = target_values(passport)
@@ -3168,6 +3315,8 @@ def project_context_payload(cwd: Path, state: dict[str, Any], passport: dict[str
 def downstream_prompt_from_payload(payload: dict[str, Any]) -> str:
     context = payload["project_context"]
     missing = payload["missing_slots"]
+    execution_profile = payload.get("execution_profile") or {}
+    harness = payload.get("harness_protocol") or {}
     prompt_lines = [
         "Use the project-local research loop before acting.",
         "",
@@ -3177,6 +3326,7 @@ def downstream_prompt_from_payload(payload: dict[str, Any]) -> str:
         "Interpreted task:",
         f"- Task type: {payload.get('task_type')} ({TASK_TYPE_LABELS.get(payload.get('task_type'), 'research task')})",
         f"- Chain depth: {payload.get('depth_level')}",
+        f"- Execution profile: {execution_profile.get('id', 'standard_loop')} ({execution_profile.get('label', 'standard research loop')})",
         f"- Current stage: {context.get('stage')}",
         "",
         "Project context to preserve:",
@@ -3198,6 +3348,19 @@ def downstream_prompt_from_payload(payload: dict[str, Any]) -> str:
         prompt_lines.extend(f"- [{item['severity']}] {item['slot']}: {item['why']}" for item in missing)
     else:
         prompt_lines.append("- None detected by the local loop.")
+    prompt_lines.extend(["", "Harness protocol to follow before claiming completion:"])
+    if harness.get("validation_surfaces"):
+        prompt_lines.append("- Choose one validation surface before editing/running: " + "; ".join(str(item) for item in harness["validation_surfaces"]))
+    case_contract = harness.get("case_contract") if isinstance(harness.get("case_contract"), dict) else {}
+    if case_contract.get("fields"):
+        prompt_lines.append("- If using reproducible cases, define: " + "; ".join(str(item) for item in case_contract["fields"]))
+    feedback_summary = harness.get("feedback_summary") if isinstance(harness.get("feedback_summary"), dict) else {}
+    if feedback_summary.get("preferred_metrics"):
+        prompt_lines.append("- Feed gate decisions with: " + "; ".join(str(item) for item in feedback_summary["preferred_metrics"]))
+    if harness.get("guardrails"):
+        prompt_lines.extend(f"- {item}" for item in harness["guardrails"])
+    if harness.get("report_fields"):
+        prompt_lines.append("- Final report must cover: " + "; ".join(str(item) for item in harness["report_fields"]))
     prompt_lines.extend(
         [
             "",
@@ -3217,6 +3380,8 @@ def normalize_task_input(cwd: Path, state: dict[str, Any], passport: dict[str, A
     issues = route_blockers(cwd, state, passport)
     blockers = [item for item in issues if item["severity"] == "blocking"]
     depth = assign_depth(task_type, state, passport, blockers, raw or None)
+    execution_profile = classify_execution_profile(task_type, passport, raw or None)
+    harness_protocol = harness_protocol_for_profile(execution_profile, task_type, depth)
     context = project_context_payload(cwd, state, passport)
     target_hint = ", ".join(context.get("output_targets") or []) or "research artifact"
     question_hint = context.get("research_question") or "the active research question is missing; first recover or define it"
@@ -3232,6 +3397,8 @@ def normalize_task_input(cwd: Path, state: dict[str, Any], passport: dict[str, A
         "working_prompt": working_prompt,
         "task_type": task_type,
         "depth_level": depth,
+        "execution_profile": execution_profile,
+        "harness_protocol": harness_protocol,
         "project_context": context,
         "missing_slots": prompt_missing_slots(task_type, state, passport, cwd),
         "blockers": blockers,
@@ -3249,6 +3416,7 @@ def normalized_prompt_markdown(payload: dict[str, Any]) -> list[str]:
         f"- Generated at UTC: {payload['timestamp']}",
         f"- Task type: `{payload['task_type']}`",
         f"- Chain depth: `{payload['depth_level']}`",
+        f"- Execution profile: `{(payload.get('execution_profile') or {}).get('id', 'standard_loop')}`",
         f"- Stage: `{context.get('stage')}`",
         "",
         "## Raw Input",
@@ -3271,6 +3439,20 @@ def normalized_prompt_markdown(payload: dict[str, Any]) -> list[str]:
         lines.extend(f"- [{item['severity']}] `{item['slot']}`: {item['why']}" for item in payload["missing_slots"])
     else:
         lines.append("- None detected.")
+    harness = payload.get("harness_protocol") or {}
+    lines.extend(["", "## Harness Protocol", ""])
+    lines.append("- Validation surfaces:")
+    lines.extend(f"  - {item}" for item in harness.get("validation_surfaces") or [])
+    case_contract = harness.get("case_contract") if isinstance(harness.get("case_contract"), dict) else {}
+    lines.append("- Case contract fields:")
+    lines.extend(f"  - {item}" for item in case_contract.get("fields") or [])
+    feedback_summary = harness.get("feedback_summary") if isinstance(harness.get("feedback_summary"), dict) else {}
+    lines.append("- Gate feedback metrics:")
+    lines.extend(f"  - {item}" for item in feedback_summary.get("preferred_metrics") or [])
+    lines.append("- Guardrails:")
+    lines.extend(f"  - {item}" for item in harness.get("guardrails") or [])
+    lines.append("- Report fields:")
+    lines.extend(f"  - {item}" for item in harness.get("report_fields") or [])
     lines.extend(["", "## Downstream Prompt", "", payload["downstream_prompt"]])
     return lines
 
@@ -3294,6 +3476,8 @@ def build_route_graph(cwd: Path, state: dict[str, Any], passport: dict[str, Any]
         "normalized_input": normalized,
         "task_type": task_type,
         "depth_level": depth,
+        "execution_profile": normalized.get("execution_profile"),
+        "harness_protocol": normalized.get("harness_protocol"),
         "profile": passport.get("profile") or {},
         "active_question": passport.get("research_question"),
         "output_targets": passport.get("output_targets") or [],
@@ -3542,6 +3726,8 @@ def route_recommendations(cwd: Path, state: dict[str, Any], passport: dict[str, 
 def route_markdown(cwd: Path, state: dict[str, Any], passport: dict[str, Any], intent: str | None = None) -> list[str]:
     graph = build_route_graph(cwd, state, passport, intent)
     profile = graph.get("profile") or {}
+    execution_profile = graph.get("execution_profile") or {}
+    harness = graph.get("harness_protocol") or {}
     blockers = graph["blockers"]
     warnings = graph["warnings"]
     recommendations = graph["recommendations"]
@@ -3559,6 +3745,7 @@ def route_markdown(cwd: Path, state: dict[str, Any], passport: dict[str, Any], i
         f"- Current stage: {graph['stage']}",
         f"- Task type: {graph['task_type']}",
         f"- Chain depth: {graph['depth_level']}",
+        f"- Execution profile: {execution_profile.get('id', 'standard_loop')} ({execution_profile.get('label', 'standard research loop')})",
         f"- Active research question: {graph.get('active_question') or '(not set)'}",
         f"- Output targets: {', '.join(graph.get('output_targets') or []) or '(not set)'}",
         f"- Material kinds: {', '.join(graph.get('material_kinds') or []) or '(not set)'}",
@@ -3572,6 +3759,20 @@ def route_markdown(cwd: Path, state: dict[str, Any], passport: dict[str, Any], i
     normalized = graph.get("normalized_input") or {}
     if normalized.get("downstream_prompt"):
         lines.extend(["", "## Normalized Downstream Prompt", "", normalized["downstream_prompt"]])
+
+    lines.extend(["", "## Harness Protocol", ""])
+    lines.append("- Validation surfaces:")
+    lines.extend(f"  - {item}" for item in harness.get("validation_surfaces") or [])
+    case_contract = harness.get("case_contract") if isinstance(harness.get("case_contract"), dict) else {}
+    lines.append("- Case contract fields:")
+    lines.extend(f"  - {item}" for item in case_contract.get("fields") or [])
+    feedback_summary = harness.get("feedback_summary") if isinstance(harness.get("feedback_summary"), dict) else {}
+    lines.append("- Gate feedback metrics:")
+    lines.extend(f"  - {item}" for item in feedback_summary.get("preferred_metrics") or [])
+    lines.append("- Guardrails:")
+    lines.extend(f"  - {item}" for item in harness.get("guardrails") or [])
+    lines.append("- Report fields:")
+    lines.extend(f"  - {item}" for item in harness.get("report_fields") or [])
 
     lines.extend(["", "## Shared Dispatcher Nodes", ""])
     for node in graph["shared_nodes"]:
@@ -4174,6 +4375,8 @@ def deep_loop_review_directive(
             "result_summary": result_summary,
             "manual_issues": manual_issues,
             "normalized_prompt": normalized.get("downstream_prompt"),
+            "execution_profile": route_graph.get("execution_profile"),
+            "harness_protocol": route_graph.get("harness_protocol"),
         },
     }
 
@@ -4211,6 +4414,7 @@ def deep_loop_handoff_package(
         "artifact_refs": artifacts,
         "review_mode": review.get("mode"),
         "review_output_contract": review.get("output_contract"),
+        "harness_protocol": route_graph.get("harness_protocol"),
         "next_work_prompt": deep_loop_next_work_prompt(route_graph, current_subchain, next_subchains, gate, review),
     }
 
@@ -4260,6 +4464,7 @@ def deep_loop_continuation_contract(
         "next_work_prompt": handoff.get("next_work_prompt"),
         "required_reads": list(handoff.get("must_read") or []),
         "artifact_refs": list(handoff.get("artifact_refs") or []),
+        "harness_protocol": handoff.get("harness_protocol"),
         "gate_vector_summary": {key: value.get("level") for key, value in gate_vector.items() if isinstance(value, dict)},
         "blocking_dimensions": blocking_dimensions,
         "stop_conditions": [
@@ -4301,7 +4506,9 @@ def deep_loop_next_work_prompt(
         return (
             f"Retry subchain {current_id} ({current_subchain.get('name')}) after review_for_retry. "
             "Limit the next round to the diagnosed failed gate criteria, then rerun the same gate.\n\n"
-            f"{subchain_agent_prompt_block(current_agent)}"
+            f"{subchain_agent_prompt_block(current_agent)}\n\n"
+            "## Project Task And Harness\n\n"
+            f"{inherited_prompt}"
         )
     if decision == "escalate_problem_loop":
         problem_agent = subchain_agent_spec("P10")
@@ -4309,7 +4516,9 @@ def deep_loop_next_work_prompt(
             "Run P10 problem-resolution-expert-chain in an isolated lab. "
             "Convert the failed gate into a precise problem-loop case, capture reproduction or validation commands, "
             "and promote only after the threshold gate approves the adjustment plan.\n\n"
-            f"{subchain_agent_prompt_block(problem_agent)}"
+            f"{subchain_agent_prompt_block(problem_agent)}\n\n"
+            "## Original Project Task And Harness\n\n"
+            f"{inherited_prompt}"
         )
     return (
         "Pause unattended execution. Record the required human decision in the decision log before retrying, "
@@ -4472,6 +4681,14 @@ def deep_loop_markdown(payload: dict[str, Any]) -> list[str]:
     lines.append(f"- From agent: `{continuation.get('from_agent')}`")
     lines.append("- Target subchains: " + (", ".join(continuation.get("target_subchains") or []) or "(none)"))
     lines.append("- Blocking dimensions: " + (", ".join(continuation.get("blocking_dimensions") or []) or "(none)"))
+    harness = continuation.get("harness_protocol") if isinstance(continuation.get("harness_protocol"), dict) else {}
+    if harness:
+        lines.extend(["", "## Harness Protocol", ""])
+        lines.append(f"- Execution profile: `{harness.get('execution_profile')}`")
+        lines.append("- Validation surfaces: " + (", ".join(str(item) for item in harness.get("validation_surfaces") or []) or "(none)"))
+        feedback_summary = harness.get("feedback_summary") if isinstance(harness.get("feedback_summary"), dict) else {}
+        lines.append("- Gate feedback metrics: " + (", ".join(str(item) for item in feedback_summary.get("preferred_metrics") or []) or "(none)"))
+        lines.append("- Report fields: " + (", ".join(str(item) for item in harness.get("report_fields") or []) or "(none)"))
     lines.extend(["", "## Required Reads", ""])
     for item in handoff.get("must_read") or []:
         lines.append(f"- `{item}`")
@@ -6687,34 +6904,58 @@ def close_windows_handle(handle: Any | None) -> None:
         pass
 
 
+def taskkill_windows_tree(pid: int) -> None:
+    if os.name != "nt" or not pid:
+        return
+    try:
+        proc = subprocess.Popen(
+            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=1)
+    except Exception:
+        pass
+
+
 def kill_process_tree(proc: subprocess.Popen[Any], job_handle: Any | None = None) -> None:
     if proc.poll() is not None:
         return
     if os.name == "nt":
-        if job_handle:
-            terminate_windows_job(job_handle)
-            time.sleep(0.1)
-            if proc.poll() is not None:
-                return
         try:
             proc.send_signal(signal.CTRL_BREAK_EVENT)
-            time.sleep(0.2)
-        except Exception:
-            pass
-        try:
-            proc.kill()
+            try:
+                proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                pass
         except Exception:
             pass
         if proc.poll() is None:
+            taskkill_windows_tree(proc.pid)
             try:
-                subprocess.Popen(
-                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
-                )
-            except Exception:
+                proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
                 pass
+        if job_handle:
+            terminate_windows_job(job_handle)
+            time.sleep(0.3)
+            if proc.poll() is not None:
+                return
+        try:
+            proc.kill()
+            try:
+                proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                pass
+        except Exception:
+            pass
+        if proc.poll() is None:
+            taskkill_windows_tree(proc.pid)
         return
     try:
         os.killpg(proc.pid, signal.SIGKILL)
@@ -7038,6 +7279,8 @@ def auto_loop_problem_statement(goal: str, deep_payload: dict[str, Any], failure
     }
     blocking_dimensions = list(continuation.get("blocking_dimensions") or [])
     next_agent = continuation.get("next_agent") or {}
+    harness = continuation.get("harness_protocol") if isinstance(continuation.get("harness_protocol"), dict) else {}
+    harness_feedback = harness.get("feedback_summary") if isinstance(harness.get("feedback_summary"), dict) else {}
     return "\n\n".join(
         [
             f"Auto-loop escalated by deep-loop for goal: {goal}",
@@ -7058,6 +7301,16 @@ def auto_loop_problem_statement(goal: str, deep_payload: dict[str, Any], failure
                 indent=2,
                 ensure_ascii=True,
             ),
+            "Harness protocol:\n" + json.dumps(
+                {
+                    "execution_profile": harness.get("execution_profile"),
+                    "validation_surfaces": harness.get("validation_surfaces") or [],
+                    "feedback_metrics": harness_feedback.get("preferred_metrics") or [],
+                    "routing_use": harness_feedback.get("routing_use"),
+                },
+                indent=2,
+                ensure_ascii=True,
+            ),
             f"Next work prompt:\n{handoff.get('next_work_prompt') or '(not generated)'}",
             f"Deep-loop report: {deep_payload.get('report_markdown') or deep_payload.get('report_json')}",
         ]
@@ -7070,6 +7323,7 @@ def summarize_deep_loop_dispatch(deep_payload: dict[str, Any]) -> dict[str, Any]
     handoff = deep_payload.get("handoff_package") or {}
     agent = deep_payload.get("subchain_agent") or {}
     continuation = deep_payload.get("continuation_contract") or {}
+    harness = continuation.get("harness_protocol") if isinstance(continuation.get("harness_protocol"), dict) else {}
     return {
         "decision": gate.get("decision"),
         "review_mode": review.get("mode"),
@@ -7078,6 +7332,8 @@ def summarize_deep_loop_dispatch(deep_payload: dict[str, Any]) -> dict[str, Any]
         "next_work_prompt": command_excerpt(handoff.get("next_work_prompt") or "", 900),
         "gate_vector": continuation.get("gate_vector_summary") or {},
         "blocking_dimensions": continuation.get("blocking_dimensions") or [],
+        "execution_profile": harness.get("execution_profile"),
+        "harness_protocol": harness,
         "continuation_contract": continuation,
         "report_json": deep_payload.get("report_json"),
         "report_markdown": deep_payload.get("report_markdown"),
