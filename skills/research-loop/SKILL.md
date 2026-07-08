@@ -384,6 +384,21 @@ the loop stops with `route-agent-failed` and records the executor logs and
 target subchain in the auto-loop report before any downstream validation gates
 run.
 
+When an unattended run stops for a resumable control reason, resume it instead
+of asking the user for the next manual command:
+
+```powershell
+python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-resume --latest --extra-rounds 8 --extra-route-depth 4 --max-minutes 180
+```
+
+Use `auto-loop-resume` for `route-depth-budget-exhausted`, `round-limit`,
+`timeout`, `route-next-handoff-required`,
+`retry-same-route-handoff-required`, `route-agent-failed`, and compatible
+approved problem-loop handoffs. The resume command reads the previous
+`*-auto-loop.json`, reconstructs the next prompt from the continuation contract
+or last auto-route record, starts the route agent first, then runs validation and
+deep-loop gates again.
+
 ## Routing Protocol
 
 Before starting substantive research, writing, review, figure, conversion, or

@@ -6923,6 +6923,12 @@ def auto_loop_report_markdown(payload: dict[str, Any]) -> list[str]:
         "## Rounds",
         "",
     ]
+    if payload.get("resume"):
+        resume = payload["resume"]
+        lines[7:7] = [
+            f"- Resumed from: `{resume.get('source_report')}`",
+            f"- Resume source status: `{resume.get('source_status')}`",
+        ]
     for round_item in payload.get("rounds") or []:
         lines.append(f"- Round {round_item['round']}: {round_item['status']}")
         if round_item.get("subchain") or round_item.get("goal"):
@@ -6972,6 +6978,144 @@ def auto_loop_report_markdown(payload: dict[str, Any]) -> list[str]:
     return lines
 
 
+def latest_auto_loop_report(cwd: Path) -> Path | None:
+    files = sorted(
+        reports_root(cwd).glob("*-auto-loop.json"),
+        key=lambda path: path.stat().st_mtime if path.exists() else 0,
+        reverse=True,
+    )
+    return files[0] if files else None
+
+
+def auto_loop_resume_seed(payload: dict[str, Any]) -> dict[str, Any]:
+    status = str(payload.get("status") or "")
+    rounds = list(payload.get("rounds") or [])
+    if not rounds:
+        raise ValueError("auto-loop report has no rounds to resume from")
+    if status == "passed":
+        raise ValueError("auto-loop report is already passed and does not need resume")
+    last_round = rounds[-1]
+    last_route = last_round.get("auto_route") or {}
+    deep_loop = last_round.get("deep_loop") or {}
+    continuation = deep_loop.get("continuation_contract") or {}
+    decision = str(deep_loop.get("decision") or last_route.get("decision") or "")
+    target_subchains = list(continuation.get("target_subchains") or deep_loop.get("target_subchains") or [])
+    source_subchain = last_round.get("subchain")
+
+    if status in {"route-agent-failed", "route-next-executor-missing", "round-limit", "timeout"} and last_route:
+        target = str(last_route.get("to_subchain") or source_subchain or "")
+        prompt = str(last_route.get("next_goal") or last_round.get("goal") or payload.get("goal") or "")
+        decision = str(last_route.get("decision") or decision or "route_next")
+    elif decision in {"route_next", "retry_same_route", "escalate_problem_loop"}:
+        if not target_subchains and decision == "retry_same_route":
+            target_subchains = [str(source_subchain or "")]
+        if not target_subchains and decision == "escalate_problem_loop":
+            target_subchains = ["P10"]
+        if not target_subchains:
+            raise ValueError("auto-loop report does not contain a resumable target subchain")
+        target = str(target_subchains[0])
+        prompt = str(continuation.get("next_work_prompt") or deep_loop.get("next_work_prompt") or payload.get("goal") or "")
+    elif status in {"route-next-handoff-required", "retry-same-route-handoff-required"} and deep_loop:
+        if not target_subchains:
+            raise ValueError("handoff-required report does not contain a target subchain")
+        target = str(target_subchains[0])
+        prompt = str(continuation.get("next_work_prompt") or deep_loop.get("next_work_prompt") or payload.get("goal") or "")
+    else:
+        raise ValueError(f"auto-loop status is not automatically resumable: {status}")
+
+    if not target:
+        raise ValueError("auto-loop resume target subchain is empty")
+    if not prompt:
+        prompt = str(payload.get("goal") or f"Resume subchain {target}")
+    pending_route = {
+        "round": last_round.get("round"),
+        "decision": decision or "resume",
+        "from_subchain": source_subchain,
+        "to_subchain": target,
+        "remaining_budget": None,
+        "next_goal": prompt,
+        "deep_loop_report": deep_loop.get("report_markdown") or deep_loop.get("report_json") or last_route.get("deep_loop_report"),
+        "resume_source_status": status,
+    }
+    return {
+        "source_status": status,
+        "source_round": last_round.get("round"),
+        "source_subchain": source_subchain,
+        "decision": decision or "resume",
+        "goal": prompt,
+        "current_subchain": target,
+        "next_subchains": [],
+        "initial_agent_prompt": prompt,
+        "initial_pending_route": pending_route,
+    }
+
+
+def command_auto_loop_resume(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd)
+    if args.latest:
+        report_path = latest_auto_loop_report(cwd)
+        if not report_path:
+            raise ValueError("no auto-loop report found under .research-loop/reports")
+    elif args.report:
+        report_path = Path(args.report).expanduser()
+        if not report_path.is_absolute():
+            report_path = cwd / report_path
+        if not report_path.exists():
+            raise ValueError(f"auto-loop report not found: {report_path}")
+    else:
+        raise ValueError("auto-loop-resume requires --latest or --report")
+
+    previous = read_json(report_path, {})
+    if not isinstance(previous, dict):
+        raise ValueError(f"auto-loop report is not a JSON object: {report_path}")
+    seed = auto_loop_resume_seed(previous)
+    route_agent = args.route_agent or previous.get("route_agent") or "codex"
+    route_agent_commands = list(args.route_agent_command or previous.get("route_agent_commands") or [])
+    resume_args = argparse.Namespace(
+        cwd=str(cwd),
+        goal=seed["goal"],
+        test_command=list(args.test_command or previous.get("test_commands") or []),
+        repair_command=list(args.repair_command or previous.get("repair_commands") or []),
+        max_rounds=int(args.extra_rounds),
+        max_minutes=float(args.max_minutes or 0.0),
+        format=args.format,
+        skip_validate=bool(previous.get("skip_validate", False) or args.skip_validate),
+        allow_unbounded=bool(args.allow_unbounded),
+        skip_deep_loop=not bool(previous.get("deep_loop_enabled", True)),
+        deep_loop_intent=seed["goal"],
+        current_subchain=seed["current_subchain"],
+        next_subchain=list(seed["next_subchains"]),
+        auto_route_next=not bool(args.no_auto_route_next),
+        route_depth_budget=int(args.extra_route_depth),
+        allow_unbounded_routes=bool(args.allow_unbounded_routes or previous.get("allow_unbounded_routes", False)),
+        route_agent=route_agent,
+        route_agent_command=route_agent_commands,
+        route_codex_path=args.route_codex_path or previous.get("route_codex_path"),
+        route_codex_sandbox=args.route_codex_sandbox,
+        route_codex_approval=args.route_codex_approval,
+        route_codex_skip_git_check=not bool(args.route_codex_require_git),
+        route_codex_ephemeral=bool(args.route_codex_ephemeral),
+        route_codex_json=bool(args.route_codex_json),
+        route_codex_output=args.route_codex_output,
+        deep_loop_quality_score=None,
+        deep_loop_pass_threshold=None,
+        deep_loop_max_rounds=args.deep_loop_max_rounds,
+        skip_problem_escalation=bool(args.skip_problem_escalation),
+        problem_promote_threshold=float(args.problem_promote_threshold),
+        initial_agent_prompt=seed["initial_agent_prompt"],
+        initial_pending_route=seed["initial_pending_route"],
+        resume_metadata={
+            "source_report": psafe(report_path),
+            "source_status": seed["source_status"],
+            "source_round": seed["source_round"],
+            "source_subchain": seed["source_subchain"],
+            "decision": seed["decision"],
+        },
+    )
+    return command_auto_loop(resume_args)
+
+
 def command_auto_loop(args: argparse.Namespace) -> int:
     cwd = resolve_workspace(args.cwd)
     init_project(cwd)
@@ -7005,6 +7149,7 @@ def command_auto_loop(args: argparse.Namespace) -> int:
         "max_minutes": args.max_minutes,
         "test_commands": test_commands,
         "repair_commands": repair_commands,
+        "skip_validate": bool(args.skip_validate),
         "deep_loop_enabled": not args.skip_deep_loop,
         "current_subchain": args.current_subchain,
         "next_subchains": list(args.next_subchain or []),
@@ -7017,14 +7162,16 @@ def command_auto_loop(args: argparse.Namespace) -> int:
         "routed_transitions": [],
         "rounds": [],
     }
+    if getattr(args, "resume_metadata", None):
+        payload["resume"] = getattr(args, "resume_metadata")
     seen_failure_signatures: dict[str, int] = {}
     status = "failed"
     final_message = ""
     active_goal = str(args.goal)
     active_subchain = args.current_subchain
     active_next_subchains = list(args.next_subchain or [])
-    pending_agent_prompt: str | None = None
-    pending_route: dict[str, Any] | None = None
+    pending_agent_prompt: str | None = getattr(args, "initial_agent_prompt", None)
+    pending_route: dict[str, Any] | None = getattr(args, "initial_pending_route", None)
     unbounded_routes = bool(args.auto_route_next and args.allow_unbounded_routes)
     remaining_route_budget = int(args.route_depth_budget or 0) if args.auto_route_next else 0
 
@@ -8509,6 +8656,33 @@ def build_parser() -> argparse.ArgumentParser:
     p_auto_loop.add_argument("--skip-problem-escalation", action="store_true", help="Record escalate_problem_loop without automatically creating a problem-loop case.")
     p_auto_loop.add_argument("--problem-promote-threshold", type=float, default=0.75, help="Promotion threshold used when auto-loop escalates into problem-loop.")
     p_auto_loop.set_defaults(func=command_auto_loop)
+
+    p_auto_loop_resume = sub.add_parser("auto-loop-resume", help="Resume an interrupted or budget-stopped auto-loop from a previous auto-loop report.")
+    p_auto_loop_resume.add_argument("--report", help="Path to a previous *-auto-loop.json report.")
+    p_auto_loop_resume.add_argument("--latest", action="store_true", help="Resume from the newest *-auto-loop.json under .research-loop/reports.")
+    p_auto_loop_resume.add_argument("--extra-rounds", type=int, default=5, help="Additional max rounds for the resumed run.")
+    p_auto_loop_resume.add_argument("--extra-route-depth", type=int, default=3, help="Additional automatic route_next transitions for the resumed run.")
+    p_auto_loop_resume.add_argument("--max-minutes", type=float, default=0.0, help="Optional wall-clock limit for the resumed run.")
+    p_auto_loop_resume.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output report format.")
+    p_auto_loop_resume.add_argument("--test-command", action="append", help="Override test commands from the source report.")
+    p_auto_loop_resume.add_argument("--repair-command", action="append", help="Override repair commands from the source report.")
+    p_auto_loop_resume.add_argument("--skip-validate", action="store_true", help="Skip structural validation in the resumed run.")
+    p_auto_loop_resume.add_argument("--allow-unbounded", action="store_true", help="Allow an unbounded resumed round count. Requires a repair command or max-minutes.")
+    p_auto_loop_resume.add_argument("--allow-unbounded-routes", action="store_true", help="Allow unlimited automatic route_next transitions in the resumed run.")
+    p_auto_loop_resume.add_argument("--no-auto-route-next", action="store_true", help="Disable automatic continuation after the resumed starting route.")
+    p_auto_loop_resume.add_argument("--route-agent", choices=sorted(ROUTE_AGENT_CHOICES), help="Built-in route_next executor for the resumed run.")
+    p_auto_loop_resume.add_argument("--route-agent-command", action="append", help="Override or provide route-agent command templates for the resumed run.")
+    p_auto_loop_resume.add_argument("--route-codex-path", help="Explicit Codex CLI executable path for the resumed run.")
+    p_auto_loop_resume.add_argument("--route-codex-sandbox", choices=["read-only", "workspace-write", "danger-full-access"], default="workspace-write", help="Sandbox mode passed to `codex exec`.")
+    p_auto_loop_resume.add_argument("--route-codex-approval", choices=["untrusted", "on-request", "never"], default="never", help="Approval policy passed to `codex exec`.")
+    p_auto_loop_resume.add_argument("--route-codex-require-git", action="store_true", help="Do not pass --skip-git-repo-check to `codex exec`.")
+    p_auto_loop_resume.add_argument("--route-codex-ephemeral", action="store_true", help="Pass --ephemeral to `codex exec`.")
+    p_auto_loop_resume.add_argument("--route-codex-json", action="store_true", help="Pass --json to `codex exec`.")
+    p_auto_loop_resume.add_argument("--route-codex-output", help="Pass --output-last-message to `codex exec` with this file path.")
+    p_auto_loop_resume.add_argument("--deep-loop-max-rounds", type=int, help="Override deep-loop retry budget in the resumed run.")
+    p_auto_loop_resume.add_argument("--skip-problem-escalation", action="store_true", help="Do not automatically create problem-loop cases in the resumed run.")
+    p_auto_loop_resume.add_argument("--problem-promote-threshold", type=float, default=0.75, help="Promotion threshold used when resumed auto-loop escalates into problem-loop.")
+    p_auto_loop_resume.set_defaults(func=command_auto_loop_resume)
 
     p_claim_evidence = sub.add_parser("claim-evidence", help="Verify claim-to-evidence structure over evidence ids, sources, locators, and statuses.")
     p_claim_evidence.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output claim-evidence report format.")

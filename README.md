@@ -98,6 +98,22 @@ python scripts/research_loop.py --cwd "D:\Project" auto-loop `
   --max-minutes 360
 ```
 
+If a run stops because a safety budget is exhausted, a route handoff is required,
+or a route executor needs to be retried, resume from the last auto-loop report:
+
+```powershell
+python scripts/research_loop.py --cwd "D:\Project" auto-loop-resume `
+  --latest `
+  --extra-rounds 8 `
+  --extra-route-depth 4 `
+  --max-minutes 180
+```
+
+`auto-loop-resume` reads the previous `*-auto-loop.json`, reconstructs the next
+subchain or same-subchain retry prompt from the stored continuation contract,
+starts the route agent before validation, and records the source report under
+`resume` in the new auto-loop report.
+
 ## Subchain Head Agents
 
 Every P1-P10 subchain is fronted by a head agent. The head agent reads the

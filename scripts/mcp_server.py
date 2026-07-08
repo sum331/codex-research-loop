@@ -238,6 +238,40 @@ TOOLS: list[dict[str, Any]] = [
         ),
     },
     {
+        "name": "research_loop_auto_loop_resume",
+        "description": "Resume an interrupted, handoff-required, or budget-stopped auto-loop from a previous auto-loop report.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "report": {"type": "string", "description": "Path to a previous *-auto-loop.json report."},
+                "latest": {"type": "boolean", "description": "Resume from the newest auto-loop report."},
+                "extra_rounds": {"type": "integer", "description": "Additional max rounds for the resumed run."},
+                "extra_route_depth": {"type": "integer", "description": "Additional route_next transitions for the resumed run."},
+                "max_minutes": {"type": "number", "description": "Optional wall-clock limit for the resumed run."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "test_commands": {"type": "array", "items": {"type": "string"}, "description": "Override test commands from the source report."},
+                "repair_commands": {"type": "array", "items": {"type": "string"}, "description": "Override repair commands from the source report."},
+                "skip_validate": {"type": "boolean", "description": "Skip structural validation in the resumed run."},
+                "allow_unbounded": {"type": "boolean", "description": "Allow unbounded resumed rounds with guardrails."},
+                "allow_unbounded_routes": {"type": "boolean", "description": "Allow unlimited route_next transitions in the resumed run."},
+                "no_auto_route_next": {"type": "boolean", "description": "Disable automatic continuation after the resumed starting route."},
+                "route_agent": {"type": "string", "description": "Built-in route executor, such as codex or none."},
+                "route_agent_commands": {"type": "array", "items": {"type": "string"}, "description": "Route-agent command templates for the resumed run."},
+                "route_codex_path": {"type": "string", "description": "Explicit Codex CLI executable path."},
+                "route_codex_sandbox": {"type": "string", "description": "Sandbox mode passed to codex exec."},
+                "route_codex_approval": {"type": "string", "description": "Approval mode passed to codex exec."},
+                "route_codex_require_git": {"type": "boolean", "description": "Do not pass --skip-git-repo-check to codex exec."},
+                "route_codex_ephemeral": {"type": "boolean", "description": "Pass --ephemeral to codex exec."},
+                "route_codex_json": {"type": "boolean", "description": "Pass --json to codex exec."},
+                "route_codex_output": {"type": "string", "description": "Path for --output-last-message from codex exec."},
+                "deep_loop_max_rounds": {"type": "integer", "description": "Override deep-loop retry budget in the resumed run."},
+                "skip_problem_escalation": {"type": "boolean", "description": "Do not automatically create problem-loop cases in the resumed run."},
+                "problem_promote_threshold": {"type": "number", "description": "Promotion threshold used for automatic problem-loop cases."},
+            },
+            ["cwd"],
+        ),
+    },
+    {
         "name": "research_claim_evidence_verify",
         "description": "Verify claim-to-evidence structure over evidence ids, sources, locators, statuses, and verdicts.",
         "inputSchema": schema(
@@ -670,6 +704,45 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
             command.append("--skip-deep-loop")
         if as_bool(args.get("skip_problem_escalation")):
             command.append("--skip-problem-escalation")
+        return command
+    if name == "research_loop_auto_loop_resume":
+        command.append("auto-loop-resume")
+        add_option(command, "--report", args.get("report"))
+        if as_bool(args.get("latest")):
+            command.append("--latest")
+        add_option(command, "--extra-rounds", args.get("extra_rounds"))
+        add_option(command, "--extra-route-depth", args.get("extra_route_depth"))
+        add_option(command, "--max-minutes", args.get("max_minutes"))
+        add_option(command, "--format", args.get("format"))
+        for test_command in args.get("test_commands") or []:
+            add_option(command, "--test-command", test_command)
+        for repair_command in args.get("repair_commands") or []:
+            add_option(command, "--repair-command", repair_command)
+        if as_bool(args.get("skip_validate")):
+            command.append("--skip-validate")
+        if as_bool(args.get("allow_unbounded")):
+            command.append("--allow-unbounded")
+        if as_bool(args.get("allow_unbounded_routes")):
+            command.append("--allow-unbounded-routes")
+        if as_bool(args.get("no_auto_route_next")):
+            command.append("--no-auto-route-next")
+        add_option(command, "--route-agent", args.get("route_agent"))
+        for route_command in args.get("route_agent_commands") or []:
+            add_option(command, "--route-agent-command", route_command)
+        add_option(command, "--route-codex-path", args.get("route_codex_path"))
+        add_option(command, "--route-codex-sandbox", args.get("route_codex_sandbox"))
+        add_option(command, "--route-codex-approval", args.get("route_codex_approval"))
+        if as_bool(args.get("route_codex_require_git")):
+            command.append("--route-codex-require-git")
+        if as_bool(args.get("route_codex_ephemeral")):
+            command.append("--route-codex-ephemeral")
+        if as_bool(args.get("route_codex_json")):
+            command.append("--route-codex-json")
+        add_option(command, "--route-codex-output", args.get("route_codex_output"))
+        add_option(command, "--deep-loop-max-rounds", args.get("deep_loop_max_rounds"))
+        if as_bool(args.get("skip_problem_escalation")):
+            command.append("--skip-problem-escalation")
+        add_option(command, "--problem-promote-threshold", args.get("problem_promote_threshold"))
         return command
     if name == "research_claim_evidence_verify":
         command.append("claim-evidence")

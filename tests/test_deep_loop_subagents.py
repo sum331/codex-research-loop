@@ -180,6 +180,27 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertEqual(command[command.index("--route-agent") + 1], "none")
         self.assertIn("--route-agent-command", command)
 
+    def test_mcp_auto_loop_resume_maps_latest_and_route_options(self):
+        command = mcp_server.tool_to_cli(
+            "research_loop_auto_loop_resume",
+            {
+                "cwd": "D:\\Project",
+                "latest": True,
+                "extra_rounds": 7,
+                "extra_route_depth": 4,
+                "route_agent": "none",
+                "route_agent_commands": ["cmd /c echo resume"],
+                "format": "json",
+            },
+        )
+
+        self.assertIn("auto-loop-resume", command)
+        self.assertIn("--latest", command)
+        self.assertEqual(command[command.index("--extra-rounds") + 1], "7")
+        self.assertEqual(command[command.index("--extra-route-depth") + 1], "4")
+        self.assertEqual(command[command.index("--route-agent") + 1], "none")
+        self.assertIn("--route-agent-command", command)
+
     def test_auto_loop_no_auto_route_reports_handoff_required_not_passed(self):
         with tempfile.TemporaryDirectory() as tmp:
             proc = subprocess.run(
@@ -346,6 +367,72 @@ class DeepLoopSubagentTests(unittest.TestCase):
             self.assertEqual(payload["rounds"][1]["status"], "problem-loop-auto-started")
             self.assertEqual(payload["rounds"][2]["subchain"], "P10")
             self.assertEqual(payload["rounds"][2]["executors"][0]["exit_code"], 0)
+
+    def test_auto_loop_resume_restarts_budget_exhausted_route(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            first = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    tmp,
+                    "auto-loop",
+                    "--goal",
+                    "resume route budget smoke",
+                    "--skip-validate",
+                    "--test-command",
+                    "cmd /c exit /b 0",
+                    "--current-subchain",
+                    "P5",
+                    "--next-subchain",
+                    "P6",
+                    "--route-agent",
+                    "none",
+                    "--route-depth-budget",
+                    "0",
+                    "--format",
+                    "json",
+                ],
+                cwd=str(ROOT),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            first_payload = json.loads(first.stdout)
+            self.assertEqual(first_payload["status"], "route-depth-budget-exhausted")
+
+            marker = Path(tmp) / "resume-marker.txt"
+            resumed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    tmp,
+                    "auto-loop-resume",
+                    "--latest",
+                    "--extra-rounds",
+                    "2",
+                    "--extra-route-depth",
+                    "0",
+                    "--route-agent",
+                    "none",
+                    "--route-agent-command",
+                    f'cmd /c echo resumed > "{marker}"',
+                    "--format",
+                    "json",
+                ],
+                cwd=str(ROOT),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertNotEqual(resumed.returncode, 0)
+            payload = json.loads(resumed.stdout)
+            self.assertEqual(payload["rounds"][0]["subchain"], "P6")
+            self.assertEqual(payload["rounds"][0]["executors"][0]["exit_code"], 0)
+            self.assertTrue(marker.exists())
+            self.assertEqual(payload["resume"]["source_status"], "route-depth-budget-exhausted")
 
     def test_persisted_deep_loop_decision_records_gate_vector_summary(self):
         with tempfile.TemporaryDirectory() as tmp:

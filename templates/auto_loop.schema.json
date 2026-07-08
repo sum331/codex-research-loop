@@ -43,6 +43,7 @@
     "max_minutes": { "type": "number" },
     "test_commands": { "type": "array", "items": { "type": "string" } },
     "repair_commands": { "type": "array", "items": { "type": "string" } },
+    "skip_validate": { "type": "boolean" },
     "deep_loop_enabled": { "type": "boolean" },
     "current_subchain": { "type": ["string", "null"] },
     "next_subchains": { "type": "array", "items": { "type": "string" } },
@@ -56,6 +57,7 @@
     "round_count": { "type": "integer" },
     "elapsed_seconds": { "type": "number" },
     "final_message": { "type": "string" },
+    "resume": { "type": "object" },
     "rounds": {
       "type": "array",
       "items": {
