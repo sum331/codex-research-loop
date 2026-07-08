@@ -348,10 +348,14 @@ gate under `.research-loop/deep-loops/` and acts on its decision:
   subchain. Use `--no-auto-route-next` only when a manual checkpoint is
   required after writing the handoff; when a next target exists this reports
   `route-next-handoff-required`, not `passed`.
-- `retry_same_route`: run any `--repair-command` and start the next round inside
-  the same subchain.
+- `retry_same_route`: run any `--repair-command`, then consume the generated
+  retry prompt through the route agent and start the next round inside the same
+  subchain. With automatic continuation disabled, stop as
+  `retry-same-route-handoff-required`.
 - `escalate_problem_loop`: automatically create an isolated `problem-loop` case
-  unless `--skip-problem-escalation` is set.
+  unless `--skip-problem-escalation` is set. When the case exits successfully
+  with an approved gate, consume the generated P10 prompt and continue into the
+  problem-resolution chain as `problem-loop-auto-started`.
 - `pause_for_human`: stop unattended execution and leave a blocked next action.
 
 Use `--current-subchain P1..P10` when the caller knows which chain is being

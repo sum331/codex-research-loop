@@ -7205,16 +7205,67 @@ def command_auto_loop(args: argparse.Namespace) -> int:
                         for repair_index, command in enumerate(repair_commands, start=1):
                             repair_result = run_auto_command(cwd, round_dir, "repair", command, repair_index)
                             round_record["repairs"].append(repair_result)
-                        round_record["status"] = "deep-loop-retry-repair-attempted"
+                    if args.auto_route_next:
+                        target_subchains = list(deep_dispatch.get("target_subchains") or [])
+                        retry_subchain = str(target_subchains[0] if target_subchains else (active_subchain or ""))
+                        handoff = deep_payload.get("handoff_package") or {}
+                        next_prompt = str(handoff.get("next_work_prompt") or deep_dispatch.get("next_work_prompt") or active_goal)
+                        retry_record = {
+                            "round": round_index,
+                            "decision": "retry_same_route",
+                            "from_subchain": active_subchain,
+                            "to_subchain": retry_subchain,
+                            "remaining_budget": None,
+                            "next_goal": next_prompt,
+                            "deep_loop_report": deep_payload.get("report_markdown") or deep_payload.get("report_json"),
+                        }
+                        round_record["auto_route"] = retry_record
+                        payload["routed_transitions"].append(retry_record)
+                        active_goal = next_prompt
+                        active_subchain = retry_subchain or active_subchain
+                        pending_agent_prompt = next_prompt
+                        pending_route = retry_record
+                        round_record["status"] = "retry-same-route-auto-started"
                         payload["rounds"].append(round_record)
                         continue
-                    status = "deep-loop-retry-required"
-                    final_message = "Tests passed, but the deep-loop gate requested a retry and no repair command is available."
+                    status = "retry-same-route-handoff-required"
+                    final_message = "Deep-loop requested retry_same_route, but automatic continuation is disabled."
                     payload["rounds"].append(round_record)
                     break
                 if decision == "escalate_problem_loop":
                     if not args.skip_problem_escalation:
-                        round_record["problem_loop"] = auto_loop_problem_escalation(args, cwd, round_dir, deep_payload, tests, [])
+                        problem_result = auto_loop_problem_escalation(args, cwd, round_dir, deep_payload, tests, [])
+                        round_record["problem_loop"] = problem_result
+                        if (
+                            args.auto_route_next
+                            and problem_result.get("exit_code") == 0
+                            and problem_result.get("gate_status") == "approved"
+                        ):
+                            target_subchains = list(deep_dispatch.get("target_subchains") or ["P10"])
+                            problem_subchain = str(target_subchains[0] if target_subchains else "P10")
+                            handoff = deep_payload.get("handoff_package") or {}
+                            problem_prompt = str(handoff.get("next_work_prompt") or deep_dispatch.get("next_work_prompt") or active_goal)
+                            problem_record = {
+                                "round": round_index,
+                                "decision": "escalate_problem_loop",
+                                "from_subchain": active_subchain,
+                                "to_subchain": problem_subchain,
+                                "remaining_budget": None,
+                                "next_goal": problem_prompt,
+                                "deep_loop_report": deep_payload.get("report_markdown") or deep_payload.get("report_json"),
+                                "problem_case_id": problem_result.get("case_id"),
+                                "problem_report": problem_result.get("report_path"),
+                            }
+                            round_record["auto_route"] = problem_record
+                            payload["routed_transitions"].append(problem_record)
+                            active_goal = problem_prompt
+                            active_subchain = problem_subchain
+                            active_next_subchains = []
+                            pending_agent_prompt = problem_prompt
+                            pending_route = problem_record
+                            round_record["status"] = "problem-loop-auto-started"
+                            payload["rounds"].append(round_record)
+                            continue
                         status = "problem-loop-escalated"
                         final_message = "Tests passed, but the deep-loop gate escalated the result into an isolated problem-loop case."
                     else:
@@ -7294,7 +7345,38 @@ def command_auto_loop(args: argparse.Namespace) -> int:
             deep_decision = deep_dispatch.get("decision")
             if deep_decision == "escalate_problem_loop":
                 if not args.skip_problem_escalation:
-                    round_record["problem_loop"] = auto_loop_problem_escalation(args, cwd, round_dir, deep_payload, tests, failures)
+                    problem_result = auto_loop_problem_escalation(args, cwd, round_dir, deep_payload, tests, failures)
+                    round_record["problem_loop"] = problem_result
+                    if (
+                        args.auto_route_next
+                        and problem_result.get("exit_code") == 0
+                        and problem_result.get("gate_status") == "approved"
+                    ):
+                        target_subchains = list(deep_dispatch.get("target_subchains") or ["P10"])
+                        problem_subchain = str(target_subchains[0] if target_subchains else "P10")
+                        handoff = deep_payload.get("handoff_package") or {}
+                        problem_prompt = str(handoff.get("next_work_prompt") or deep_dispatch.get("next_work_prompt") or route_intent)
+                        problem_record = {
+                            "round": round_index,
+                            "decision": "escalate_problem_loop",
+                            "from_subchain": active_subchain,
+                            "to_subchain": problem_subchain,
+                            "remaining_budget": None,
+                            "next_goal": problem_prompt,
+                            "deep_loop_report": deep_payload.get("report_markdown") or deep_payload.get("report_json"),
+                            "problem_case_id": problem_result.get("case_id"),
+                            "problem_report": problem_result.get("report_path"),
+                        }
+                        round_record["auto_route"] = problem_record
+                        payload["routed_transitions"].append(problem_record)
+                        active_goal = problem_prompt
+                        active_subchain = problem_subchain
+                        active_next_subchains = []
+                        pending_agent_prompt = problem_prompt
+                        pending_route = problem_record
+                        round_record["status"] = "problem-loop-auto-started"
+                        payload["rounds"].append(round_record)
+                        continue
                     status = "problem-loop-escalated"
                     final_message = "Stopped because deep-loop escalated the failed gate into an isolated problem-loop case."
                 else:
@@ -7305,6 +7387,38 @@ def command_auto_loop(args: argparse.Namespace) -> int:
             if deep_decision == "pause_for_human":
                 status = "human-checkpoint"
                 final_message = "Stopped because deep-loop requires a human checkpoint before another auto-loop round."
+                payload["rounds"].append(round_record)
+                break
+            if deep_decision == "retry_same_route":
+                if repair_commands:
+                    for repair_index, command in enumerate(repair_commands, start=1):
+                        repair_result = run_auto_command(cwd, round_dir, "repair", command, repair_index)
+                        round_record["repairs"].append(repair_result)
+                if args.auto_route_next:
+                    target_subchains = list(deep_dispatch.get("target_subchains") or [])
+                    retry_subchain = str(target_subchains[0] if target_subchains else (active_subchain or ""))
+                    handoff = deep_payload.get("handoff_package") or {}
+                    retry_prompt = str(handoff.get("next_work_prompt") or deep_dispatch.get("next_work_prompt") or route_intent)
+                    retry_record = {
+                        "round": round_index,
+                        "decision": "retry_same_route",
+                        "from_subchain": active_subchain,
+                        "to_subchain": retry_subchain,
+                        "remaining_budget": None,
+                        "next_goal": retry_prompt,
+                        "deep_loop_report": deep_payload.get("report_markdown") or deep_payload.get("report_json"),
+                    }
+                    round_record["auto_route"] = retry_record
+                    payload["routed_transitions"].append(retry_record)
+                    active_goal = retry_prompt
+                    active_subchain = retry_subchain or active_subchain
+                    pending_agent_prompt = retry_prompt
+                    pending_route = retry_record
+                    round_record["status"] = "retry-same-route-auto-started"
+                    payload["rounds"].append(round_record)
+                    continue
+                status = "retry-same-route-handoff-required"
+                final_message = "Stopped because deep-loop requested retry_same_route and automatic continuation is disabled."
                 payload["rounds"].append(round_record)
                 break
         if seen_failure_signatures[failure_signature] >= 2 and not args.allow_unbounded and deep_decision != "retry_same_route":

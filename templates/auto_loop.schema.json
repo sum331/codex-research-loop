@@ -29,7 +29,10 @@
         "route-next-executor-missing",
         "route-agent-failed",
         "route-depth-budget-exhausted",
+        "retry-same-route-auto-started",
+        "retry-same-route-handoff-required",
         "deep-loop-retry-required",
+        "problem-loop-auto-started",
         "problem-loop-escalated",
         "problem-loop-required",
         "human-checkpoint"

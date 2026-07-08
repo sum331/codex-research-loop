@@ -256,6 +256,97 @@ class DeepLoopSubagentTests(unittest.TestCase):
             self.assertEqual(payload["rounds"][1]["executors"][0]["exit_code"], 7)
             self.assertIn("P6", payload["final_message"])
 
+    def test_auto_loop_retry_same_route_runs_agent_before_next_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "retry-marker.txt"
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    tmp,
+                    "auto-loop",
+                    "--goal",
+                    "retry same route smoke",
+                    "--skip-validate",
+                    "--test-command",
+                    f'cmd /c if exist "{marker}" (exit /b 0) else (exit /b 1)',
+                    "--current-subchain",
+                    "P5",
+                    "--next-subchain",
+                    "P6",
+                    "--route-agent",
+                    "none",
+                    "--route-agent-command",
+                    f'cmd /c echo retry > "{marker}"',
+                    "--route-depth-budget",
+                    "0",
+                    "--max-rounds",
+                    "3",
+                    "--deep-loop-max-rounds",
+                    "3",
+                    "--format",
+                    "json",
+                ],
+                cwd=str(ROOT),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertNotEqual(proc.returncode, 0)
+            payload = json.loads(proc.stdout)
+            self.assertEqual(payload["rounds"][0]["deep_loop"]["decision"], "retry_same_route")
+            self.assertEqual(payload["rounds"][0]["status"], "retry-same-route-auto-started")
+            self.assertEqual(payload["rounds"][1]["subchain"], "P5")
+            self.assertEqual(payload["rounds"][1]["executors"][0]["exit_code"], 0)
+            self.assertEqual(payload["rounds"][1]["tests"][0]["exit_code"], 0)
+            self.assertTrue(marker.exists())
+
+    def test_auto_loop_approved_problem_loop_continues_into_p10(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    tmp,
+                    "auto-loop",
+                    "--goal",
+                    "problem continuation smoke",
+                    "--skip-validate",
+                    "--test-command",
+                    "cmd /c exit /b 0",
+                    "--current-subchain",
+                    "P5",
+                    "--next-subchain",
+                    "P6",
+                    "--route-agent",
+                    "none",
+                    "--route-agent-command",
+                    "cmd /c exit /b 0",
+                    "--route-depth-budget",
+                    "1",
+                    "--max-rounds",
+                    "4",
+                    "--format",
+                    "json",
+                ],
+                cwd=str(ROOT),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertNotEqual(proc.returncode, 0)
+            payload = json.loads(proc.stdout)
+            self.assertEqual(payload["rounds"][0]["status"], "route-next-auto-started")
+            self.assertEqual(payload["rounds"][1]["deep_loop"]["decision"], "escalate_problem_loop")
+            self.assertEqual(payload["rounds"][1]["problem_loop"]["gate_status"], "approved")
+            self.assertEqual(payload["rounds"][1]["status"], "problem-loop-auto-started")
+            self.assertEqual(payload["rounds"][2]["subchain"], "P10")
+            self.assertEqual(payload["rounds"][2]["executors"][0]["exit_code"], 0)
+
     def test_persisted_deep_loop_decision_records_gate_vector_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
             cwd = Path(tmp)
