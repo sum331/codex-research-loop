@@ -1,0 +1,52 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"<CODEX_HOME>\\hooks\\codex-portable\\run-prompt-router.ps1\"",
+            "timeout": 10,
+            "statusMessage": "Routing prompt to skills/plugins"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"<CODEX_HOME>\\hooks\\codex-portable\\run-local-task-hook.ps1\" SessionStart",
+            "timeout": 10,
+            "statusMessage": "Running local task hook"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"<CODEX_HOME>\\hooks\\codex-portable\\run-local-task-hook.ps1\" PostToolUse",
+            "timeout": 10,
+            "statusMessage": "Running local task hook"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"<CODEX_HOME>\\hooks\\codex-portable\\run-local-task-hook.ps1\" Stop",
+            "timeout": 10,
+            "statusMessage": "Running local task hook"
+          }
+        ]
+      }
+    ]
+  }
+}

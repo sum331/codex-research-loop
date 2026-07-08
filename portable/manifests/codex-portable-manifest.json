@@ -1,0 +1,64 @@
+﻿{
+    "schema_version":  1,
+    "generated_at":  "2026-07-08T14:15:39Z",
+    "source_codex_home":  "C:\\Users\\ASUS\\.codex",
+    "package_root":  "portable",
+    "includes_secrets":  false,
+    "secret_policy":  "API keys, tokens, env files, logs, runtime caches, pycache, local databases, and Git metadata are excluded.",
+    "packaged_skills":  [
+                            ".system",
+                            "_shared",
+                            "academic-research-suite",
+                            "cleanshot",
+                            "codex-primary-runtime",
+                            "diagnose",
+                            "electron-dev",
+                            "excalidraw-diagram",
+                            "explain-complex-concepts",
+                            "figma",
+                            "grill-me",
+                            "grill-with-docs",
+                            "handoff",
+                            "llm-wiki",
+                            "local-task-hooks",
+                            "mobile-codex-inbox",
+                            "nature-academic-search",
+                            "nature-citation",
+                            "nature-data",
+                            "nature-figure",
+                            "nature-paper2ppt",
+                            "nature-paper-to-patent",
+                            "nature-polishing",
+                            "nature-reader",
+                            "nature-response",
+                            "nature-reviewer",
+                            "nature-writing",
+                            "paper-design",
+                            "pdf",
+                            "prototype",
+                            "raycast-alfred",
+                            "readwise-mcp",
+                            "skill-plugin-router",
+                            "tdd",
+                            "to-issues",
+                            "triage",
+                            "wispr-analytics",
+                            "word",
+                            "z2-harness-loop"
+                        ],
+    "packaged_plugins":  [
+                             "prompt-submit-skill-router"
+                         ],
+    "dispatch_tables":  [
+                            "codex_capability_dispatch_inventory_20260702.md"
+                        ],
+    "packaged_hooks":  [
+                           "local-task-hooks"
+                       ],
+    "excluded_managed_plugin_caches":  [
+                                           "cache",
+                                           ".plugin-appserver",
+                                           ".remote-plugin-install-staging"
+                                       ],
+    "install_script":  "portable/scripts/install-codex-portable.ps1"
+}

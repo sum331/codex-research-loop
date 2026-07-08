@@ -1,0 +1,7 @@
+interface:
+  display_name: "Explain Complex Concepts"
+  short_description: "Chinese science concept explainer"
+  default_prompt: "Use $explain-complex-concepts to unpack this astronomy or ML concept for a Chinese-first beginner researcher."
+
+policy:
+  allow_implicit_invocation: true

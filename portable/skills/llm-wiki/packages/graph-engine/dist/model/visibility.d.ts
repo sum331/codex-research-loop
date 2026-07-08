@@ -1,0 +1,2 @@
+export { buildSearchHaystack, buildSearchIndex, filterLinksByTypes, applySearchToNodeIds, applyFocusMode, resolveVisibleSnapshot, shouldAutoOpenDrawer } from './legacy-helpers';
+//# sourceMappingURL=visibility.d.ts.map

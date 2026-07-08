@@ -31,6 +31,8 @@ It provides:
 - `scripts/mcp_server.py` - stdio MCP wrapper around the CLI.
 - `skills/research-loop/SKILL.md` - Codex skill instructions.
 - `templates/` - JSON/Markdown schemas used by the runtime.
+- `portable/` - transferable Codex skills, dispatch plugin, dispatch table,
+  hook scripts, installer, and portable-package manifests.
 
 ## Installation And API Pairing
 
@@ -54,6 +56,28 @@ external API; only the external review layer has no effect.
 On Windows, the runtime also checks the current user's persisted environment
 variable when the current process has not inherited `DEEPSEEK_API_KEY`, which
 helps a newly paired key work inside an already-running Codex desktop session.
+
+## Portable Codex Skill And Plugin Library
+
+This repository also carries a portable package for recreating the source
+machine's Codex capability library on a fresh Windows computer:
+
+```powershell
+git clone https://github.com/sum331/codex-research-loop.git
+cd codex-research-loop
+powershell -ExecutionPolicy Bypass -File .\portable\scripts\install-codex-portable.ps1
+```
+
+The portable installer copies local skills, the prompt-submit dispatch plugin,
+the dispatch table, and reusable lifecycle hook scripts into `%CODEX_HOME%`
+when set, otherwise `%USERPROFILE%\.codex`. It rewrites `hooks.json` with the
+new computer's paths and backs up the previous hooks file before changing it.
+
+Managed Codex plugin caches, appserver caches, runtime logs, orphan workspaces,
+databases, Git metadata, and API keys are intentionally excluded from the
+package. Reinstall official plugins/connectors through Codex on the new
+computer; see `portable/manifests/local-plugin-inventory.json` for the local
+cache inventory that was present on the source machine.
 
 ## Quick Smoke Test
 

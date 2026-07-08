@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill Plugin Router"
+  short_description: "Match requests to Codex skills and plugins"
+  default_prompt: "Use $skill-plugin-router to identify which skills and plugins should handle this draft request."

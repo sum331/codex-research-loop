@@ -79,6 +79,27 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("external supervisor", prompts)
         self.assertIn("DEEPSEEK_API_KEY", prompts)
 
+    def test_portable_bundle_contains_skills_dispatch_plugin_and_installer(self):
+        portable = ROOT / "portable"
+        manifest_path = portable / "manifests" / "codex-portable-manifest.json"
+        dispatch_path = portable / "dispatch" / "codex_capability_dispatch_inventory_20260702.md"
+        installer_path = portable / "scripts" / "install-codex-portable.ps1"
+        router_path = portable / "plugins" / "prompt-submit-skill-router" / "scripts" / "user_prompt_submit_router.py"
+
+        self.assertTrue(manifest_path.exists())
+        self.assertTrue(dispatch_path.exists())
+        self.assertTrue(installer_path.exists())
+        self.assertTrue(router_path.exists())
+        self.assertTrue((portable / "skills" / "skill-plugin-router" / "SKILL.md").exists())
+        self.assertTrue((portable / "skills" / "local-task-hooks" / "SKILL.md").exists())
+        self.assertTrue((portable / "hooks" / "local-task-hooks" / "codex_lifecycle_hook.py").exists())
+
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+        self.assertIn("skill-plugin-router", manifest["packaged_skills"])
+        self.assertIn("prompt-submit-skill-router", manifest["packaged_plugins"])
+        self.assertIn("codex_capability_dispatch_inventory_20260702.md", manifest["dispatch_tables"])
+        self.assertFalse(manifest["includes_secrets"])
+
     def test_every_subchain_has_head_agent_contract(self):
         self.assertEqual(set(research_loop.SUBCHAIN_AGENT_SPECS), set(research_loop.DEEP_LOOP_SUBCHAIN_BY_ID))
         for subchain_id, spec in research_loop.SUBCHAIN_AGENT_SPECS.items():

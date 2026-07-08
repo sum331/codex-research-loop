@@ -1,0 +1,30 @@
+﻿[
+    {
+        "name":  ".plugin-appserver",
+        "copied_to_portable":  false,
+        "file_count":  3,
+        "size_mb":  317.831,
+        "note":  "runtime appserver cache excluded"
+    },
+    {
+        "name":  ".remote-plugin-install-staging",
+        "copied_to_portable":  false,
+        "file_count":  0,
+        "size_mb":  0,
+        "note":  "runtime/staging cache excluded"
+    },
+    {
+        "name":  "cache",
+        "copied_to_portable":  false,
+        "file_count":  2215,
+        "size_mb":  87.048,
+        "note":  "managed plugin cache listed only; reinstall through Codex/plugin marketplace on new machines"
+    },
+    {
+        "name":  "prompt-submit-skill-router",
+        "copied_to_portable":  true,
+        "file_count":  9,
+        "size_mb":  0.571,
+        "note":  "local dispatch plugin included"
+    }
+]

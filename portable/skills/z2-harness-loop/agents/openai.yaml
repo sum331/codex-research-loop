@@ -1,0 +1,6 @@
+interface:
+  display_name: "Z2 Research Loop"
+  short_description: "Run z2 paper and project loops with smoke, audit, and planning guardrails."
+  default_prompt: "Use $z2-harness-loop to run a z2 research loop for the current paper or project task."
+policy:
+  allow_implicit_invocation: true

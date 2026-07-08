@@ -1,0 +1,1 @@
+{"version":3,"file":"minimap.d.ts","sourceRoot":"","sources":["../../src/render/minimap.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,iBAAiB,EAAE,MAAM,SAAS,CAAC;AAIjD,MAAM,WAAW,eAAe;IAC9B,OAAO,EAAE,WAAW,CAAC;IACrB,YAAY,EAAE,GAAG,CAAC,MAAM,EAAE,gBAAgB,CAAC,CAAC;IAC5C,eAAe,EAAE,cAAc,CAAC;CACjC;AAED,wBAAgB,kBAAkB,CAAC,aAAa,EAAE,QAAQ,EAAE,OAAO,EAAE,iBAAiB,GAAG,eAAe,CAkCvG"}

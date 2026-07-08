@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mobile Codex Inbox"
+  short_description: "Process mobile-submitted Codex tasks from a local inbox."
+  default_prompt: "Check the mobile Codex inbox, claim the next pending task, execute it in the appropriate project, and send the result back through the bridge."

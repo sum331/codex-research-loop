@@ -1,0 +1,4 @@
+interface:
+  display_name: "Local Task Hooks"
+  short_description: "Run task wrappers with snapshots, summaries, and failure logs."
+  default_prompt: "Use local task hooks to wrap a command, capture a pre-change snapshot, and collect a completion summary or failure log."

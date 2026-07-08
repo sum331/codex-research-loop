@@ -1,0 +1,1 @@
+{"version":3,"file":"hover-card.d.ts","sourceRoot":"","sources":["../../src/render/hover-card.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,iBAAiB,EAAE,MAAM,WAAW,CAAC;AAGnD,wBAAgB,yBAAyB,CAAC,aAAa,EAAE,QAAQ,EAAE,OAAO,EAAE,iBAAiB,GAAG,WAAW,CAiB1G;AAED,wBAAgB,6BAA6B,CAAC,aAAa,EAAE,QAAQ,EAAE,YAAY,EAAE,MAAM,EAAE,UAAU,EAAE,MAAM,GAAG,WAAW,CAc5H"}

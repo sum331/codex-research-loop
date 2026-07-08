@@ -1,0 +1,4 @@
+interface:
+  display_name: "Word"
+  short_description: "Create, edit, and verify Word DOCX documents."
+  default_prompt: "Use the Word skill to create or edit a DOCX document and verify the result."

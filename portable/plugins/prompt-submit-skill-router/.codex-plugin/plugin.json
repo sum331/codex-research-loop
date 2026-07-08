@@ -1,0 +1,41 @@
+{
+  "name": "prompt-submit-skill-router",
+  "version": "0.2.0",
+  "description": "Injects registry-driven skill, plugin, MCP, and hook routing guidance when a Codex prompt is submitted.",
+  "author": {
+    "name": "Local Codex",
+    "email": "local@example.invalid",
+    "url": "https://developers.openai.com/codex/hooks"
+  },
+  "homepage": "https://developers.openai.com/codex/hooks",
+  "repository": "https://developers.openai.com/codex/hooks",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "skills",
+    "plugins",
+    "routing",
+    "hooks"
+  ],
+  "interface": {
+    "displayName": "Prompt Submit Skill Router",
+    "shortDescription": "Routes prompts from the capability registry",
+    "longDescription": "Adds model-visible pre-run routing guidance from the submitted prompt, recent router logs, and the project capability registry so Codex can choose relevant skills, plugin-backed workflows, MCP/app connectors, and hooks without an explicit router prompt.",
+    "developerName": "Local Codex",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Automation"
+    ],
+    "websiteURL": "https://developers.openai.com/codex/hooks",
+    "privacyPolicyURL": "https://openai.com/policies/row-privacy-policy/",
+    "termsOfServiceURL": "https://openai.com/policies/row-terms-of-use/",
+    "defaultPrompt": [
+      "Route my next prompt to the right skills",
+      "Explain which skills this request should use",
+      "Auto-suggest plugins for this task"
+    ],
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}
