@@ -73,6 +73,14 @@ across the existing workflow:
 - `handoff`: preserve report paths, failed tags, and next validation target for
   the next subchain.
 
+Structured JSON harness reports can be passed to deep-loop with
+`--harness-report`. The adapter accepts direct `summary` payloads, z2-style
+`evaluations` reports, and auto-loop-style `rounds/tests/executors` reports. It
+extracts `pass_rate`, `weighted_score`, `failures_by_tag`, failed cases,
+runtime/latency, and report paths. With `--gate-result auto`, failed harness
+evidence becomes a retry/problem signal; passing evidence can route to the next
+subchain.
+
 When MCP tools from this plugin are available, prefer them for routine state
 operations instead of shelling out manually. Pass the active project directory
 as `cwd` for every tool call. Available tool names mirror the CLI surface:
@@ -105,6 +113,7 @@ python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd 
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" route --intent "write the paper" --format json
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "write the paper" --current-subchain P7 --gate-result pass --write
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "verify evidence" --current-subchain P3 --gate-result fail --gate-issue "unsupported claim remains" --write
+python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "verify harness report" --current-subchain P6 --gate-result auto --harness-report "reports\harness.json" --write
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" capabilities
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" source-hub --query "10.1038/s41586-020-2649-2" --provider auto
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" content-ingest --source "paper.html" --mode article --record-materials --write
@@ -512,11 +521,14 @@ to decide whether to continue inside the same subchain or move to another one:
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "current task" --current-subchain P2 --gate-result pass --write
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "current task" --current-subchain P3 --gate-result fail --gate-issue "claim has no verified evidence" --write
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "current task" --current-subchain P6 --gate-result auto --quality-score 0.72 --artifact "outputs/figures/main.png" --write
+python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "current task" --current-subchain P6 --gate-result auto --harness-report "reports\harness.json" --write
 ```
 
 `deep-loop` reads the current route graph, selected P1-P10 subchain, project
 profile, route blockers, supplied gate issues, optional artifacts, and optional
-quality score. It emits one of four decisions:
+quality score. If `--harness-report` is supplied, it also parses structured
+report evidence and injects pass/fail, weighted score, failed tags, failed
+cases, and report paths into the gate. It emits one of four decisions:
 
 - `route_next`: the subchain passed; first run `review_for_transition`, then
   hand off to the next subchain.

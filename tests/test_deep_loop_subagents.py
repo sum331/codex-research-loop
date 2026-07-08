@@ -41,6 +41,7 @@ def deep_args(**overrides):
         "gate_issue": [],
         "result_summary": "",
         "artifact": [],
+        "harness_report": [],
         "loop_id": "test-loop",
     }
     values.update(overrides)
@@ -161,6 +162,97 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("formula/text preservation audit", harness["validation_surfaces"])
         self.assertIn("weighted_score", harness["feedback_summary"]["preferred_metrics"])
         self.assertIn("Harness protocol", payload["continuation_contract"]["next_work_prompt"])
+
+    def test_harness_report_failure_drives_retry_gate_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "harness-report.json"
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "selected_candidate": "candidate-a",
+                        "evaluations": [
+                            {
+                                "candidate": {"name": "candidate-a"},
+                                "summary": {
+                                    "case_count": 3,
+                                    "pass_count": 2,
+                                    "pass_rate": 2 / 3,
+                                    "weighted_score": 0.72,
+                                    "failures_by_tag": {"formula": 1},
+                                    "avg_latency_ms": 12.5,
+                                },
+                                "results": [
+                                    {"case_id": "display-math-count", "passed": True, "score": 1.0, "tags": ["formula"]},
+                                    {"case_id": "inline-math-missing", "passed": False, "score": 0.0, "tags": ["formula"], "error": "missing inline math"},
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            payload = research_loop.build_deep_loop_payload(
+                deep_args(
+                    intent="write manuscript with citations and formula preservation",
+                    current_subchain="P7",
+                    next_subchain=["P8"],
+                    gate_result="auto",
+                    harness_report=[str(report_path)],
+                    result_summary="",
+                    artifact=[],
+                    round_index=1,
+                    max_rounds=3,
+                ),
+                Path(tmp),
+                minimal_state("WRITING"),
+                minimal_passport(),
+            )
+
+        self.assertEqual(payload["gate_input"]["effective_gate_result"], "fail")
+        self.assertEqual(payload["gate"]["decision"], "retry_same_route")
+        self.assertEqual(payload["harness_evidence"]["failures_by_tag"], {"formula": 1})
+        self.assertIn("Harness evidence did not pass", "\n".join(payload["gate_input"]["manual_issues"]))
+        self.assertIn(str(report_path), payload["gate_input"]["artifacts"])
+
+    def test_harness_report_pass_routes_next_with_evidence_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "harness-pass.json"
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "summary": {
+                            "case_count": 4,
+                            "pass_count": 4,
+                            "pass_rate": 1.0,
+                            "weighted_score": 0.96,
+                            "failures_by_tag": {},
+                            "avg_latency_or_runtime": 1.2,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            payload = research_loop.build_deep_loop_payload(
+                deep_args(
+                    intent="run analysis and compare metrics against the baseline",
+                    current_subchain="P5",
+                    next_subchain=["P6"],
+                    gate_result="auto",
+                    harness_report=[str(report_path)],
+                    result_summary="",
+                    artifact=[],
+                ),
+                Path(tmp),
+                minimal_state("EXECUTION"),
+                minimal_passport(),
+            )
+
+        self.assertEqual(payload["gate_input"]["effective_gate_result"], "pass")
+        self.assertEqual(payload["gate"]["decision"], "route_next")
+        self.assertAlmostEqual(payload["gate"]["quality_score"], 0.96)
+        self.assertIn(str(report_path), payload["continuation_contract"]["artifact_refs"])
 
     def test_every_subchain_has_head_agent_contract(self):
         self.assertEqual(set(research_loop.SUBCHAIN_AGENT_SPECS), set(research_loop.DEEP_LOOP_SUBCHAIN_BY_ID))
@@ -293,6 +385,7 @@ class DeepLoopSubagentTests(unittest.TestCase):
                 "route_depth_budget": 8,
                 "route_agent": "none",
                 "route_agent_commands": ["cmd /c echo {subchain}"],
+                "harness_reports": ["reports\\harness.json"],
                 "route_codex_sandbox": "workspace-write",
                 "route_codex_approval": "never",
                 "allow_unbounded_resumes": True,
@@ -307,6 +400,28 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertEqual(command[command.index("--route-depth-budget") + 1], "8")
         self.assertEqual(command[command.index("--route-agent") + 1], "none")
         self.assertIn("--route-agent-command", command)
+        self.assertIn("--harness-report", command)
+        self.assertEqual(command[command.index("--harness-report") + 1], "reports\\harness.json")
+
+    def test_mcp_deep_loop_maps_harness_reports(self):
+        command = mcp_server.tool_to_cli(
+            "research_loop_deep_loop",
+            {
+                "cwd": "D:\\Project",
+                "intent": "run analysis",
+                "current_subchain": "P5",
+                "next_subchains": ["P6"],
+                "gate_result": "auto",
+                "harness_reports": ["reports\\summary.json", "reports\\cases.json"],
+                "format": "json",
+            },
+        )
+
+        self.assertIn("deep-loop", command)
+        report_positions = [index for index, value in enumerate(command) if value == "--harness-report"]
+        self.assertEqual(len(report_positions), 2)
+        self.assertEqual(command[report_positions[0] + 1], "reports\\summary.json")
+        self.assertEqual(command[report_positions[1] + 1], "reports\\cases.json")
 
     def test_mcp_auto_loop_legacy_mode_keeps_bare_auto_loop(self):
         command = mcp_server.tool_to_cli(

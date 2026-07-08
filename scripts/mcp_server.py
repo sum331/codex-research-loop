@@ -81,6 +81,7 @@ TOOLS: list[dict[str, Any]] = [
                 "gate_issues": {"type": "array", "items": {"type": "string"}, "description": "Gate issues, failed criteria, or blockers."},
                 "result_summary": {"type": "string", "description": "Short summary of current round output."},
                 "artifacts": {"type": "array", "items": {"type": "string"}, "description": "Artifact paths or ids produced by the current round."},
+                "harness_reports": {"type": "array", "items": {"type": "string"}, "description": "Structured JSON harness/test reports to parse as gate evidence."},
                 "round_index": {"type": "integer", "description": "Explicit round index for this subchain."},
                 "max_rounds": {"type": "integer", "description": "Maximum retry rounds before escalation."},
                 "format": {"type": "string", "description": "markdown or json."},
@@ -234,6 +235,7 @@ TOOLS: list[dict[str, Any]] = [
                 "deep_loop_quality_score": {"type": "number", "description": "Optional deep-loop quality score, 0-1 or 0-100."},
                 "deep_loop_pass_threshold": {"type": "number", "description": "Optional deep-loop pass threshold, 0-1 or 0-100."},
                 "deep_loop_max_rounds": {"type": "integer", "description": "Override deep-loop retry budget before escalation."},
+                "harness_reports": {"type": "array", "items": {"type": "string"}, "description": "Structured JSON harness/test reports passed into deep-loop gates as evidence."},
                 "skip_problem_escalation": {"type": "boolean", "description": "Record escalation without automatically creating a problem-loop case."},
                 "problem_promote_threshold": {"type": "number", "description": "Promotion threshold used for automatic problem-loop cases."},
                 "max_resumes": {"type": "integer", "description": "Maximum automatic auto-loop-resume attempts when using the default watchdog entrypoint."},
@@ -286,6 +288,7 @@ TOOLS: list[dict[str, Any]] = [
                 "route_agent_wall_timeout": {"type": "number", "description": "Override route executor wall timeout for the resumed run."},
                 "route_agent_poll_seconds": {"type": "number", "description": "Override route executor liveness polling interval."},
                 "deep_loop_max_rounds": {"type": "integer", "description": "Override deep-loop retry budget in the resumed run."},
+                "harness_reports": {"type": "array", "items": {"type": "string"}, "description": "Structured JSON harness/test reports passed into resumed deep-loop gates as evidence."},
                 "skip_problem_escalation": {"type": "boolean", "description": "Do not automatically create problem-loop cases in the resumed run."},
                 "problem_promote_threshold": {"type": "number", "description": "Promotion threshold used for automatic problem-loop cases."},
             },
@@ -329,6 +332,7 @@ TOOLS: list[dict[str, Any]] = [
                 "deep_loop_quality_score": {"type": "number", "description": "Optional deep-loop quality score, 0-1 or 0-100."},
                 "deep_loop_pass_threshold": {"type": "number", "description": "Optional deep-loop pass threshold, 0-1 or 0-100."},
                 "deep_loop_max_rounds": {"type": "integer", "description": "Override deep-loop retry budget before escalation."},
+                "harness_reports": {"type": "array", "items": {"type": "string"}, "description": "Structured JSON harness/test reports passed into child deep-loop gates as evidence."},
                 "skip_problem_escalation": {"type": "boolean", "description": "Record escalation without automatically creating a problem-loop case."},
                 "problem_promote_threshold": {"type": "number", "description": "Promotion threshold used for automatic problem-loop cases."},
                 "max_resumes": {"type": "integer", "description": "Maximum automatic auto-loop-resume attempts."},
@@ -655,6 +659,8 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
         add_option(command, "--result-summary", args.get("result_summary"))
         for artifact in args.get("artifacts") or []:
             add_option(command, "--artifact", artifact)
+        for report in args.get("harness_reports") or []:
+            add_option(command, "--harness-report", report)
         add_option(command, "--round-index", args.get("round_index"))
         add_option(command, "--max-rounds", args.get("max_rounds"))
         add_option(command, "--format", args.get("format"))
@@ -777,6 +783,8 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
         add_option(command, "--deep-loop-quality-score", args.get("deep_loop_quality_score"))
         add_option(command, "--deep-loop-pass-threshold", args.get("deep_loop_pass_threshold"))
         add_option(command, "--deep-loop-max-rounds", args.get("deep_loop_max_rounds"))
+        for report in args.get("harness_reports") or []:
+            add_option(command, "--harness-report", report)
         add_option(command, "--problem-promote-threshold", args.get("problem_promote_threshold"))
         if as_bool(args.get("skip_validate")):
             command.append("--skip-validate")
@@ -841,6 +849,8 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
         add_option(command, "--route-agent-wall-timeout", args.get("route_agent_wall_timeout"))
         add_option(command, "--route-agent-poll-seconds", args.get("route_agent_poll_seconds"))
         add_option(command, "--deep-loop-max-rounds", args.get("deep_loop_max_rounds"))
+        for report in args.get("harness_reports") or []:
+            add_option(command, "--harness-report", report)
         if as_bool(args.get("skip_problem_escalation")):
             command.append("--skip-problem-escalation")
         add_option(command, "--problem-promote-threshold", args.get("problem_promote_threshold"))
@@ -885,6 +895,8 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
         add_option(command, "--deep-loop-quality-score", args.get("deep_loop_quality_score"))
         add_option(command, "--deep-loop-pass-threshold", args.get("deep_loop_pass_threshold"))
         add_option(command, "--deep-loop-max-rounds", args.get("deep_loop_max_rounds"))
+        for report in args.get("harness_reports") or []:
+            add_option(command, "--harness-report", report)
         add_option(command, "--problem-promote-threshold", args.get("problem_promote_threshold"))
         add_option(command, "--max-resumes", args.get("max_resumes"))
         if as_bool(args.get("allow_unbounded_resumes")):

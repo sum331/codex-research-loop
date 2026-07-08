@@ -3902,6 +3902,291 @@ def normalize_quality_score(value: float | None) -> float | None:
     return max(0.0, min(1.0, score))
 
 
+def coerce_float(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    multiplier = 0.01 if text.endswith("%") else 1.0
+    if text.endswith("%"):
+        text = text[:-1].strip()
+    try:
+        return float(text) * multiplier
+    except ValueError:
+        return None
+
+
+def coerce_int(value: Any) -> int | None:
+    number = coerce_float(value)
+    if number is None:
+        return None
+    return int(number)
+
+
+def normalize_report_metric(value: Any) -> float | None:
+    number = coerce_float(value)
+    if number is None:
+        return None
+    if number > 1.0:
+        number = number / 100.0
+    return max(0.0, min(1.0, number))
+
+
+def resolve_harness_report_path(cwd: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = cwd / path
+    return path.resolve()
+
+
+def merge_failure_tags(target: dict[str, int], value: Any) -> None:
+    if isinstance(value, dict):
+        for key, count in value.items():
+            tag = str(key or "untagged")
+            target[tag] = int(target.get(tag, 0)) + int(coerce_int(count) or 0)
+    elif isinstance(value, list):
+        for item in value:
+            if isinstance(item, dict):
+                tag = str(item.get("tag") or item.get("name") or "untagged")
+                count = int(coerce_int(item.get("count") or item.get("failures") or 1) or 1)
+            else:
+                tag = str(item or "untagged")
+                count = 1
+            target[tag] = int(target.get(tag, 0)) + count
+
+
+def failed_cases_from_results(results: Any) -> list[dict[str, Any]]:
+    failed: list[dict[str, Any]] = []
+    if not isinstance(results, list):
+        return failed
+    for index, result in enumerate(results, start=1):
+        if not isinstance(result, dict):
+            continue
+        passed = result.get("passed")
+        if passed is None and "exit_code" in result:
+            passed = result.get("exit_code") == 0
+        if passed is True:
+            continue
+        case_id = result.get("case_id") or result.get("id") or result.get("name") or f"case-{index:02d}"
+        tags = result.get("tags")
+        if isinstance(tags, str):
+            tags = [tags]
+        elif not isinstance(tags, list):
+            tags = []
+        failed.append(
+            {
+                "case_id": str(case_id),
+                "tags": [str(tag) for tag in tags],
+                "score": coerce_float(result.get("score")),
+                "error": result.get("error") or result.get("grading_message") or result.get("stderr_excerpt") or result.get("status"),
+                "expected": result.get("expected"),
+                "output": result.get("output"),
+            }
+        )
+    return failed
+
+
+def failure_tags_from_cases(cases: list[dict[str, Any]]) -> dict[str, int]:
+    tags: dict[str, int] = {}
+    for case in cases:
+        case_tags = list(case.get("tags") or ["untagged"])
+        for tag in case_tags or ["untagged"]:
+            key = str(tag or "untagged")
+            tags[key] = int(tags.get(key, 0)) + 1
+    return tags
+
+
+def select_harness_evaluation(payload: dict[str, Any]) -> dict[str, Any] | None:
+    evaluations = payload.get("evaluations")
+    if not isinstance(evaluations, list) or not evaluations:
+        return None
+    selected_name = payload.get("selected_candidate") or payload.get("selected")
+    if selected_name:
+        for evaluation in evaluations:
+            if not isinstance(evaluation, dict):
+                continue
+            candidate = evaluation.get("candidate")
+            candidate_name = candidate.get("name") if isinstance(candidate, dict) else candidate
+            if str(candidate_name) == str(selected_name):
+                return evaluation
+
+    def rank(evaluation: Any) -> float:
+        if not isinstance(evaluation, dict):
+            return -1.0
+        utility = coerce_float(evaluation.get("utility"))
+        if utility is not None:
+            return utility
+        summary = evaluation.get("summary") if isinstance(evaluation.get("summary"), dict) else {}
+        score = normalize_report_metric(summary.get("weighted_score"))
+        return score if score is not None else -1.0
+
+    candidates = [item for item in evaluations if isinstance(item, dict)]
+    return max(candidates, key=rank) if candidates else None
+
+
+def summarize_auto_loop_report(payload: dict[str, Any]) -> dict[str, Any] | None:
+    rounds = payload.get("rounds")
+    if not isinstance(rounds, list):
+        return None
+    rows: list[dict[str, Any]] = []
+    for round_item in rounds:
+        if not isinstance(round_item, dict):
+            continue
+        for group_name in ["executors", "tests"]:
+            group = round_item.get(group_name)
+            if isinstance(group, list):
+                for item in group:
+                    if isinstance(item, dict):
+                        rows.append({**item, "tags": [str(item.get("kind") or group_name)]})
+    if not rows:
+        return None
+    failed = failed_cases_from_results(rows)
+    case_count = len(rows)
+    pass_count = case_count - len(failed)
+    return {
+        "case_count": case_count,
+        "pass_count": pass_count,
+        "pass_rate": pass_count / case_count if case_count else 0.0,
+        "weighted_score": pass_count / case_count if case_count else 0.0,
+        "failures_by_tag": failure_tags_from_cases(failed),
+        "avg_latency_or_runtime": sum(float(item.get("elapsed_seconds") or 0.0) for item in rows) / case_count,
+        "results": rows,
+    }
+
+
+def extract_harness_summary(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    selected = select_harness_evaluation(payload)
+    if selected:
+        summary = selected.get("summary") if isinstance(selected.get("summary"), dict) else {}
+        return dict(summary), selected
+    if isinstance(payload.get("summary"), dict):
+        return dict(payload["summary"]), payload
+    auto_summary = summarize_auto_loop_report(payload)
+    if auto_summary:
+        return auto_summary, auto_summary
+    return dict(payload), payload
+
+
+def harness_evidence_from_payload(report_path: Path, payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {
+            "report_path": psafe(report_path),
+            "status": "unparsed",
+            "errors": ["Harness report JSON root is not an object."],
+        }
+    summary, source = extract_harness_summary(payload)
+    results = source.get("results") if isinstance(source, dict) else None
+    failed_cases = failed_cases_from_results(results)
+    failures_by_tag: dict[str, int] = {}
+    merge_failure_tags(failures_by_tag, summary.get("failures_by_tag"))
+    if not failures_by_tag:
+        failures_by_tag.update(failure_tags_from_cases(failed_cases))
+    case_count = coerce_int(summary.get("case_count"))
+    pass_count = coerce_int(summary.get("pass_count"))
+    pass_rate = normalize_report_metric(summary.get("pass_rate"))
+    weighted_score = normalize_report_metric(summary.get("weighted_score"))
+    if case_count is None and isinstance(results, list):
+        case_count = len(results)
+    if pass_count is None and case_count is not None:
+        pass_count = max(0, case_count - len(failed_cases))
+    if pass_rate is None and case_count:
+        pass_rate = (pass_count or 0) / case_count
+    quality_score = weighted_score if weighted_score is not None else pass_rate
+    latency = coerce_float(summary.get("avg_latency_or_runtime"))
+    if latency is None:
+        latency = coerce_float(summary.get("avg_latency_ms"))
+    report_paths = [psafe(report_path)]
+    for key in ["report", "json_report", "markdown_report", "paragraph_audit"]:
+        if payload.get(key):
+            report_paths.append(str(payload[key]))
+    has_failures = bool(failures_by_tag) or bool(failed_cases) or (pass_rate is not None and pass_rate < 1.0)
+    status = "fail" if has_failures else "pass"
+    return {
+        "report_path": psafe(report_path),
+        "status": status,
+        "selected_candidate": payload.get("selected_candidate") or payload.get("selected"),
+        "case_count": case_count,
+        "pass_count": pass_count,
+        "pass_rate": pass_rate,
+        "weighted_score": weighted_score,
+        "quality_score": quality_score,
+        "avg_latency_or_runtime": latency,
+        "failures_by_tag": failures_by_tag,
+        "failed_cases": failed_cases[:50],
+        "report_paths": list(dict.fromkeys(report_paths)),
+        "errors": [],
+    }
+
+
+def collect_harness_evidence(cwd: Path, report_values: list[str] | None) -> dict[str, Any]:
+    reports = list(report_values or [])
+    evidence_items: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for value in reports:
+        report_path = resolve_harness_report_path(cwd, str(value))
+        if not report_path.exists():
+            errors.append(f"Harness report not found: {psafe(report_path)}")
+            continue
+        try:
+            payload = json.loads(report_path.read_text(encoding="utf-8-sig"))
+        except Exception as exc:  # noqa: BLE001 - evidence adapter must report bad reports.
+            errors.append(f"Cannot parse harness report {psafe(report_path)}: {type(exc).__name__}: {exc}")
+            continue
+        evidence_items.append(harness_evidence_from_payload(report_path, payload))
+    failure_tags: dict[str, int] = {}
+    report_paths: list[str] = []
+    failed_cases: list[dict[str, Any]] = []
+    quality_scores: list[float] = []
+    case_count = 0
+    pass_count = 0
+    for item in evidence_items:
+        merge_failure_tags(failure_tags, item.get("failures_by_tag"))
+        report_paths.extend(str(path) for path in item.get("report_paths") or [item.get("report_path")])
+        failed_cases.extend(list(item.get("failed_cases") or []))
+        quality = normalize_report_metric(item.get("quality_score"))
+        if quality is not None:
+            quality_scores.append(quality)
+        if item.get("case_count") is not None:
+            case_count += int(item.get("case_count") or 0)
+        if item.get("pass_count") is not None:
+            pass_count += int(item.get("pass_count") or 0)
+    pass_rate = (pass_count / case_count) if case_count else None
+    quality_score = min(quality_scores) if quality_scores else pass_rate
+    has_failures = bool(errors) or bool(failure_tags) or bool(failed_cases) or (pass_rate is not None and pass_rate < 1.0)
+    summary_bits = []
+    if pass_rate is not None:
+        summary_bits.append(f"pass_rate={pass_rate:.3f}")
+    if quality_score is not None:
+        summary_bits.append(f"quality_score={quality_score:.3f}")
+    if failure_tags:
+        tag_text = ", ".join(f"{key}={value}" for key, value in sorted(failure_tags.items()))
+        summary_bits.append(f"failures_by_tag: {tag_text}")
+    if errors:
+        summary_bits.append(f"errors={len(errors)}")
+    gate_issues: list[str] = []
+    if has_failures:
+        gate_issues.append("Harness evidence did not pass: " + ("; ".join(summary_bits) if summary_bits else "no passing summary available"))
+    gate_issues.extend(errors)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "reports": list(dict.fromkeys(report_paths)),
+        "items": evidence_items,
+        "errors": errors,
+        "case_count": case_count or None,
+        "pass_count": pass_count if case_count else None,
+        "pass_rate": pass_rate,
+        "quality_score": quality_score,
+        "failures_by_tag": failure_tags,
+        "failed_cases": failed_cases[:80],
+        "gate_result": "fail" if has_failures else ("pass" if evidence_items else "auto"),
+        "gate_issues": gate_issues,
+        "summary": "; ".join(summary_bits) if summary_bits else "",
+    }
+
+
 def deep_loop_pass_threshold(depth: str, profile: dict[str, Any]) -> float:
     threshold = {
         "L0": 0.50,
@@ -4289,6 +4574,7 @@ def deep_loop_review_directive(
     gate: dict[str, Any],
     result_summary: str | None,
     manual_issues: list[str],
+    harness_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     current_id = str(current_subchain.get("id"))
     decision = gate["decision"]
@@ -4377,6 +4663,7 @@ def deep_loop_review_directive(
             "normalized_prompt": normalized.get("downstream_prompt"),
             "execution_profile": route_graph.get("execution_profile"),
             "harness_protocol": route_graph.get("harness_protocol"),
+            "harness_evidence": harness_evidence or {},
         },
     }
 
@@ -4532,27 +4819,38 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
     depth = merge_depth(str(current.get("depth", "L0")), str(graph.get("depth_level", "L0")))
     profile = passport.get("profile") or {}
     quality_score = normalize_quality_score(args.quality_score)
+    harness_evidence = collect_harness_evidence(cwd, list(getattr(args, "harness_report", None) or []))
+    if quality_score is None:
+        quality_score = normalize_report_metric(harness_evidence.get("quality_score"))
     threshold = normalize_quality_score(args.pass_threshold) if args.pass_threshold is not None else deep_loop_pass_threshold(depth, profile)
     max_rounds = int(args.max_rounds or deep_loop_round_limit(depth))
     round_index = int(args.round_index or (deep_loop_existing_round_count(cwd, str(current.get("id"))) + 1))
     next_subchains = deep_loop_next_subchains(graph, current, args.next_subchain)
-    manual_issues = list(args.gate_issue or [])
+    manual_issues = list(args.gate_issue or []) + list(harness_evidence.get("gate_issues") or [])
     artifacts = list(args.artifact or [])
+    for report_path in harness_evidence.get("reports") or []:
+        append_unique(artifacts, str(report_path))
+    effective_gate_result = str(args.gate_result)
+    if effective_gate_result == "auto" and harness_evidence.get("gate_result") in {"pass", "fail"}:
+        effective_gate_result = str(harness_evidence["gate_result"])
+    result_summary = args.result_summary
+    if harness_evidence.get("summary"):
+        result_summary = "\n\n".join(part for part in [result_summary, f"Harness evidence: {harness_evidence['summary']}"] if part)
     subchain_agent = subchain_agent_spec(str(current.get("id")))
     gate_vector = build_gate_vector(
-        gate_result=args.gate_result,
+        gate_result=effective_gate_result,
         current_subchain=current,
         route_graph=graph,
         profile=profile,
         depth=depth,
         manual_issues=manual_issues,
-        result_summary=args.result_summary,
+        result_summary=result_summary,
         artifacts=artifacts,
         next_subchains=next_subchains,
     )
     expert_reasons = expert_escalation_reasons(current, depth, gate_vector)
     gate = deep_loop_gate_decision(
-        gate_result=args.gate_result,
+        gate_result=effective_gate_result,
         current_subchain=current,
         route_graph=graph,
         profile=profile,
@@ -4562,12 +4860,12 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         quality_score=quality_score,
         pass_threshold=float(threshold),
         manual_issues=manual_issues,
-        result_summary=args.result_summary,
+        result_summary=result_summary,
         next_subchains=next_subchains,
         gate_vector=gate_vector,
         expert_reasons=expert_reasons,
     )
-    review = deep_loop_review_directive(cwd, graph, current, next_subchains, gate, args.result_summary, manual_issues)
+    review = deep_loop_review_directive(cwd, graph, current, next_subchains, gate, result_summary, manual_issues, harness_evidence)
     handoff = deep_loop_handoff_package(graph, current, next_subchains, gate, review, artifacts)
     continuation = deep_loop_continuation_contract(
         current_subchain=current,
@@ -4590,12 +4888,16 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         "route_graph": graph,
         "gate_input": {
             "gate_result": args.gate_result,
+            "effective_gate_result": effective_gate_result,
             "quality_score": quality_score,
             "pass_threshold": threshold,
-            "result_summary": args.result_summary,
+            "result_summary": result_summary,
             "manual_issues": manual_issues,
-            "artifacts": list(args.artifact or []),
+            "artifacts": artifacts,
+            "harness_reports": list(getattr(args, "harness_report", None) or []),
+            "harness_evidence": harness_evidence,
         },
+        "harness_evidence": harness_evidence,
         "gate_vector": gate_vector,
         "gate": gate,
         "review_directive": review,
@@ -4648,6 +4950,23 @@ def deep_loop_markdown(payload: dict[str, Any]) -> list[str]:
     if gate_input.get("manual_issues"):
         lines.extend(["", "## Supplied Gate Issues", ""])
         lines.extend(f"- {item}" for item in gate_input.get("manual_issues") or [])
+    harness_evidence = payload.get("harness_evidence") if isinstance(payload.get("harness_evidence"), dict) else {}
+    if harness_evidence and (harness_evidence.get("reports") or harness_evidence.get("summary") or harness_evidence.get("errors")):
+        lines.extend(["", "## Harness Evidence", ""])
+        lines.append(f"- Gate result from evidence: `{harness_evidence.get('gate_result')}`")
+        if harness_evidence.get("pass_rate") is not None:
+            lines.append(f"- Pass rate: `{harness_evidence.get('pass_rate')}`")
+        if harness_evidence.get("quality_score") is not None:
+            lines.append(f"- Quality score: `{harness_evidence.get('quality_score')}`")
+        failures_by_tag = harness_evidence.get("failures_by_tag") if isinstance(harness_evidence.get("failures_by_tag"), dict) else {}
+        if failures_by_tag:
+            lines.append("- Failures by tag: " + ", ".join(f"{key}={value}" for key, value in sorted(failures_by_tag.items())))
+        if harness_evidence.get("reports"):
+            lines.append("- Reports:")
+            lines.extend(f"  - `{item}`" for item in harness_evidence.get("reports") or [])
+        if harness_evidence.get("errors"):
+            lines.append("- Adapter errors:")
+            lines.extend(f"  - {item}" for item in harness_evidence.get("errors") or [])
     lines.extend(["", "## Gate Vector", ""])
     for key, value in (payload.get("gate_vector") or {}).items():
         if isinstance(value, dict):
@@ -4748,6 +5067,13 @@ def persist_deep_loop_payload(
             "target_subchains": handoff.get("target_subchains") or [],
             "gate_vector_summary": continuation.get("gate_vector_summary") or {},
             "blocking_dimensions": continuation.get("blocking_dimensions") or [],
+            "harness_evidence": {
+                "gate_result": (payload.get("harness_evidence") or {}).get("gate_result"),
+                "pass_rate": (payload.get("harness_evidence") or {}).get("pass_rate"),
+                "quality_score": (payload.get("harness_evidence") or {}).get("quality_score"),
+                "failures_by_tag": (payload.get("harness_evidence") or {}).get("failures_by_tag"),
+                "reports": (payload.get("harness_evidence") or {}).get("reports"),
+            },
             "continuation_contract": {
                 "target_subchains": continuation.get("target_subchains") or [],
                 "blocking_dimensions": continuation.get("blocking_dimensions") or [],
@@ -7177,6 +7503,7 @@ def auto_loop_deep_loop_payload(
         gate_issue=list(gate_issues or []),
         result_summary=result_summary,
         artifact=auto_loop_artifact_refs(round_dir, list(test_results or []), extra_paths),
+        harness_report=list(getattr(args, "harness_report", None) or []),
         round_index=round_index,
         max_rounds=args.deep_loop_max_rounds or (None if args.allow_unbounded else args.max_rounds),
     )
@@ -7187,6 +7514,7 @@ def auto_loop_deep_loop_payload(
         "round_directory": psafe(round_dir),
         "round": round_index,
         "gate_result_source": gate_result,
+        "harness_reports": list(getattr(args, "harness_report", None) or []),
     }
     return persist_deep_loop_payload(cwd, state, passport, payload, source="auto-loop")
 
@@ -7281,6 +7609,7 @@ def auto_loop_problem_statement(goal: str, deep_payload: dict[str, Any], failure
     next_agent = continuation.get("next_agent") or {}
     harness = continuation.get("harness_protocol") if isinstance(continuation.get("harness_protocol"), dict) else {}
     harness_feedback = harness.get("feedback_summary") if isinstance(harness.get("feedback_summary"), dict) else {}
+    harness_evidence = deep_payload.get("harness_evidence") if isinstance(deep_payload.get("harness_evidence"), dict) else {}
     return "\n\n".join(
         [
             f"Auto-loop escalated by deep-loop for goal: {goal}",
@@ -7297,6 +7626,18 @@ def auto_loop_problem_statement(goal: str, deep_payload: dict[str, Any], failure
                     "next_agent": next_agent.get("agent_id"),
                     "requires_human": continuation.get("requires_human"),
                     "unattended_safe": continuation.get("unattended_safe"),
+                },
+                indent=2,
+                ensure_ascii=True,
+            ),
+            "Harness evidence:\n" + json.dumps(
+                {
+                    "gate_result": harness_evidence.get("gate_result"),
+                    "pass_rate": harness_evidence.get("pass_rate"),
+                    "quality_score": harness_evidence.get("quality_score"),
+                    "failures_by_tag": harness_evidence.get("failures_by_tag") or {},
+                    "reports": harness_evidence.get("reports") or [],
+                    "errors": harness_evidence.get("errors") or [],
                 },
                 indent=2,
                 ensure_ascii=True,
@@ -7324,6 +7665,7 @@ def summarize_deep_loop_dispatch(deep_payload: dict[str, Any]) -> dict[str, Any]
     agent = deep_payload.get("subchain_agent") or {}
     continuation = deep_payload.get("continuation_contract") or {}
     harness = continuation.get("harness_protocol") if isinstance(continuation.get("harness_protocol"), dict) else {}
+    harness_evidence = deep_payload.get("harness_evidence") if isinstance(deep_payload.get("harness_evidence"), dict) else {}
     return {
         "decision": gate.get("decision"),
         "review_mode": review.get("mode"),
@@ -7334,6 +7676,7 @@ def summarize_deep_loop_dispatch(deep_payload: dict[str, Any]) -> dict[str, Any]
         "blocking_dimensions": continuation.get("blocking_dimensions") or [],
         "execution_profile": harness.get("execution_profile"),
         "harness_protocol": harness,
+        "harness_evidence": harness_evidence,
         "continuation_contract": continuation,
         "report_json": deep_payload.get("report_json"),
         "report_markdown": deep_payload.get("report_markdown"),
@@ -7631,6 +7974,7 @@ def command_auto_loop_resume(args: argparse.Namespace) -> int:
         deep_loop_quality_score=None,
         deep_loop_pass_threshold=None,
         deep_loop_max_rounds=args.deep_loop_max_rounds,
+        harness_report=list(args.harness_report or previous.get("harness_reports") or []),
         skip_problem_escalation=bool(args.skip_problem_escalation),
         problem_promote_threshold=float(args.problem_promote_threshold),
         initial_agent_prompt=seed["initial_agent_prompt"],
@@ -7681,6 +8025,7 @@ def command_auto_loop(args: argparse.Namespace) -> int:
         "repair_commands": repair_commands,
         "skip_validate": bool(args.skip_validate),
         "deep_loop_enabled": not args.skip_deep_loop,
+        "harness_reports": list(getattr(args, "harness_report", None) or []),
         "current_subchain": args.current_subchain,
         "next_subchains": list(args.next_subchain or []),
         "auto_route_next": bool(args.auto_route_next),
@@ -8250,6 +8595,7 @@ def append_auto_loop_common_cli_options(command: list[str], args: argparse.Names
     add_cli_option(command, "--deep-loop-quality-score", getattr(args, "deep_loop_quality_score", None))
     add_cli_option(command, "--deep-loop-pass-threshold", getattr(args, "deep_loop_pass_threshold", None))
     add_cli_option(command, "--deep-loop-max-rounds", getattr(args, "deep_loop_max_rounds", None))
+    add_cli_repeated(command, "--harness-report", list(getattr(args, "harness_report", None) or []))
     if getattr(args, "skip_problem_escalation", False):
         command.append("--skip-problem-escalation")
     add_cli_option(command, "--problem-promote-threshold", getattr(args, "problem_promote_threshold", None))
@@ -8293,6 +8639,7 @@ def build_watchdog_resume_command(args: argparse.Namespace, cwd: Path) -> list[s
     add_cli_option(command, "--route-agent-wall-timeout", getattr(args, "route_agent_wall_timeout", None))
     add_cli_option(command, "--route-agent-poll-seconds", getattr(args, "route_agent_poll_seconds", None))
     add_cli_option(command, "--deep-loop-max-rounds", getattr(args, "deep_loop_max_rounds", None))
+    add_cli_repeated(command, "--harness-report", list(getattr(args, "harness_report", None) or []))
     if getattr(args, "skip_problem_escalation", False):
         command.append("--skip-problem-escalation")
     add_cli_option(command, "--problem-promote-threshold", getattr(args, "problem_promote_threshold", None))
@@ -9811,6 +10158,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_deep_loop.add_argument("--gate-issue", action="append", help="Gate issue, failed criterion, or blocker observed in this round. Repeat for multiple issues.")
     p_deep_loop.add_argument("--result-summary", help="Short summary of what this subchain round produced.")
     p_deep_loop.add_argument("--artifact", action="append", help="Artifact path or id produced by the current round. Repeat for multiple artifacts.")
+    p_deep_loop.add_argument("--harness-report", action="append", help="Structured JSON harness/test report to parse as gate evidence. Repeat for multiple reports.")
     p_deep_loop.add_argument("--round-index", type=int, help="Explicit round index for this subchain. Defaults from previous deep-loop records.")
     p_deep_loop.add_argument("--max-rounds", type=int, help="Maximum retry rounds for this subchain before escalation. Defaults from depth.")
     p_deep_loop.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output deep-loop directive format.")
@@ -9905,6 +10253,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_auto_loop.add_argument("--deep-loop-quality-score", type=float, help="Optional per-round quality score for deep-loop gates, 0-1 or 0-100.")
     p_auto_loop.add_argument("--deep-loop-pass-threshold", type=float, help="Optional deep-loop pass threshold, 0-1 or 0-100.")
     p_auto_loop.add_argument("--deep-loop-max-rounds", type=int, help="Override deep-loop retry budget before escalation.")
+    p_auto_loop.add_argument("--harness-report", action="append", help="Structured JSON harness/test report to pass into each deep-loop gate as evidence.")
     p_auto_loop.add_argument("--skip-problem-escalation", action="store_true", help="Record escalate_problem_loop without automatically creating a problem-loop case.")
     p_auto_loop.add_argument("--problem-promote-threshold", type=float, default=0.75, help="Promotion threshold used when auto-loop escalates into problem-loop.")
     p_auto_loop.set_defaults(func=command_auto_loop)
@@ -9935,6 +10284,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_auto_loop_resume.add_argument("--route-agent-wall-timeout", type=float, help="Override route executor wall timeout for the resumed run. 0 disables wall timeout.")
     p_auto_loop_resume.add_argument("--route-agent-poll-seconds", type=float, help="Override route executor liveness polling interval.")
     p_auto_loop_resume.add_argument("--deep-loop-max-rounds", type=int, help="Override deep-loop retry budget in the resumed run.")
+    p_auto_loop_resume.add_argument("--harness-report", action="append", help="Structured JSON harness/test report to pass into resumed deep-loop gates as evidence.")
     p_auto_loop_resume.add_argument("--skip-problem-escalation", action="store_true", help="Do not automatically create problem-loop cases in the resumed run.")
     p_auto_loop_resume.add_argument("--problem-promote-threshold", type=float, default=0.75, help="Promotion threshold used when resumed auto-loop escalates into problem-loop.")
     p_auto_loop_resume.set_defaults(func=command_auto_loop_resume)
@@ -9975,6 +10325,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_auto_loop_watchdog.add_argument("--deep-loop-quality-score", type=float, help="Optional per-round quality score for deep-loop gates, 0-1 or 0-100.")
     p_auto_loop_watchdog.add_argument("--deep-loop-pass-threshold", type=float, help="Optional deep-loop pass threshold, 0-1 or 0-100.")
     p_auto_loop_watchdog.add_argument("--deep-loop-max-rounds", type=int, help="Override deep-loop retry budget before escalation.")
+    p_auto_loop_watchdog.add_argument("--harness-report", action="append", help="Structured JSON harness/test report to pass into child deep-loop gates as evidence.")
     p_auto_loop_watchdog.add_argument("--skip-problem-escalation", action="store_true", help="Record escalation without automatically creating a problem-loop case.")
     p_auto_loop_watchdog.add_argument("--problem-promote-threshold", type=float, default=0.75, help="Promotion threshold used when auto-loop escalates into problem-loop.")
     p_auto_loop_watchdog.add_argument("--max-resumes", type=int, default=3, help="Maximum automatic auto-loop-resume attempts after resumable child stops.")
