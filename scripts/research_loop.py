@@ -34,7 +34,7 @@ from typing import Any
 
 
 LOOP_DIR = ".research-loop"
-SCHEMA_VERSION = "0.9.1"
+SCHEMA_VERSION = "0.9.2"
 PAYLOAD_LIMIT = 24000
 INVENTORY_LIMIT = int(os.environ.get("RESEARCH_LOOP_INVENTORY_LIMIT", "1200"))
 INVENTORY_SECONDS = float(os.environ.get("RESEARCH_LOOP_INVENTORY_SECONDS", "2.0"))
@@ -45,7 +45,20 @@ DEFAULT_ROUTE_AGENT_POLL_SECONDS = float(os.environ.get("RESEARCH_LOOP_ROUTE_AGE
 DEFAULT_WATCHDOG_CHILD_IDLE_TIMEOUT_SECONDS = float(os.environ.get("RESEARCH_LOOP_WATCHDOG_CHILD_IDLE_TIMEOUT_SECONDS", "0"))
 DEFAULT_WATCHDOG_CHILD_WALL_TIMEOUT_SECONDS = float(os.environ.get("RESEARCH_LOOP_WATCHDOG_CHILD_WALL_TIMEOUT_SECONDS", "0"))
 DEFAULT_WATCHDOG_POLL_SECONDS = float(os.environ.get("RESEARCH_LOOP_WATCHDOG_POLL_SECONDS", "5"))
+EXTERNAL_SUPERVISOR_CHOICES = {"none", "deepseek"}
+DEFAULT_EXTERNAL_SUPERVISOR_MODEL = os.environ.get("RESEARCH_LOOP_EXTERNAL_SUPERVISOR_MODEL", "deepseek-v4-flash")
+DEFAULT_EXTERNAL_SUPERVISOR_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+DEFAULT_EXTERNAL_SUPERVISOR_TIMEOUT_SECONDS = float(os.environ.get("RESEARCH_LOOP_EXTERNAL_SUPERVISOR_TIMEOUT_SECONDS", "20"))
+DEFAULT_EXTERNAL_SUPERVISOR_MAX_CHARS = int(os.environ.get("RESEARCH_LOOP_EXTERNAL_SUPERVISOR_MAX_CHARS", "8000"))
 TIMEOUT_EXIT_CODE = -124
+
+EXTERNAL_SUPERVISOR_CONTINUE_RECOMMENDATIONS = {
+    "continue_same_route",
+    "retry_same_route",
+    "route_next",
+    "escalate_problem_loop",
+    "resume",
+}
 
 RESUMABLE_AUTO_LOOP_STATUSES = {
     "route-agent-failed",
@@ -1172,6 +1185,10 @@ def reports_root(cwd: Path) -> Path:
 
 def watchdog_root(cwd: Path) -> Path:
     return loop_root(cwd) / "watchdog"
+
+
+def supervisor_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "supervisor"
 
 
 def deep_loops_root(cwd: Path) -> Path:
@@ -8074,6 +8091,16 @@ def watchdog_report_markdown(payload: dict[str, Any]) -> list[str]:
             lines.append(f"  - stdout: `{item.get('stdout_log')}`")
         if item.get("stderr_log"):
             lines.append(f"  - stderr: `{item.get('stderr_log')}`")
+        supervisor = item.get("external_supervisor") if isinstance(item.get("external_supervisor"), dict) else {}
+        if supervisor:
+            lines.append(
+                "  - external supervisor: "
+                f"{supervisor.get('provider')} status={supervisor.get('status')} "
+                f"recommendation={supervisor.get('recommendation')} "
+                f"effective_resumable={supervisor.get('effective_resumable')}"
+            )
+            if supervisor.get("report_json"):
+                lines.append(f"  - supervisor report: `{supervisor.get('report_json')}`")
     if payload.get("final_message"):
         lines.extend(["", "## Final Message", "", payload["final_message"]])
     return lines
@@ -8115,6 +8142,357 @@ def watchdog_child_is_resumable(source_status: str, child_payload: dict[str, Any
     return source_status in RESUMABLE_AUTO_LOOP_STATUSES or auto_loop_payload_has_unattended_continuation(child_payload)
 
 
+def external_supervisor_secret_redact(text: str, secret: str | None) -> str:
+    value = str(text or "")
+    if secret:
+        value = value.replace(secret, "[redacted]")
+    return value
+
+
+def read_windows_user_environment_variable(name: str) -> str:
+    if os.name != "nt":
+        return ""
+    try:
+        import winreg
+    except ImportError:
+        return ""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+            value, _kind = winreg.QueryValueEx(key, name)
+    except OSError:
+        return ""
+    return str(value or "")
+
+
+def external_supervisor_api_key() -> str:
+    return os.environ.get("DEEPSEEK_API_KEY", "") or read_windows_user_environment_variable("DEEPSEEK_API_KEY")
+
+
+def external_supervisor_resume_seed_available(payload: dict[str, Any] | None) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    try:
+        auto_loop_resume_seed(payload)
+    except Exception:
+        return False
+    return True
+
+
+def external_supervisor_result(
+    *,
+    cwd: Path,
+    attempt_index: int,
+    provider: str,
+    status: str,
+    goal: str,
+    source_status: str,
+    local_resumable: bool,
+    effective_resumable: bool,
+    fail_open: bool,
+    model: str | None = None,
+    recommendation: str = "local_decision",
+    confidence: float | None = None,
+    reasons: list[Any] | None = None,
+    risk_flags: list[Any] | None = None,
+    next_prompt_patch: str | None = None,
+    error: str | None = None,
+    error_type: str | None = None,
+    usage: dict[str, Any] | None = None,
+    raw_decision: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION,
+        "timestamp": utc_now(),
+        "provider": provider,
+        "status": status,
+        "model": model,
+        "goal": goal,
+        "source_status": source_status,
+        "local_resumable": bool(local_resumable),
+        "effective_resumable": bool(effective_resumable),
+        "fail_open": bool(fail_open),
+        "recommendation": recommendation,
+        "confidence": confidence,
+        "reasons": list(reasons or []),
+        "risk_flags": list(risk_flags or []),
+        "next_prompt_patch": next_prompt_patch or "",
+    }
+    if error:
+        result["error"] = error
+    if error_type:
+        result["error_type"] = error_type
+    if usage:
+        result["usage"] = usage
+    if raw_decision:
+        result["raw_decision"] = raw_decision
+    if provider != "none":
+        report_path = supervisor_root(cwd) / f"{timestamp()}-watchdog-attempt-{attempt_index:02d}-{slug(provider)}.json"
+        result["report_json"] = psafe(report_path)
+        write_json(report_path, result)
+    return result
+
+
+def external_supervisor_prompt(
+    *,
+    goal: str,
+    source_status: str,
+    child_payload: dict[str, Any] | None,
+    local_resumable: bool,
+    max_chars: int,
+) -> str:
+    compact_payload = {
+        "status": source_status,
+        "goal": (child_payload or {}).get("goal") if isinstance(child_payload, dict) else goal,
+        "final_message": (child_payload or {}).get("final_message") if isinstance(child_payload, dict) else "",
+        "rounds": [],
+        "routed_transitions": (child_payload or {}).get("routed_transitions") if isinstance(child_payload, dict) else [],
+    }
+    if isinstance(child_payload, dict):
+        for round_item in list(child_payload.get("rounds") or [])[-3:]:
+            if not isinstance(round_item, dict):
+                continue
+            deep_loop = round_item.get("deep_loop") if isinstance(round_item.get("deep_loop"), dict) else {}
+            compact_payload["rounds"].append(
+                {
+                    "round": round_item.get("round"),
+                    "goal": round_item.get("goal"),
+                    "subchain": round_item.get("subchain"),
+                    "status": round_item.get("status"),
+                    "auto_route": round_item.get("auto_route"),
+                    "deep_loop_decision": deep_loop.get("decision"),
+                    "continuation_contract": deep_loop.get("continuation_contract"),
+                    "blocking_dimensions": deep_loop.get("blocking_dimensions"),
+                    "problem_loop": round_item.get("problem_loop"),
+                    "tests": round_item.get("tests"),
+                    "executors": round_item.get("executors"),
+                }
+            )
+    payload_text = command_excerpt(json.dumps(compact_payload, indent=2, ensure_ascii=True, default=str), max_chars)
+    return (
+        "Return json only. Review this unattended research loop watchdog attempt as a supplemental supervisor.\n"
+        "Do not recommend pausing unless there is a real human-only blocker, safety issue, or missing credential.\n"
+        "Never execute tools or edit files. Judge whether the local watchdog should keep its local continuation decision.\n"
+        "Expected JSON shape:\n"
+        "{\n"
+        '  "recommendation": "local_decision|continue_same_route|retry_same_route|route_next|escalate_problem_loop|pause_for_human",\n'
+        '  "confidence": 0.0,\n'
+        '  "unattended_safe": true,\n'
+        '  "requires_human": false,\n'
+        '  "reasons": ["short reason"],\n'
+        '  "risk_flags": ["short risk"],\n'
+        '  "next_prompt_patch": ""\n'
+        "}\n\n"
+        f"Project goal: {goal}\n"
+        f"Child status: {source_status or '(unknown)'}\n"
+        f"Local watchdog says resumable: {bool(local_resumable)}\n"
+        "Child auto-loop report excerpt:\n"
+        f"{payload_text}"
+    )
+
+
+def deepseek_supervisor_request_payload(args: argparse.Namespace, prompt: str) -> dict[str, Any]:
+    return {
+        "model": str(getattr(args, "external_supervisor_model", DEFAULT_EXTERNAL_SUPERVISOR_MODEL) or DEFAULT_EXTERNAL_SUPERVISOR_MODEL),
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a supplemental watchdog supervisor for an autonomous research loop. "
+                    "Output strict json only. You are advisory and fail-open: preserve local continuation unless a true human-only blocker exists."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "response_format": {"type": "json_object"},
+        "thinking": {"type": "enabled"},
+        "reasoning_effort": str(getattr(args, "external_supervisor_reasoning_effort", "high") or "high"),
+        "max_tokens": 1600,
+        "stream": False,
+    }
+
+
+def parse_deepseek_supervisor_content(content: str) -> dict[str, Any]:
+    parsed = json.loads(content or "{}")
+    if not isinstance(parsed, dict):
+        raise ValueError("external supervisor response content is not a JSON object")
+    return parsed
+
+
+def normalize_external_supervisor_decision(decision: dict[str, Any]) -> tuple[str, float | None, bool | None, bool | None]:
+    recommendation = str(decision.get("recommendation") or decision.get("next_action") or "local_decision").strip().lower()
+    recommendation = recommendation.replace("-", "_").replace(" ", "_")
+    if recommendation not in EXTERNAL_SUPERVISOR_CONTINUE_RECOMMENDATIONS and recommendation not in {
+        "local_decision",
+        "pause_for_human",
+        "observe",
+    }:
+        recommendation = "local_decision"
+    confidence = decision.get("confidence")
+    try:
+        confidence_value = float(confidence) if confidence is not None else None
+    except (TypeError, ValueError):
+        confidence_value = None
+    unattended_safe = decision.get("unattended_safe")
+    requires_human = decision.get("requires_human")
+    return (
+        recommendation,
+        confidence_value,
+        unattended_safe if isinstance(unattended_safe, bool) else None,
+        requires_human if isinstance(requires_human, bool) else None,
+    )
+
+
+def external_supervisor_effective_resumable(
+    *,
+    child_payload: dict[str, Any] | None,
+    local_resumable: bool,
+    recommendation: str,
+    unattended_safe: bool | None,
+    requires_human: bool | None,
+) -> bool:
+    if local_resumable:
+        return True
+    if recommendation not in EXTERNAL_SUPERVISOR_CONTINUE_RECOMMENDATIONS:
+        return False
+    if unattended_safe is False or requires_human is True:
+        return False
+    return external_supervisor_resume_seed_available(child_payload)
+
+
+def external_supervisor_review(
+    args: argparse.Namespace,
+    cwd: Path,
+    *,
+    attempt_index: int,
+    goal: str,
+    source_status: str,
+    child_payload: dict[str, Any] | None,
+    local_resumable: bool,
+) -> dict[str, Any]:
+    provider = str(getattr(args, "external_supervisor", "none") or "none").strip().lower()
+    if provider == "none":
+        return external_supervisor_result(
+            cwd=cwd,
+            attempt_index=attempt_index,
+            provider="none",
+            status="disabled",
+            goal=goal,
+            source_status=source_status,
+            local_resumable=local_resumable,
+            effective_resumable=local_resumable,
+            fail_open=True,
+        )
+    if provider != "deepseek":
+        return external_supervisor_result(
+            cwd=cwd,
+            attempt_index=attempt_index,
+            provider=provider,
+            status="failed",
+            goal=goal,
+            source_status=source_status,
+            local_resumable=local_resumable,
+            effective_resumable=local_resumable,
+            fail_open=True,
+            error=f"unsupported external supervisor provider: {provider}",
+            error_type="unsupported_provider",
+        )
+
+    api_key = external_supervisor_api_key()
+    model = str(getattr(args, "external_supervisor_model", DEFAULT_EXTERNAL_SUPERVISOR_MODEL) or DEFAULT_EXTERNAL_SUPERVISOR_MODEL)
+    if not api_key:
+        return external_supervisor_result(
+            cwd=cwd,
+            attempt_index=attempt_index,
+            provider=provider,
+            status="skipped",
+            model=model,
+            goal=goal,
+            source_status=source_status,
+            local_resumable=local_resumable,
+            effective_resumable=local_resumable,
+            fail_open=True,
+            error="DeepSeek supervisor credential is not set; continuing with local watchdog decision.",
+            error_type="missing_credential",
+        )
+
+    timeout_seconds = float(getattr(args, "external_supervisor_timeout", DEFAULT_EXTERNAL_SUPERVISOR_TIMEOUT_SECONDS) or 0.0)
+    max_chars = int(getattr(args, "external_supervisor_max_chars", DEFAULT_EXTERNAL_SUPERVISOR_MAX_CHARS) or DEFAULT_EXTERNAL_SUPERVISOR_MAX_CHARS)
+    base_url = str(getattr(args, "external_supervisor_base_url", DEFAULT_EXTERNAL_SUPERVISOR_BASE_URL) or DEFAULT_EXTERNAL_SUPERVISOR_BASE_URL).rstrip("/")
+    request_payload = deepseek_supervisor_request_payload(
+        args,
+        external_supervisor_prompt(
+            goal=goal,
+            source_status=source_status,
+            child_payload=child_payload,
+            local_resumable=local_resumable,
+            max_chars=max_chars,
+        ),
+    )
+    endpoint = f"{base_url}/chat/completions"
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(request_payload, ensure_ascii=True, default=str).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds if timeout_seconds > 0 else None) as response:
+            raw_response = response.read().decode("utf-8", errors="replace")
+        response_payload = json.loads(raw_response or "{}")
+        choices = response_payload.get("choices") if isinstance(response_payload, dict) else []
+        choice = choices[0] if choices and isinstance(choices[0], dict) else {}
+        message = choice.get("message") if isinstance(choice.get("message"), dict) else {}
+        content = str(message.get("content") or "")
+        if not content.strip():
+            raise ValueError("external supervisor returned empty content")
+        decision = parse_deepseek_supervisor_content(content)
+        recommendation, confidence, unattended_safe, requires_human = normalize_external_supervisor_decision(decision)
+        effective_resumable = external_supervisor_effective_resumable(
+            child_payload=child_payload,
+            local_resumable=local_resumable,
+            recommendation=recommendation,
+            unattended_safe=unattended_safe,
+            requires_human=requires_human,
+        )
+        return external_supervisor_result(
+            cwd=cwd,
+            attempt_index=attempt_index,
+            provider=provider,
+            status="ok",
+            model=model,
+            goal=goal,
+            source_status=source_status,
+            local_resumable=local_resumable,
+            effective_resumable=effective_resumable,
+            fail_open=True,
+            recommendation=recommendation,
+            confidence=confidence,
+            reasons=list(decision.get("reasons") or []),
+            risk_flags=list(decision.get("risk_flags") or []),
+            next_prompt_patch=str(decision.get("next_prompt_patch") or ""),
+            usage=response_payload.get("usage") if isinstance(response_payload.get("usage"), dict) else None,
+            raw_decision=decision,
+        )
+    except Exception as exc:
+        return external_supervisor_result(
+            cwd=cwd,
+            attempt_index=attempt_index,
+            provider=provider,
+            status="failed",
+            model=model,
+            goal=goal,
+            source_status=source_status,
+            local_resumable=local_resumable,
+            effective_resumable=local_resumable,
+            fail_open=True,
+            error=external_supervisor_secret_redact(repr(exc), api_key),
+            error_type=exc.__class__.__name__,
+        )
+
+
 def watchdog_resume_allowed(args: argparse.Namespace, resume_count: int) -> bool:
     if bool(getattr(args, "allow_unbounded_resumes", False)):
         return True
@@ -8144,6 +8522,12 @@ def command_auto_loop_watchdog(args: argparse.Namespace) -> int:
         "child_idle_timeout": float(args.child_idle_timeout or 0.0),
         "child_wall_timeout": float(args.child_wall_timeout or 0.0),
         "poll_seconds": float(args.poll_seconds or DEFAULT_WATCHDOG_POLL_SECONDS),
+        "external_supervisor": str(getattr(args, "external_supervisor", "none") or "none"),
+        "external_supervisor_model": (
+            str(getattr(args, "external_supervisor_model", "") or DEFAULT_EXTERNAL_SUPERVISOR_MODEL)
+            if str(getattr(args, "external_supervisor", "none") or "none") != "none"
+            else None
+        ),
         "attempts": [],
         "resume_count": 0,
     }
@@ -8170,7 +8554,17 @@ def command_auto_loop_watchdog(args: argparse.Namespace) -> int:
         child_payload = parse_child_auto_loop_payload(result)
         report_path = report_path_from_child_payload(child_payload)
         source_status = str((child_payload or {}).get("status") or "")
-        child_resumable = watchdog_child_is_resumable(source_status, child_payload)
+        local_child_resumable = watchdog_child_is_resumable(source_status, child_payload)
+        supervisor_review = external_supervisor_review(
+            args,
+            cwd,
+            attempt_index=attempt_index,
+            goal=args.goal,
+            source_status=source_status,
+            child_payload=child_payload,
+            local_resumable=local_child_resumable,
+        )
+        child_resumable = bool(supervisor_review.get("effective_resumable", local_child_resumable))
         attempt = {
             "attempt": attempt_index,
             "kind": kind,
@@ -8183,7 +8577,10 @@ def command_auto_loop_watchdog(args: argparse.Namespace) -> int:
             "source_status": source_status or None,
             "report_json": psafe(report_path) if report_path else None,
             "resumable": bool(child_resumable),
+            "local_resumable": bool(local_child_resumable),
         }
+        if supervisor_review.get("status") != "disabled":
+            attempt["external_supervisor"] = supervisor_review
         payload["attempts"].append(attempt)
         payload["attempt_count"] = len(payload["attempts"])
         payload["resume_count"] = resume_count
@@ -9332,6 +9729,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_auto_loop_watchdog.add_argument("--child-idle-timeout", type=float, default=DEFAULT_WATCHDOG_CHILD_IDLE_TIMEOUT_SECONDS, help="Kill the child auto-loop process after this many silent seconds. 0 disables child idle timeout.")
     p_auto_loop_watchdog.add_argument("--child-wall-timeout", type=float, default=DEFAULT_WATCHDOG_CHILD_WALL_TIMEOUT_SECONDS, help="Kill the child auto-loop process after this many wall-clock seconds. 0 disables child wall timeout.")
     p_auto_loop_watchdog.add_argument("--poll-seconds", type=float, default=DEFAULT_WATCHDOG_POLL_SECONDS, help="Polling interval for child auto-loop supervision.")
+    p_auto_loop_watchdog.add_argument("--external-supervisor", choices=sorted(EXTERNAL_SUPERVISOR_CHOICES), default="none", help="Optional fail-open external supervisor layer for watchdog decisions.")
+    p_auto_loop_watchdog.add_argument("--external-supervisor-model", default=DEFAULT_EXTERNAL_SUPERVISOR_MODEL, help="Model used by --external-supervisor deepseek.")
+    p_auto_loop_watchdog.add_argument("--external-supervisor-base-url", default=DEFAULT_EXTERNAL_SUPERVISOR_BASE_URL, help="OpenAI-compatible base URL used by --external-supervisor deepseek.")
+    p_auto_loop_watchdog.add_argument("--external-supervisor-timeout", type=float, default=DEFAULT_EXTERNAL_SUPERVISOR_TIMEOUT_SECONDS, help="Seconds to wait for external supervisor before falling back to the local watchdog decision.")
+    p_auto_loop_watchdog.add_argument("--external-supervisor-max-chars", type=int, default=DEFAULT_EXTERNAL_SUPERVISOR_MAX_CHARS, help="Maximum child report excerpt characters sent to the external supervisor.")
+    p_auto_loop_watchdog.add_argument("--external-supervisor-reasoning-effort", choices=["high", "max"], default="high", help="Reasoning effort for DeepSeek thinking mode.")
     p_auto_loop_watchdog.set_defaults(func=command_auto_loop_watchdog)
 
     p_claim_evidence = sub.add_parser("claim-evidence", help="Verify claim-to-evidence structure over evidence ids, sources, locators, and statuses.")

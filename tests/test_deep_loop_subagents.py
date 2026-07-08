@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -69,6 +71,14 @@ def minimal_passport():
 
 
 class DeepLoopSubagentTests(unittest.TestCase):
+    def test_plugin_manifest_prompts_external_api_pairing(self):
+        manifest = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        prompts = "\n".join(manifest["interface"].get("defaultPrompt") or [])
+
+        self.assertIn("DeepSeek", prompts)
+        self.assertIn("external supervisor", prompts)
+        self.assertIn("DEEPSEEK_API_KEY", prompts)
+
     def test_every_subchain_has_head_agent_contract(self):
         self.assertEqual(set(research_loop.SUBCHAIN_AGENT_SPECS), set(research_loop.DEEP_LOOP_SUBCHAIN_BY_ID))
         for subchain_id, spec in research_loop.SUBCHAIN_AGENT_SPECS.items():
@@ -248,6 +258,25 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertEqual(command[command.index("--resume-extra-rounds") + 1], "5")
         self.assertEqual(command[command.index("--resume-extra-route-depth") + 1], "2")
 
+    def test_mcp_auto_loop_watchdog_maps_external_supervisor_options(self):
+        command = mcp_server.tool_to_cli(
+            "research_loop_auto_loop_watchdog",
+            {
+                "cwd": "D:\\Project",
+                "goal": "finish unattended run",
+                "external_supervisor": "deepseek",
+                "external_supervisor_model": "deepseek-v4-pro",
+                "external_supervisor_timeout": 7,
+                "external_supervisor_base_url": "https://api.deepseek.com",
+            },
+        )
+
+        self.assertIn("--external-supervisor", command)
+        self.assertEqual(command[command.index("--external-supervisor") + 1], "deepseek")
+        self.assertEqual(command[command.index("--external-supervisor-model") + 1], "deepseek-v4-pro")
+        self.assertEqual(command[command.index("--external-supervisor-timeout") + 1], "7")
+        self.assertEqual(command[command.index("--external-supervisor-base-url") + 1], "https://api.deepseek.com")
+
     def test_watchdog_treats_unattended_continuation_contract_as_resumable(self):
         payload = {
             "status": "problem-loop-escalated",
@@ -271,6 +300,163 @@ class DeepLoopSubagentTests(unittest.TestCase):
         }
 
         self.assertTrue(research_loop.watchdog_child_is_resumable("problem-loop-escalated", payload))
+
+    def test_external_supervisor_skips_without_api_key_and_preserves_local_decision(self):
+        child_payload = {
+            "status": "route-depth-budget-exhausted",
+            "goal": "resume safely",
+            "rounds": [
+                {
+                    "round": 1,
+                    "subchain": "P5",
+                    "goal": "resume safely",
+                    "status": "route-depth-budget-exhausted",
+                    "auto_route": {
+                        "decision": "route_next",
+                        "to_subchain": "P6",
+                        "next_goal": "continue into analysis",
+                    },
+                }
+            ],
+        }
+        args = argparse.Namespace(
+            external_supervisor="deepseek",
+            external_supervisor_model="deepseek-v4-flash",
+            external_supervisor_base_url="https://api.deepseek.com",
+            external_supervisor_timeout=1,
+            external_supervisor_max_chars=4000,
+            external_supervisor_reasoning_effort="high",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {}, clear=True):
+            with mock.patch.object(research_loop, "read_windows_user_environment_variable", return_value=""):
+                review = research_loop.external_supervisor_review(
+                    args,
+                    Path(tmp),
+                    attempt_index=1,
+                    goal="resume safely",
+                    source_status="route-depth-budget-exhausted",
+                    child_payload=child_payload,
+                    local_resumable=True,
+                )
+
+        self.assertEqual(review["status"], "skipped")
+        self.assertEqual(review["provider"], "deepseek")
+        self.assertTrue(review["fail_open"])
+        self.assertTrue(review["local_resumable"])
+        self.assertEqual(review["effective_resumable"], True)
+        self.assertNotIn("api_key", json.dumps(review).lower())
+
+    def test_external_supervisor_api_failure_is_fail_open_and_sanitized(self):
+        child_payload = {
+            "status": "route-agent-timeout",
+            "goal": "resume safely",
+            "rounds": [
+                {
+                    "round": 1,
+                    "subchain": "P5",
+                    "goal": "resume safely",
+                    "status": "route-agent-timeout",
+                    "auto_route": {
+                        "decision": "route_next",
+                        "to_subchain": "P6",
+                        "next_goal": "continue into analysis",
+                    },
+                }
+            ],
+        }
+        args = argparse.Namespace(
+            external_supervisor="deepseek",
+            external_supervisor_model="deepseek-v4-flash",
+            external_supervisor_base_url="https://api.deepseek.com",
+            external_supervisor_timeout=1,
+            external_supervisor_max_chars=4000,
+            external_supervisor_reasoning_effort="high",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DEEPSEEK_API_KEY": "dummy-token"}, clear=True):
+            with mock.patch.object(research_loop.urllib.request, "urlopen", side_effect=research_loop.urllib.error.URLError("boom")):
+                review = research_loop.external_supervisor_review(
+                    args,
+                    Path(tmp),
+                    attempt_index=1,
+                    goal="resume safely",
+                    source_status="route-agent-timeout",
+                    child_payload=child_payload,
+                    local_resumable=True,
+                )
+
+        serialized = json.dumps(review)
+        self.assertEqual(review["status"], "failed")
+        self.assertTrue(review["fail_open"])
+        self.assertTrue(review["effective_resumable"])
+        self.assertNotIn("dummy-token", serialized)
+
+    def test_external_supervisor_reads_windows_user_env_fallback_without_leaking_token(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                decision = {
+                    "recommendation": "route_next",
+                    "confidence": 0.91,
+                    "unattended_safe": True,
+                    "requires_human": False,
+                    "reasons": ["local continuation is executable"],
+                    "risk_flags": [],
+                    "next_prompt_patch": "",
+                }
+                payload = {"choices": [{"message": {"content": json.dumps(decision)}}]}
+                return json.dumps(payload).encode("utf-8")
+
+        child_payload = {
+            "status": "route-depth-budget-exhausted",
+            "goal": "resume safely",
+            "rounds": [
+                {
+                    "round": 1,
+                    "subchain": "P5",
+                    "goal": "resume safely",
+                    "status": "route-depth-budget-exhausted",
+                    "auto_route": {
+                        "decision": "route_next",
+                        "to_subchain": "P6",
+                        "next_goal": "continue into analysis",
+                    },
+                }
+            ],
+        }
+        args = argparse.Namespace(
+            external_supervisor="deepseek",
+            external_supervisor_model="deepseek-v4-flash",
+            external_supervisor_base_url="https://api.deepseek.com",
+            external_supervisor_timeout=1,
+            external_supervisor_max_chars=4000,
+            external_supervisor_reasoning_effort="high",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {}, clear=True):
+            with mock.patch.object(research_loop, "read_windows_user_environment_variable", return_value="dummy-token", create=True):
+                with mock.patch.object(research_loop.urllib.request, "urlopen", return_value=FakeResponse()) as urlopen:
+                    review = research_loop.external_supervisor_review(
+                        args,
+                        Path(tmp),
+                        attempt_index=1,
+                        goal="resume safely",
+                        source_status="route-depth-budget-exhausted",
+                        child_payload=child_payload,
+                        local_resumable=True,
+                    )
+
+        serialized = json.dumps(review)
+        self.assertEqual(review["status"], "ok")
+        self.assertTrue(urlopen.called)
+        self.assertTrue(review["effective_resumable"])
+        self.assertNotIn("dummy-token", serialized)
 
     def test_watchdog_unbounded_resumes_ignore_resume_count_cap(self):
         args = argparse.Namespace(max_resumes=1, allow_unbounded_resumes=True)

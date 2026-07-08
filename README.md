@@ -19,6 +19,7 @@ It provides:
   promotion before core project edits.
 - Watchdog-supervised unattended validation/test/repair cycles connected to
   deep-loop dispatch, with legacy `auto-loop` kept as the child runner.
+- Optional fail-open external supervisor review for watchdog decisions.
 - Auto-routed subchain startup through configurable agent command templates.
 - MCP tools and a Codex skill entrypoint.
 
@@ -30,6 +31,29 @@ It provides:
 - `scripts/mcp_server.py` - stdio MCP wrapper around the CLI.
 - `skills/research-loop/SKILL.md` - Codex skill instructions.
 - `templates/` - JSON/Markdown schemas used by the runtime.
+
+## Installation And API Pairing
+
+After installing or cloning the plugin, pair an external DeepSeek API key only
+when you want the optional supervisor layer:
+
+```powershell
+$env:DEEPSEEK_API_KEY = "<your DeepSeek API key>"
+```
+
+Persist it with your normal shell, OS secret manager, or Codex environment
+setup. Do not write keys into this repository, command history snippets,
+reports, prompts, or Git-tracked files.
+
+The external supervisor is a supplemental layer. If `DEEPSEEK_API_KEY` is not
+set, `--external-supervisor deepseek` records a skipped supervisor review and
+falls back to the original local watchdog/deep-loop behavior. The core research
+loop, routing, validation, and unattended resume flow still work without the
+external API; only the external review layer has no effect.
+
+On Windows, the runtime also checks the current user's persisted environment
+variable when the current process has not inherited `DEEPSEEK_API_KEY`, which
+helps a newly paired key work inside an already-running Codex desktop session.
 
 ## Quick Smoke Test
 
@@ -151,6 +175,33 @@ unattended-safe continuation contract. Use `--allow-unbounded-resumes` when
 resume count should not be the stopping condition. If the child process itself
 hangs before it can write a report, `--child-idle-timeout` and
 `--child-wall-timeout` can terminate it and leave a watchdog failure report.
+
+### External Supervisor
+
+`auto-loop-watchdog` can add a fail-open DeepSeek supervisor layer that reviews
+each child report before the watchdog decides whether to resume:
+
+```powershell
+$env:DEEPSEEK_API_KEY = "<set outside the repo>"
+python scripts/research_loop.py --cwd "D:\Project" auto-loop-watchdog `
+  --goal "complete the research project end to end" `
+  --test-command "python -m pytest" `
+  --current-subchain P1 `
+  --allow-unbounded-routes `
+  --allow-unbounded-resumes `
+  --max-minutes 360 `
+  --external-supervisor deepseek `
+  --external-supervisor-model deepseek-v4-flash
+```
+
+The supervisor is advisory and read-only. It receives a compact child-report
+excerpt and returns JSON with a recommendation, risk flags, and optional prompt
+patch text. It never writes project files and never replaces the local gate. If
+the API key is missing, the API times out, returns invalid JSON, or is otherwise
+unavailable, watchdog records the supervisor status as `skipped` or `failed`
+under `.research-loop/supervisor/` and continues with the original local
+decision. Do not put API keys in commands, reports, docs, or Git; use the
+`DEEPSEEK_API_KEY` environment variable only.
 
 ## Subchain Head Agents
 

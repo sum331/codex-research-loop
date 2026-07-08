@@ -16,7 +16,7 @@ from typing import Any
 
 SCRIPT = Path(__file__).resolve().parent / "research_loop.py"
 SERVER_NAME = "codex-research-loop"
-SERVER_VERSION = "0.9.1"
+SERVER_VERSION = "0.9.2"
 
 
 def schema(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -244,6 +244,12 @@ TOOLS: list[dict[str, Any]] = [
                 "child_idle_timeout": {"type": "number", "description": "Kill child auto-loop after this many silent seconds. 0 disables child idle timeout."},
                 "child_wall_timeout": {"type": "number", "description": "Kill child auto-loop after this many wall-clock seconds. 0 disables child wall timeout."},
                 "poll_seconds": {"type": "number", "description": "Polling interval for child auto-loop supervision."},
+                "external_supervisor": {"type": "string", "description": "Optional fail-open external supervisor provider, such as deepseek."},
+                "external_supervisor_model": {"type": "string", "description": "Model used by the external supervisor."},
+                "external_supervisor_base_url": {"type": "string", "description": "OpenAI-compatible base URL for the external supervisor."},
+                "external_supervisor_timeout": {"type": "number", "description": "Seconds to wait before falling back to the local watchdog decision."},
+                "external_supervisor_max_chars": {"type": "integer", "description": "Maximum child report excerpt characters sent to the external supervisor."},
+                "external_supervisor_reasoning_effort": {"type": "string", "description": "DeepSeek thinking effort, high or max."},
                 "legacy_auto_loop": {"type": "boolean", "description": "Use the old bare auto-loop command instead of the default watchdog-supervised entrypoint."},
             },
             ["cwd", "goal"],
@@ -333,6 +339,12 @@ TOOLS: list[dict[str, Any]] = [
                 "child_idle_timeout": {"type": "number", "description": "Kill child auto-loop after this many silent seconds. 0 disables child idle timeout."},
                 "child_wall_timeout": {"type": "number", "description": "Kill child auto-loop after this many wall-clock seconds. 0 disables child wall timeout."},
                 "poll_seconds": {"type": "number", "description": "Polling interval for child auto-loop supervision."},
+                "external_supervisor": {"type": "string", "description": "Optional fail-open external supervisor provider, such as deepseek."},
+                "external_supervisor_model": {"type": "string", "description": "Model used by the external supervisor."},
+                "external_supervisor_base_url": {"type": "string", "description": "OpenAI-compatible base URL for the external supervisor."},
+                "external_supervisor_timeout": {"type": "number", "description": "Seconds to wait before falling back to the local watchdog decision."},
+                "external_supervisor_max_chars": {"type": "integer", "description": "Maximum child report excerpt characters sent to the external supervisor."},
+                "external_supervisor_reasoning_effort": {"type": "string", "description": "DeepSeek thinking effort, high or max."},
             },
             ["cwd", "goal"],
         ),
@@ -784,6 +796,12 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
             add_option(command, "--child-idle-timeout", args.get("child_idle_timeout"))
             add_option(command, "--child-wall-timeout", args.get("child_wall_timeout"))
             add_option(command, "--poll-seconds", args.get("poll_seconds"))
+            add_option(command, "--external-supervisor", args.get("external_supervisor"))
+            add_option(command, "--external-supervisor-model", args.get("external_supervisor_model"))
+            add_option(command, "--external-supervisor-base-url", args.get("external_supervisor_base_url"))
+            add_option(command, "--external-supervisor-timeout", args.get("external_supervisor_timeout"))
+            add_option(command, "--external-supervisor-max-chars", args.get("external_supervisor_max_chars"))
+            add_option(command, "--external-supervisor-reasoning-effort", args.get("external_supervisor_reasoning_effort"))
         return command
     if name == "research_loop_auto_loop_resume":
         command.append("auto-loop-resume")
@@ -877,6 +895,12 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
         add_option(command, "--child-idle-timeout", args.get("child_idle_timeout"))
         add_option(command, "--child-wall-timeout", args.get("child_wall_timeout"))
         add_option(command, "--poll-seconds", args.get("poll_seconds"))
+        add_option(command, "--external-supervisor", args.get("external_supervisor"))
+        add_option(command, "--external-supervisor-model", args.get("external_supervisor_model"))
+        add_option(command, "--external-supervisor-base-url", args.get("external_supervisor_base_url"))
+        add_option(command, "--external-supervisor-timeout", args.get("external_supervisor_timeout"))
+        add_option(command, "--external-supervisor-max-chars", args.get("external_supervisor_max_chars"))
+        add_option(command, "--external-supervisor-reasoning-effort", args.get("external_supervisor_reasoning_effort"))
         if as_bool(args.get("skip_validate")):
             command.append("--skip-validate")
         if as_bool(args.get("allow_unbounded")):

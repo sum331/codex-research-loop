@@ -1,7 +1,7 @@
 {
   "name": "codex-research-loop",
-  "version": "0.9.1+codex.20260708203000",
-  "description": "Project-local research workflow memory, prompt normalization, adaptive storage policies, content ingest, standardized data packages, source lookup, Zotero/wiki exports, claim-evidence verification, deep-loop gate review routing, isolated problem-loop expert diagnosis, unattended test loops, checkpoints, handoffs, lifecycle logs, and skill routing for Codex.",
+  "version": "0.9.2+codex.20260708211500",
+  "description": "Project-local research workflow memory, prompt normalization, adaptive storage policies, content ingest, standardized data packages, source lookup, Zotero/wiki exports, claim-evidence verification, deep-loop gate review routing, isolated problem-loop expert diagnosis, fail-open external supervisor review, unattended test loops, checkpoints, handoffs, lifecycle logs, and skill routing for Codex.",
   "author": {
     "name": "Local Research Workflow"
   },
@@ -10,7 +10,7 @@
   "interface": {
     "displayName": "Codex Research Loop",
     "shortDescription": "Route resumable research projects with adaptive storage, ingest, evidence checks, deep-loop gate reviews, isolated problem diagnosis, and test feedback loops.",
-    "longDescription": "Codex Research Loop adds project-local research state, project profiles, prompt normalization for incomplete natural-language requests, adaptive project-facing storage policies, canonical or existing-repo-compatible research layouts, explicit URL/local-file content ingest, article-processing packages, standardized data packages with raw bytes, metadata, schema, README, source metadata lookup through public scholarly APIs, Zotero-compatible collection plans, BibTeX and CSL-JSON exports, PDF attachment plans, llm-wiki-compatible pages, deterministic claim-evidence verification over evidence ids, sources, locators, and statuses, deep-loop gate evaluation that routes every pass through review_for_transition and every failed gate through review_for_retry, isolated problem-loop diagnosis with repo/context analysis, generated expert panels, captured test logs, adjustment plans, and gated promotion before core edits, unattended validation/test/repair loops, updateable research records, checkpoints, handoff files, command run logs, lifecycle hook scripts, MCP tools, multi-path task graphs, capability matrices, missing-tool gap reporting, and routing to academic, Nature-style, document, figure, and presentation skills.",
+    "longDescription": "Codex Research Loop adds project-local research state, project profiles, prompt normalization for incomplete natural-language requests, adaptive project-facing storage policies, canonical or existing-repo-compatible research layouts, explicit URL/local-file content ingest, article-processing packages, standardized data packages with raw bytes, metadata, schema, README, source metadata lookup through public scholarly APIs, Zotero-compatible collection plans, BibTeX and CSL-JSON exports, PDF attachment plans, llm-wiki-compatible pages, deterministic claim-evidence verification over evidence ids, sources, locators, and statuses, deep-loop gate evaluation that routes every pass through review_for_transition and every failed gate through review_for_retry, isolated problem-loop diagnosis with repo/context analysis, generated expert panels, captured test logs, adjustment plans, and gated promotion before core edits, fail-open external supervisor review for watchdog decisions, unattended validation/test/repair loops, updateable research records, checkpoints, handoff files, command run logs, lifecycle hook scripts, MCP tools, multi-path task graphs, capability matrices, missing-tool gap reporting, and routing to academic, Nature-style, document, figure, and presentation skills.",
     "developerName": "Local Research Workflow",
     "category": "Productivity",
     "capabilities": [
@@ -29,7 +29,8 @@
       "Export recorded sources to Zotero and wiki pages.",
       "Verify claim evidence links before writing.",
       "Diagnose this blocker with the isolated problem loop.",
-      "Run the unattended auto loop until tests pass."
+      "Run the unattended auto loop until tests pass.",
+      "Pair DeepSeek by setting DEEPSEEK_API_KEY so the fail-open external supervisor can run."
     ],
     "brandColor": "#2563EB"
   }

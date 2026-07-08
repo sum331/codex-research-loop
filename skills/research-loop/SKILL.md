@@ -13,8 +13,9 @@ description: >
   BibTeX/CSL-JSON/PDF attachment/dedupe exports, llm-wiki-compatible pages,
   claim-evidence verification, isolated problem diagnosis, expert-panel
   evaluation, gated adjustment promotion, deep-loop gate/review/tree routing,
-  auto-loop test repair, or multi-path routing to academic, Nature-style, PDF,
-  Word, presentation, and research production skills.
+  auto-loop test repair, fail-open external supervisor review, or multi-path
+  routing to academic, Nature-style, PDF, Word, presentation, and research
+  production skills.
 ---
 
 # Research Loop
@@ -417,6 +418,14 @@ count should not be the stopping condition; otherwise use `--max-resumes`,
 `--resume-extra-rounds`, and `--resume-extra-route-depth` to control depth. Use
 `--child-idle-timeout` or `--child-wall-timeout` when the parent auto-loop
 process itself must be killed if it hangs before writing a report.
+
+For stronger long-run review, add `--external-supervisor deepseek` to
+`auto-loop-watchdog`. This is a fail-open, read-only compatibility layer: it
+reviews the compact child auto-loop report, writes supervisor reports under
+`.research-loop/supervisor/`, and preserves the local watchdog decision if the
+API key is missing, the API times out, or the response is invalid. Read the
+credential from `DEEPSEEK_API_KEY` only; never place API keys in prompts,
+commands, reports, docs, or repository files.
 
 ## Routing Protocol
 
