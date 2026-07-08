@@ -41,7 +41,8 @@ as `cwd` for every tool call. Available tool names mirror the CLI surface:
 `research_storage_policy`, `research_loop_deep_loop`,
 `research_source_hub`, `research_content_ingest`, `research_zotero_bridge`,
 `research_problem_loop`, `research_problem_promote`,
-`research_loop_auto_loop`, `research_claim_evidence_verify`,
+`research_loop_auto_loop`, `research_loop_auto_loop_watchdog`,
+`research_claim_evidence_verify`,
 `research_loop_checkpoint`,
 `research_loop_handoff`, `research_loop_resume`, `research_loop_validate`, and
 `research_loop_run`.
@@ -74,7 +75,7 @@ python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd 
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" checkpoint --stage SCOPING --note "Research question narrowed."
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" handoff --note "Ready for literature review."
 python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" run -- python -m pytest -q
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "tests pass" --test-command "python -m pytest -q" --max-rounds 5
+python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "tests pass" --test-command "python -m pytest -q" --max-rounds 5
 ```
 
 Install lifecycle hooks once:
@@ -327,16 +328,17 @@ default so `auto-loop` can catch broken evidence chains.
 
 ## Unattended Auto Loop
 
-Use `auto-loop` when a test or validation gate should automatically trigger the
-next round instead of stopping after the first failure:
+Use `auto-loop-watchdog` when a test or validation gate should automatically
+trigger the next round instead of stopping after the first failure. The legacy
+`research_loop_auto_loop` MCP tool also maps to watchdog by default; set
+`legacy_auto_loop=true` only for the old bare child-runner behavior.
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "project tests pass" --test-command "python -m pytest -q" --max-rounds 5
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "lint and tests pass" --test-command "python -m pytest -q" --test-command "python -m ruff check ." --repair-command "python scripts/repair.py" --max-rounds 8
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "data pipeline is reproducible" --current-subchain P5 --test-command "python -m pytest tests/data -q" --repair-command "python scripts/repair_data_pipeline.py" --max-rounds 5
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "finish current research stage" --current-subchain P7 --next-subchain P8 --route-depth-budget 3 --test-command "python -m pytest -q" --max-rounds 8
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop --goal "complete the research project end to end" --current-subchain P1 --test-command "python -m pytest -q" --allow-unbounded-routes --max-minutes 360
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "complete the research project end to end" --current-subchain P1 --test-command "python -m pytest -q" --allow-unbounded-routes --max-minutes 360 --max-resumes 6 --resume-extra-rounds 8 --resume-extra-route-depth 4
+python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "project tests pass" --test-command "python -m pytest -q" --max-rounds 5
+python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "lint and tests pass" --test-command "python -m pytest -q" --test-command "python -m ruff check ." --repair-command "python scripts/repair.py" --max-rounds 8
+python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "data pipeline is reproducible" --current-subchain P5 --test-command "python -m pytest tests/data -q" --repair-command "python scripts/repair_data_pipeline.py" --max-rounds 5
+python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "finish current research stage" --current-subchain P7 --next-subchain P8 --route-depth-budget 3 --test-command "python -m pytest -q" --max-rounds 8 --max-resumes 8
+python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "complete the research project end to end" --current-subchain P1 --test-command "python -m pytest -q" --allow-unbounded-routes --allow-unbounded-resumes --max-minutes 360
 ```
 
 Each round runs `validate --fail-on-issue` unless `--skip-validate` is set, then
@@ -405,15 +407,16 @@ command reads the previous
 or last auto-route record, starts the route agent first, then runs validation and
 deep-loop gates again.
 
-For long unattended work, prefer `auto-loop-watchdog` over a bare `auto-loop`.
+For long unattended work, use `auto-loop-watchdog` over a bare `auto-loop`.
 The watchdog starts `auto-loop`, reads the child report, and automatically runs
-`auto-loop-resume --latest` while the child status is resumable. It records live
-state in `.research-loop/watchdog/active-run.json` and writes a
-`*-auto-loop-watchdog.json` report. Use `--max-resumes`,
-`--resume-extra-rounds`, and `--resume-extra-route-depth` to control how deep
-the supervision tree may continue. Use `--child-idle-timeout` or
-`--child-wall-timeout` when the parent auto-loop process itself must be killed
-if it hangs before writing a report.
+`auto-loop-resume --latest` while the child status is resumable or the child
+report contains an unattended-safe continuation contract. It records live state
+in `.research-loop/watchdog/active-run.json` and writes a
+`*-auto-loop-watchdog.json` report. Use `--allow-unbounded-resumes` when resume
+count should not be the stopping condition; otherwise use `--max-resumes`,
+`--resume-extra-rounds`, and `--resume-extra-route-depth` to control depth. Use
+`--child-idle-timeout` or `--child-wall-timeout` when the parent auto-loop
+process itself must be killed if it hangs before writing a report.
 
 ## Routing Protocol
 

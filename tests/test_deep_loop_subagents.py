@@ -171,14 +171,32 @@ class DeepLoopSubagentTests(unittest.TestCase):
                 "route_agent_commands": ["cmd /c echo {subchain}"],
                 "route_codex_sandbox": "workspace-write",
                 "route_codex_approval": "never",
+                "allow_unbounded_resumes": True,
             },
         )
 
+        self.assertIn("auto-loop-watchdog", command)
+        self.assertNotIn("auto-loop", command)
         self.assertIn("--auto-route-next", command)
         self.assertIn("--allow-unbounded-routes", command)
+        self.assertIn("--allow-unbounded-resumes", command)
         self.assertEqual(command[command.index("--route-depth-budget") + 1], "8")
         self.assertEqual(command[command.index("--route-agent") + 1], "none")
         self.assertIn("--route-agent-command", command)
+
+    def test_mcp_auto_loop_legacy_mode_keeps_bare_auto_loop(self):
+        command = mcp_server.tool_to_cli(
+            "research_loop_auto_loop",
+            {
+                "cwd": "D:\\Project",
+                "goal": "legacy compatibility smoke",
+                "test_commands": ["python -m pytest -q"],
+                "legacy_auto_loop": True,
+            },
+        )
+
+        self.assertIn("auto-loop", command)
+        self.assertNotIn("auto-loop-watchdog", command)
 
     def test_mcp_auto_loop_resume_maps_latest_and_route_options(self):
         command = mcp_server.tool_to_cli(
@@ -214,6 +232,7 @@ class DeepLoopSubagentTests(unittest.TestCase):
                 "route_agent_commands": ["cmd /c echo route"],
                 "route_agent_idle_timeout": 120,
                 "max_resumes": 3,
+                "allow_unbounded_resumes": True,
                 "resume_extra_rounds": 5,
                 "resume_extra_route_depth": 2,
                 "poll_seconds": 0.2,
@@ -225,8 +244,38 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertEqual(command[command.index("--goal") + 1], "finish unattended run")
         self.assertEqual(command[command.index("--route-agent-idle-timeout") + 1], "120")
         self.assertEqual(command[command.index("--max-resumes") + 1], "3")
+        self.assertIn("--allow-unbounded-resumes", command)
         self.assertEqual(command[command.index("--resume-extra-rounds") + 1], "5")
         self.assertEqual(command[command.index("--resume-extra-route-depth") + 1], "2")
+
+    def test_watchdog_treats_unattended_continuation_contract_as_resumable(self):
+        payload = {
+            "status": "problem-loop-escalated",
+            "rounds": [
+                {
+                    "round": 1,
+                    "subchain": "P5",
+                    "deep_loop": {
+                        "decision": "route_next",
+                        "target_subchains": ["P6"],
+                        "continuation_contract": {
+                            "decision": "route_next",
+                            "target_subchains": ["P6"],
+                            "next_work_prompt": "Run P6 analysis.",
+                            "unattended_safe": True,
+                            "requires_human": False,
+                        },
+                    },
+                }
+            ],
+        }
+
+        self.assertTrue(research_loop.watchdog_child_is_resumable("problem-loop-escalated", payload))
+
+    def test_watchdog_unbounded_resumes_ignore_resume_count_cap(self):
+        args = argparse.Namespace(max_resumes=1, allow_unbounded_resumes=True)
+
+        self.assertTrue(research_loop.watchdog_resume_allowed(args, resume_count=99))
 
     def test_run_auto_command_kills_idle_executor_and_records_timeout(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -17,8 +17,8 @@ It provides:
   `escalate_problem_loop`, and `pause_for_human`.
 - Isolated problem-loop diagnosis with generated expert panels and gated
   promotion before core project edits.
-- Unattended `auto-loop` validation/test/repair cycles connected to deep-loop
-  dispatch, plus `auto-loop-watchdog` supervision for resumable long runs.
+- Watchdog-supervised unattended validation/test/repair cycles connected to
+  deep-loop dispatch, with legacy `auto-loop` kept as the child runner.
 - Auto-routed subchain startup through configurable agent command templates.
 - MCP tools and a Codex skill entrypoint.
 
@@ -34,22 +34,28 @@ It provides:
 ## Quick Smoke Test
 
 ```powershell
-python scripts/research_loop.py --cwd "D:\Loop\scratch\research-loop-smoke" auto-loop --goal "smoke test" --skip-validate --skip-deep-loop --test-command "cmd /c exit /b 0" --format json
+python scripts/research_loop.py --cwd "D:\Loop\scratch\research-loop-smoke" auto-loop-watchdog --goal "smoke test" --skip-validate --skip-deep-loop --test-command "cmd /c exit /b 0" --format json
 ```
 
 ## Auto-Routed Agent Startup
 
-`auto-loop` consumes a `deep-loop` `route_next` decision by default and starts
-the next subchain in the same unattended run:
+Use `auto-loop-watchdog` for unattended work. It starts `auto-loop` as a child,
+then resumes automatically whenever the child writes a report with a resumable
+status or an unattended-safe continuation contract:
 
 ```powershell
-python scripts/research_loop.py --cwd "D:\Project" auto-loop `
+python scripts/research_loop.py --cwd "D:\Project" auto-loop-watchdog `
   --goal "finish current research stage" `
   --test-command "python -m pytest" `
   --current-subchain P7 `
   --next-subchain P8 `
-  --route-depth-budget 3
+  --route-depth-budget 3 `
+  --max-resumes 8
 ```
+
+The MCP compatibility tool `research_loop_auto_loop` also maps to
+`auto-loop-watchdog` by default. Set `legacy_auto_loop=true` only when a caller
+intentionally needs the old bare `auto-loop` behavior.
 
 The command template is executed at the start of each auto-routed subchain.
 Available variables are `{cwd}`, `{subchain}`, `{goal}`, `{prompt}`,
@@ -95,11 +101,12 @@ For long unattended runs where route depth should not be the stopping condition,
 combine automatic routing with an explicit wall-clock or round safety limit:
 
 ```powershell
-python scripts/research_loop.py --cwd "D:\Project" auto-loop `
+python scripts/research_loop.py --cwd "D:\Project" auto-loop-watchdog `
   --goal "complete the research project end to end" `
   --test-command "python -m pytest" `
   --current-subchain P1 `
   --allow-unbounded-routes `
+  --allow-unbounded-resumes `
   --max-minutes 360
 ```
 
@@ -129,6 +136,7 @@ python scripts/research_loop.py --cwd "D:\Project" auto-loop-watchdog `
   --test-command "python -m pytest" `
   --current-subchain P1 `
   --allow-unbounded-routes `
+  --allow-unbounded-resumes `
   --max-minutes 360 `
   --max-resumes 6 `
   --resume-extra-rounds 8 `
@@ -138,7 +146,9 @@ python scripts/research_loop.py --cwd "D:\Project" auto-loop-watchdog `
 The watchdog writes `.research-loop/watchdog/active-run.json` while running and
 a `*-auto-loop-watchdog.json` report when it stops. It resumes statuses such as
 `route-depth-budget-exhausted`, `route-agent-failed`, `route-agent-timeout`,
-`round-limit`, `timeout`, and route handoff states. If the child process itself
+`round-limit`, `timeout`, route handoff states, and any report containing an
+unattended-safe continuation contract. Use `--allow-unbounded-resumes` when
+resume count should not be the stopping condition. If the child process itself
 hangs before it can write a report, `--child-idle-timeout` and
 `--child-wall-timeout` can terminate it and leave a watchdog failure report.
 

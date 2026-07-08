@@ -16,7 +16,7 @@ from typing import Any
 
 SCRIPT = Path(__file__).resolve().parent / "research_loop.py"
 SERVER_NAME = "codex-research-loop"
-SERVER_VERSION = "0.9.0"
+SERVER_VERSION = "0.9.1"
 
 
 def schema(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -198,7 +198,7 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "research_loop_auto_loop",
-        "description": "Run validation/test/repair rounds until gates pass or a safety limit is reached.",
+        "description": "Run supervised validation/test/repair rounds. This compatibility entrypoint now uses auto-loop-watchdog by default so unattended work can resume across route stops.",
         "inputSchema": schema(
             {
                 "cwd": {"type": "string", "description": "Active project directory."},
@@ -236,6 +236,15 @@ TOOLS: list[dict[str, Any]] = [
                 "deep_loop_max_rounds": {"type": "integer", "description": "Override deep-loop retry budget before escalation."},
                 "skip_problem_escalation": {"type": "boolean", "description": "Record escalation without automatically creating a problem-loop case."},
                 "problem_promote_threshold": {"type": "number", "description": "Promotion threshold used for automatic problem-loop cases."},
+                "max_resumes": {"type": "integer", "description": "Maximum automatic auto-loop-resume attempts when using the default watchdog entrypoint."},
+                "allow_unbounded_resumes": {"type": "boolean", "description": "Ignore max_resumes and keep resuming while child reports contain unattended-safe continuation work."},
+                "resume_extra_rounds": {"type": "integer", "description": "Additional max rounds for each watchdog resume attempt."},
+                "resume_extra_route_depth": {"type": "integer", "description": "Additional route_next transitions for each watchdog resume attempt."},
+                "resume_max_minutes": {"type": "number", "description": "Optional max_minutes override for resumed child loops."},
+                "child_idle_timeout": {"type": "number", "description": "Kill child auto-loop after this many silent seconds. 0 disables child idle timeout."},
+                "child_wall_timeout": {"type": "number", "description": "Kill child auto-loop after this many wall-clock seconds. 0 disables child wall timeout."},
+                "poll_seconds": {"type": "number", "description": "Polling interval for child auto-loop supervision."},
+                "legacy_auto_loop": {"type": "boolean", "description": "Use the old bare auto-loop command instead of the default watchdog-supervised entrypoint."},
             },
             ["cwd", "goal"],
         ),
@@ -317,6 +326,7 @@ TOOLS: list[dict[str, Any]] = [
                 "skip_problem_escalation": {"type": "boolean", "description": "Record escalation without automatically creating a problem-loop case."},
                 "problem_promote_threshold": {"type": "number", "description": "Promotion threshold used for automatic problem-loop cases."},
                 "max_resumes": {"type": "integer", "description": "Maximum automatic auto-loop-resume attempts."},
+                "allow_unbounded_resumes": {"type": "boolean", "description": "Ignore max_resumes and keep resuming while child reports contain unattended-safe continuation work."},
                 "resume_extra_rounds": {"type": "integer", "description": "Additional max rounds for each resume attempt."},
                 "resume_extra_route_depth": {"type": "integer", "description": "Additional route_next transitions for each resume attempt."},
                 "resume_max_minutes": {"type": "number", "description": "Optional max_minutes override for resumed child loops."},
@@ -713,7 +723,8 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
             command.append("--no-dedupe")
         return command
     if name == "research_loop_auto_loop":
-        command.append("auto-loop")
+        legacy_auto_loop = as_bool(args.get("legacy_auto_loop"))
+        command.append("auto-loop" if legacy_auto_loop else "auto-loop-watchdog")
         add_option(command, "--goal", args.get("goal"))
         for test_command in args.get("test_commands") or []:
             add_option(command, "--test-command", test_command)
@@ -763,6 +774,16 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
             command.append("--skip-deep-loop")
         if as_bool(args.get("skip_problem_escalation")):
             command.append("--skip-problem-escalation")
+        if not legacy_auto_loop:
+            add_option(command, "--max-resumes", args.get("max_resumes"))
+            if as_bool(args.get("allow_unbounded_resumes")):
+                command.append("--allow-unbounded-resumes")
+            add_option(command, "--resume-extra-rounds", args.get("resume_extra_rounds"))
+            add_option(command, "--resume-extra-route-depth", args.get("resume_extra_route_depth"))
+            add_option(command, "--resume-max-minutes", args.get("resume_max_minutes"))
+            add_option(command, "--child-idle-timeout", args.get("child_idle_timeout"))
+            add_option(command, "--child-wall-timeout", args.get("child_wall_timeout"))
+            add_option(command, "--poll-seconds", args.get("poll_seconds"))
         return command
     if name == "research_loop_auto_loop_resume":
         command.append("auto-loop-resume")
@@ -848,6 +869,8 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
         add_option(command, "--deep-loop-max-rounds", args.get("deep_loop_max_rounds"))
         add_option(command, "--problem-promote-threshold", args.get("problem_promote_threshold"))
         add_option(command, "--max-resumes", args.get("max_resumes"))
+        if as_bool(args.get("allow_unbounded_resumes")):
+            command.append("--allow-unbounded-resumes")
         add_option(command, "--resume-extra-rounds", args.get("resume_extra_rounds"))
         add_option(command, "--resume-extra-route-depth", args.get("resume_extra_route_depth"))
         add_option(command, "--resume-max-minutes", args.get("resume_max_minutes"))

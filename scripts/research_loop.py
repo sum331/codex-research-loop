@@ -34,7 +34,7 @@ from typing import Any
 
 
 LOOP_DIR = ".research-loop"
-SCHEMA_VERSION = "0.9.0"
+SCHEMA_VERSION = "0.9.1"
 PAYLOAD_LIMIT = 24000
 INVENTORY_LIMIT = int(os.environ.get("RESEARCH_LOOP_INVENTORY_LIMIT", "1200"))
 INVENTORY_SECONDS = float(os.environ.get("RESEARCH_LOOP_INVENTORY_SECONDS", "2.0"))
@@ -8079,6 +8079,48 @@ def watchdog_report_markdown(payload: dict[str, Any]) -> list[str]:
     return lines
 
 
+def auto_loop_payload_has_unattended_continuation(payload: dict[str, Any] | None) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    if str(payload.get("status") or "") == "passed":
+        return False
+    rounds = list(payload.get("rounds") or [])
+    if not rounds:
+        return False
+    last_round = rounds[-1] if isinstance(rounds[-1], dict) else {}
+    route = last_round.get("auto_route") if isinstance(last_round.get("auto_route"), dict) else {}
+    if route and route.get("next_goal") and route.get("to_subchain"):
+        return True
+    deep_loop = last_round.get("deep_loop") if isinstance(last_round.get("deep_loop"), dict) else {}
+    continuation = deep_loop.get("continuation_contract") if isinstance(deep_loop.get("continuation_contract"), dict) else {}
+    if continuation.get("requires_human") is True:
+        return False
+    if continuation.get("unattended_safe") is False:
+        return False
+    decision = str(continuation.get("decision") or deep_loop.get("decision") or "")
+    if decision not in {"route_next", "retry_same_route", "escalate_problem_loop"}:
+        return False
+    prompt = continuation.get("next_work_prompt") or deep_loop.get("next_work_prompt") or route.get("next_goal")
+    targets = list(continuation.get("target_subchains") or deep_loop.get("target_subchains") or [])
+    if decision == "retry_same_route":
+        return bool(prompt)
+    if decision == "escalate_problem_loop":
+        return bool(prompt or targets or deep_loop)
+    return bool(prompt and targets)
+
+
+def watchdog_child_is_resumable(source_status: str, child_payload: dict[str, Any] | None) -> bool:
+    if source_status == "passed":
+        return False
+    return source_status in RESUMABLE_AUTO_LOOP_STATUSES or auto_loop_payload_has_unattended_continuation(child_payload)
+
+
+def watchdog_resume_allowed(args: argparse.Namespace, resume_count: int) -> bool:
+    if bool(getattr(args, "allow_unbounded_resumes", False)):
+        return True
+    return resume_count < int(getattr(args, "max_resumes", 0))
+
+
 def command_auto_loop_watchdog(args: argparse.Namespace) -> int:
     cwd = resolve_workspace(args.cwd)
     init_project(cwd)
@@ -8096,6 +8138,7 @@ def command_auto_loop_watchdog(args: argparse.Namespace) -> int:
         "status": "running",
         "watchdog_directory": psafe(watchdog_dir),
         "max_resumes": args.max_resumes,
+        "allow_unbounded_resumes": bool(args.allow_unbounded_resumes),
         "resume_extra_rounds": args.resume_extra_rounds,
         "resume_extra_route_depth": args.resume_extra_route_depth,
         "child_idle_timeout": float(args.child_idle_timeout or 0.0),
@@ -8127,6 +8170,7 @@ def command_auto_loop_watchdog(args: argparse.Namespace) -> int:
         child_payload = parse_child_auto_loop_payload(result)
         report_path = report_path_from_child_payload(child_payload)
         source_status = str((child_payload or {}).get("status") or "")
+        child_resumable = watchdog_child_is_resumable(source_status, child_payload)
         attempt = {
             "attempt": attempt_index,
             "kind": kind,
@@ -8138,7 +8182,7 @@ def command_auto_loop_watchdog(args: argparse.Namespace) -> int:
             "stderr_log": result.get("stderr_log"),
             "source_status": source_status or None,
             "report_json": psafe(report_path) if report_path else None,
-            "resumable": bool(source_status in RESUMABLE_AUTO_LOOP_STATUSES),
+            "resumable": bool(child_resumable),
         }
         payload["attempts"].append(attempt)
         payload["attempt_count"] = len(payload["attempts"])
@@ -8154,8 +8198,8 @@ def command_auto_loop_watchdog(args: argparse.Namespace) -> int:
             status = "passed"
             final_message = "The watched auto-loop reached a passed terminal state."
             break
-        if source_status in RESUMABLE_AUTO_LOOP_STATUSES:
-            if resume_count >= int(args.max_resumes):
+        if child_resumable:
+            if not watchdog_resume_allowed(args, resume_count):
                 status = "watchdog-max-resumes-exhausted"
                 final_message = f"Watchdog stopped because max_resumes={args.max_resumes} was exhausted at status {source_status}."
                 break
@@ -9281,6 +9325,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_auto_loop_watchdog.add_argument("--skip-problem-escalation", action="store_true", help="Record escalation without automatically creating a problem-loop case.")
     p_auto_loop_watchdog.add_argument("--problem-promote-threshold", type=float, default=0.75, help="Promotion threshold used when auto-loop escalates into problem-loop.")
     p_auto_loop_watchdog.add_argument("--max-resumes", type=int, default=3, help="Maximum automatic auto-loop-resume attempts after resumable child stops.")
+    p_auto_loop_watchdog.add_argument("--allow-unbounded-resumes", action="store_true", help="Ignore --max-resumes and keep resuming while child reports contain unattended-safe continuation work. Use with max-minutes or another external limit.")
     p_auto_loop_watchdog.add_argument("--resume-extra-rounds", type=int, default=5, help="Additional max rounds for each auto-loop-resume attempt.")
     p_auto_loop_watchdog.add_argument("--resume-extra-route-depth", type=int, default=3, help="Additional route_next transitions for each auto-loop-resume attempt.")
     p_auto_loop_watchdog.add_argument("--resume-max-minutes", type=float, help="Optional max_minutes override for resumed child loops.")
