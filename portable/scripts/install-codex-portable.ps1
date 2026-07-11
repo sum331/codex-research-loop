@@ -9,12 +9,14 @@ param(
     [bool]$EnableRuntimePlugins = $true,
     [bool]$BackupHooks = $true,
     [bool]$BackupConfig = $true,
+    [bool]$SetResearchLoopHomeEnv = $true,
     [string]$AgentsPluginHome = $(Join-Path $HOME ".agents\plugins"),
     [string]$CodexCliPath = $(if ($env:CODEX_CLI_PATH) { $env:CODEX_CLI_PATH } else { "" }),
     [switch]$SkipHooks,
     [switch]$SkipPluginChannels,
     [switch]$SkipAutoInstallPlugins,
     [switch]$SkipRuntimePlugins,
+    [switch]$SkipResearchLoopHomeEnv,
     [switch]$DryRun
 )
 
@@ -24,6 +26,7 @@ if ($SkipHooks) { $InstallHooks = $false }
 if ($SkipPluginChannels) { $InstallPluginChannels = $false }
 if ($SkipAutoInstallPlugins) { $AutoInstallPlugins = $false }
 if ($SkipRuntimePlugins) { $EnableRuntimePlugins = $false }
+if ($SkipResearchLoopHomeEnv) { $SetResearchLoopHomeEnv = $false }
 
 function Resolve-OrCreateDirectory {
     param([string]$Path)
@@ -359,6 +362,17 @@ function Enable-CodexConfigPlugin {
 $portableRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $portableRoot ".."))
 $codexHomePath = Resolve-OrCreateDirectory $CodexHome
+$researchLoopHomeEnvWritten = $false
+
+if ($SetResearchLoopHomeEnv) {
+    if ($DryRun) {
+        Write-Host "[dry-run] set user env CODEX_RESEARCH_LOOP_HOME=$repoRoot"
+    } else {
+        [Environment]::SetEnvironmentVariable("CODEX_RESEARCH_LOOP_HOME", $repoRoot, "User")
+        $env:CODEX_RESEARCH_LOOP_HOME = $repoRoot
+    }
+    $researchLoopHomeEnvWritten = $true
+}
 
 $skillsSource = Join-Path $portableRoot "skills"
 $pluginsSource = Join-Path $portableRoot "plugins"
@@ -549,6 +563,12 @@ $result = [ordered]@{
     dispatch_destination = $docsDest
     hooks_installed = $InstallHooks
     plugin_channels = $pluginChannelReport
+    research_loop_home_env = [ordered]@{
+        enabled = $SetResearchLoopHomeEnv
+        written = $researchLoopHomeEnvWritten
+        name = "CODEX_RESEARCH_LOOP_HOME"
+        value = $repoRoot
+    }
     dry_run = [bool]$DryRun
 }
 

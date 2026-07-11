@@ -11,6 +11,9 @@ scratch/
 runs/
 *.tmp
 *.log
+~$*.docx
+~$*.pptx
+~$*.xlsx
 
 .env
 .env.*

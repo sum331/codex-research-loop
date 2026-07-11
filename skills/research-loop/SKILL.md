@@ -100,40 +100,47 @@ as `cwd` for every tool call. Available tool names mirror the CLI surface:
 
 ## Core Commands
 
-From the plugin root:
+The portable installer sets `CODEX_RESEARCH_LOOP_HOME` to the cloned plugin
+root. If you are running from a manual clone before installing, set it first:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" init
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" status
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" storage
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" storage --init-dirs --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" resume
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" normalize --input "rough user request"
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" route --intent "write the paper"
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" route --intent "write the paper" --format json
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "write the paper" --current-subchain P7 --gate-result pass --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "verify evidence" --current-subchain P3 --gate-result fail --gate-issue "unsupported claim remains" --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "verify harness report" --current-subchain P6 --gate-result auto --harness-report "reports\harness.json" --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" capabilities
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" source-hub --query "10.1038/s41586-020-2649-2" --provider auto
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" content-ingest --source "paper.html" --mode article --record-materials --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" content-ingest --source "data.csv" --mode data --record-materials --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" problem-loop --problem "tests fail after data ingest" --test-command "python -m pytest -q" --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" problem-promote --case-id "prob-case-id"
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --format all --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --wiki-root "D:\path\to\wiki" --write-wiki --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" claim-evidence --format json --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" profile --target-venue "Nature" --citation-style "Nature" --verification-strictness strict
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" checkpoint --stage SCOPING --note "Research question narrowed."
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" handoff --note "Ready for literature review."
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" run -- python -m pytest -q
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "tests pass" --test-command "python -m pytest -q" --max-rounds 5
+$env:CODEX_RESEARCH_LOOP_HOME = (Get-Location).Path
+```
+
+Then call the runtime through that variable:
+
+```powershell
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" init
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" status
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" storage
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" storage --init-dirs --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" resume
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" normalize --input "rough user request"
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" route --intent "write the paper"
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" route --intent "write the paper" --format json
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "write the paper" --current-subchain P7 --gate-result pass --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "verify evidence" --current-subchain P3 --gate-result fail --gate-issue "unsupported claim remains" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "verify harness report" --current-subchain P6 --gate-result auto --harness-report "reports\harness.json" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" capabilities
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" source-hub --query "10.1038/s41586-020-2649-2" --provider auto
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" content-ingest --source "paper.html" --mode article --record-materials --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" content-ingest --source "data.csv" --mode data --record-materials --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" problem-loop --problem "tests fail after data ingest" --test-command "python -m pytest -q" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" problem-promote --case-id "prob-case-id"
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --format all --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --wiki-root "D:\path\to\wiki" --write-wiki --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" claim-evidence --format json --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" profile --target-venue "Nature" --citation-style "Nature" --verification-strictness strict
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" checkpoint --stage SCOPING --note "Research question narrowed."
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" handoff --note "Ready for literature review."
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" run -- python -m pytest -q
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" auto-loop-watchdog --goal "tests pass" --test-command "python -m pytest -q" --max-rounds 5
 ```
 
 Install lifecycle hooks once:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\install_hooks.py
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\install_hooks.py"
 ```
 
 ## Project Artifacts
@@ -173,9 +180,9 @@ the control directory.
 Use `storage` before ingesting materials into a new or unfamiliar project:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" storage
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" storage --style adaptive --init-dirs --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" storage --style canonical --rebuild --init-dirs
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" storage
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" storage --style adaptive --init-dirs --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" storage --style canonical --rebuild --init-dirs
 ```
 
 Storage styles:
@@ -203,18 +210,18 @@ Use these commands to keep the project state machine grounded in auditable
 records:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" passport --title "Project title" --domain "field" --question "Main research question" --target paper
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" material --kind paper --title "Source title" --source "doi-or-url" --status external
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" claim --text "Key claim" --status proposed
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" evidence --kind citation --source "doi-or-url" --claim-id claim-id --status verified
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" decision --decision "Use method X" --rationale "Why X is appropriate"
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" risk --text "Citation support is incomplete" --severity high
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" next --text "Verify the remaining sources" --stage LITERATURE
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" update --kind risk --id risk-id --status mitigated --note "Verified by source audit"
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" update --kind next --id next-id --status done
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" update --kind evidence --id evidence-id --status verified
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" validate
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" claim-evidence --fail-on-issue
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" passport --title "Project title" --domain "field" --question "Main research question" --target paper
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" material --kind paper --title "Source title" --source "doi-or-url" --status external
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" claim --text "Key claim" --status proposed
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" evidence --kind citation --source "doi-or-url" --claim-id claim-id --status verified
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" decision --decision "Use method X" --rationale "Why X is appropriate"
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" risk --text "Citation support is incomplete" --severity high
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" next --text "Verify the remaining sources" --stage LITERATURE
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" update --kind risk --id risk-id --status mitigated --note "Verified by source audit"
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" update --kind next --id next-id --status done
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" update --kind evidence --id evidence-id --status verified
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" validate
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" claim-evidence --fail-on-issue
 ```
 
 Record IDs printed by `claim`, `evidence`, `material`, and `decision` should be
@@ -226,8 +233,8 @@ When a user gives rough, incomplete, or low-structure natural language, run
 `normalize` before choosing a domain workflow:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" normalize --input "current user request"
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" normalize --input "current user request" --format json
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" normalize --input "current user request"
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" normalize --input "current user request" --format json
 ```
 
 `normalize` reads the current project state and passport, classifies the task,
@@ -242,9 +249,9 @@ Use `content-ingest` for explicit URLs or local files that need to enter the
 research loop as reusable materials:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" content-ingest --source "https://example.org/paper.html" --mode auto --record-materials --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" content-ingest --source "paper.pdf" --mode article --record-materials --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" content-ingest --source "data.csv" --mode data --record-materials --write --wiki-root "D:\path\to\wiki" --write-wiki
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" content-ingest --source "https://example.org/paper.html" --mode auto --record-materials --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" content-ingest --source "paper.pdf" --mode article --record-materials --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" content-ingest --source "data.csv" --mode data --record-materials --write --wiki-root "D:\path\to\wiki" --write-wiki
 ```
 
 Article-like inputs are routed to `article-processing-chain`, stored in the
@@ -285,8 +292,8 @@ root causes, or a self-started project is stalled before touching core project
 files:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" problem-loop --problem "project tests fail after data ingest" --test-command "python -m pytest -q" --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" problem-promote --case-id "problem-case-id"
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" problem-loop --problem "project tests fail after data ingest" --test-command "python -m pytest -q" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" problem-promote --case-id "problem-case-id"
 ```
 
 The chain reads project context, route graph, storage policy, passport summary,
@@ -312,8 +319,8 @@ Use `source-hub` for lightweight public scholarly metadata lookup before
 recording sources or evidence:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" source-hub --query "paper title or DOI" --provider auto --rows 3
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" source-hub --query "paper title or DOI" --record-materials
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" source-hub --query "paper title or DOI" --provider auto --rows 3
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" source-hub --query "paper title or DOI" --record-materials
 ```
 
 The first implementation queries Crossref, OpenAlex, and arXiv through public
@@ -328,10 +335,10 @@ Use `zotero-bridge` after `source-hub --record-materials` or after manually
 recording paper/reference materials:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --format plan
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --format csl-json --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --format bibtex --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --format all --include-attachments --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --format plan
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --format csl-json --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --format bibtex --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --format all --include-attachments --write
 ```
 
 The first implementation is an offline bridge. It reads recorded
@@ -347,7 +354,7 @@ For knowledge-base integration with the existing `llm-wiki` skill, write
 wiki-compatible pages:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --wiki-root "D:\path\to\wiki" --write-wiki --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" zotero-bridge --collection "Project Literature" --wiki-root "D:\path\to\wiki" --write-wiki --write
 ```
 
 This creates markdown pages in `sources/` and a `topics/zotero-paper-library.md`
@@ -360,9 +367,9 @@ replacement for llm-wiki ingestion adapters.
 Use `claim-evidence` before drafting, review, revision, and finalization:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" claim-evidence
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" claim-evidence --format json --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" claim-evidence --fail-on-issue
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" claim-evidence
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" claim-evidence --format json --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" claim-evidence --fail-on-issue
 ```
 
 The verifier is a deterministic structure gate. It checks active claims in
@@ -386,11 +393,11 @@ trigger the next round instead of stopping after the first failure. The legacy
 `legacy_auto_loop=true` only for the old bare child-runner behavior.
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "project tests pass" --test-command "python -m pytest -q" --max-rounds 5
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "lint and tests pass" --test-command "python -m pytest -q" --test-command "python -m ruff check ." --repair-command "python scripts/repair.py" --max-rounds 8
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "data pipeline is reproducible" --current-subchain P5 --test-command "python -m pytest tests/data -q" --repair-command "python scripts/repair_data_pipeline.py" --max-rounds 5
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "finish current research stage" --current-subchain P7 --next-subchain P8 --route-depth-budget 3 --test-command "python -m pytest -q" --max-rounds 8 --max-resumes 8
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-watchdog --goal "complete the research project end to end" --current-subchain P1 --test-command "python -m pytest -q" --allow-unbounded-routes --allow-unbounded-resumes --max-minutes 360
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" auto-loop-watchdog --goal "project tests pass" --test-command "python -m pytest -q" --max-rounds 5
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" auto-loop-watchdog --goal "lint and tests pass" --test-command "python -m pytest -q" --test-command "python -m ruff check ." --repair-command "python scripts/repair.py" --max-rounds 8
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" auto-loop-watchdog --goal "data pipeline is reproducible" --current-subchain P5 --test-command "python -m pytest tests/data -q" --repair-command "python scripts/repair_data_pipeline.py" --max-rounds 5
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" auto-loop-watchdog --goal "finish current research stage" --current-subchain P7 --next-subchain P8 --route-depth-budget 3 --test-command "python -m pytest -q" --max-rounds 8 --max-resumes 8
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" auto-loop-watchdog --goal "complete the research project end to end" --current-subchain P1 --test-command "python -m pytest -q" --allow-unbounded-routes --allow-unbounded-resumes --max-minutes 360
 ```
 
 Each round runs `validate --fail-on-issue` unless `--skip-validate` is set, then
@@ -447,7 +454,7 @@ When an unattended run stops for a resumable control reason, resume it instead
 of asking the user for the next manual command:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" auto-loop-resume --latest --extra-rounds 8 --extra-route-depth 4 --max-minutes 180
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" auto-loop-resume --latest --extra-rounds 8 --extra-route-depth 4 --max-minutes 180
 ```
 
 Use `auto-loop-resume` for `route-depth-budget-exhausted`, `round-limit`,
@@ -484,7 +491,7 @@ Before starting substantive research, writing, review, figure, conversion, or
 revision work, run:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" route --intent "current user task"
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" route --intent "current user task"
 ```
 
 `route` now emits a multi-path task graph rather than a single linear next step.
@@ -518,10 +525,10 @@ Use `deep-loop` when a subchain round has produced a result and the loop needs
 to decide whether to continue inside the same subchain or move to another one:
 
 ```powershell
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "current task" --current-subchain P2 --gate-result pass --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "current task" --current-subchain P3 --gate-result fail --gate-issue "claim has no verified evidence" --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "current task" --current-subchain P6 --gate-result auto --quality-score 0.72 --artifact "outputs/figures/main.png" --write
-python C:\Users\ASUS\plugins\codex-research-loop\scripts\research_loop.py --cwd "C:\path\to\project" deep-loop --intent "current task" --current-subchain P6 --gate-result auto --harness-report "reports\harness.json" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "current task" --current-subchain P2 --gate-result pass --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "current task" --current-subchain P3 --gate-result fail --gate-issue "claim has no verified evidence" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "current task" --current-subchain P6 --gate-result auto --quality-score 0.72 --artifact "outputs/figures/main.png" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "current task" --current-subchain P6 --gate-result auto --harness-report "reports\harness.json" --write
 ```
 
 `deep-loop` reads the current route graph, selected P1-P10 subchain, project
@@ -681,4 +688,4 @@ After `install_hooks.py` has run, Codex lifecycle events write:
 - session summaries and automatic checkpoints at `Stop`
 
 Hook failures must not block user work; errors are written under
-`C:\Users\ASUS\.codex\hooks\codex-research-loop\errors.log`.
+`$env:USERPROFILE\.codex\hooks\codex-research-loop\errors.log`.

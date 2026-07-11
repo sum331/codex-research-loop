@@ -72,6 +72,11 @@ The portable installer copies local skills, the prompt-submit dispatch plugin,
 the dispatch table, and reusable lifecycle hook scripts into `%CODEX_HOME%`
 when set, otherwise `%USERPROFILE%\.codex`. It rewrites `hooks.json` with the
 new computer's paths and backs up the previous hooks file before changing it.
+It also sets the user-level `CODEX_RESEARCH_LOOP_HOME` environment variable to
+the cloned repository path, so installed skills can invoke
+`scripts/research_loop.py` without hard-coded machine paths. Restart Codex after
+the first install if the current session does not see the new environment
+variable.
 It also reads `portable/manifests/plugin-install-channels.json` to configure
 local plugin marketplace entries, attempt managed plugin installs through
 `codex plugin add`, and enable bundled/runtime plugins in `config.toml`.

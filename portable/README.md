@@ -37,6 +37,11 @@ paths, backs up any existing `hooks.json`, and registers:
 - local lifecycle task hooks;
 - research-loop lifecycle hooks pointing to this cloned repo.
 
+The installer also writes the user-level `CODEX_RESEARCH_LOOP_HOME` environment
+variable to the cloned repository path. Restart Codex after the first install if
+the current session does not immediately see the variable. Use
+`-SkipResearchLoopHomeEnv` only when you want to manage that path yourself.
+
 By default it also reads `manifests/plugin-install-channels.json` and configures
 plugin channels:
 

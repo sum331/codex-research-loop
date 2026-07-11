@@ -1,6 +1,6 @@
 {
   "name": "codex-research-loop",
-  "version": "0.9.4+codex.20260708224500",
+  "version": "0.9.5+codex.20260711081523",
   "description": "Project-local research workflow memory, prompt normalization, adaptive storage policies, content ingest, standardized data packages, source lookup, Zotero/wiki exports, claim-evidence verification, deep-loop gate review routing, isolated problem-loop expert diagnosis, fail-open external supervisor review, unattended test loops, checkpoints, handoffs, lifecycle logs, portable skill/plugin packaging, plugin install channels, and skill routing for Codex.",
   "author": {
     "name": "Local Research Workflow"

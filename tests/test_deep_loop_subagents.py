@@ -97,6 +97,14 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertTrue((portable / "skills" / "skill-plugin-router" / "SKILL.md").exists())
         self.assertTrue((portable / "skills" / "local-task-hooks" / "SKILL.md").exists())
         self.assertTrue((portable / "hooks" / "local-task-hooks" / "codex_lifecycle_hook.py").exists())
+        self.assertIn("CODEX_RESEARCH_LOOP_HOME", installer_path.read_text(encoding="utf-8"))
+
+        portable_skill = (portable / "skills" / "research-loop" / "SKILL.md").read_text(encoding="utf-8")
+        source_skill = (ROOT / "skills" / "research-loop" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("$env:CODEX_RESEARCH_LOOP_HOME", portable_skill)
+        self.assertIn("$env:CODEX_RESEARCH_LOOP_HOME", source_skill)
+        self.assertNotIn("C:\\Users\\ASUS\\plugins\\codex-research-loop", portable_skill)
+        self.assertNotIn("C:\\Users\\ASUS\\plugins\\codex-research-loop", source_skill)
 
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         self.assertIn("research-loop", manifest["packaged_skills"])

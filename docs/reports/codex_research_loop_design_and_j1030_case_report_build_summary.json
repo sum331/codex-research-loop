@@ -1,0 +1,21 @@
+{
+  "date": "2026-07-11",
+  "markdown": "docs/reports/codex_research_loop_design_and_j1030_case_report.md",
+  "docx": "docs/reports/codex_research_loop_design_and_j1030_case_report_with_mindmap.docx",
+  "legacy_docx": "docs/reports/codex_research_loop_design_and_j1030_case_report.docx",
+  "mindmap": "docs/reports/assets/loop_research_mindmap.png",
+  "plugin_version": "0.9.5+codex.20260711081523",
+  "case_project": "$env:J1030_PROJECT_ROOT",
+  "j1030_rows": 243,
+  "j1030_gate": {
+    "decision": "route_next",
+    "review_mode": "review_for_transition",
+    "round_index": 2,
+    "max_rounds": 5,
+    "pass_threshold": 0.95,
+    "quality_score": 0.96,
+    "reasons": [
+      "Gate passed; review should prepare the next subchain."
+    ]
+  }
+}
