@@ -15,6 +15,9 @@ It provides:
   gate vectors, and handoff contracts.
 - Deep-loop gate decisions for `route_next`, `retry_same_route`,
   `escalate_problem_loop`, and `pause_for_human`.
+- Default Research Council and Adversarial Gate review inside `deep-loop`, with
+  rich expert cards, killer tests, and an arbiter that converts critique back
+  into the same four unattended-safe control decisions.
 - Isolated problem-loop diagnosis with generated expert panels and gated
   promotion before core project edits.
 - Watchdog-supervised unattended validation/test/repair cycles connected to
@@ -93,6 +96,38 @@ configuration still complete.
 
 ```powershell
 python scripts/research_loop.py --cwd "D:\Loop\scratch\research-loop-smoke" auto-loop-watchdog --goal "smoke test" --skip-validate --skip-deep-loop --test-command "cmd /c exit /b 0" --format json
+```
+
+## Research Council And Adversarial Gate
+
+`deep-loop` now runs three review layers by default:
+
+- The hard gate preserves non-negotiable constraints such as human authority,
+  explicit blockers, low quality scores, and retry-budget exhaustion.
+- The Research Council constructs fixed and dynamic expert cards with
+  `required_reads`, `diagnostic_frame`, `red_flags`, and `output_contract`
+  fields, then recommends whether to transition, retry, reroute, escalate, or
+  pause.
+- The Adversarial Gate attacks premature convergence with fatal objections,
+  missing counterfactuals, and killer tests. The Arbiter combines hard gate,
+  council, and adversarial findings into `route_next`, `retry_same_route`,
+  `escalate_problem_loop`, or `pause_for_human`.
+
+With `--write`, the main directive remains under `.research-loop/deep-loops/`.
+Supplemental council reports are written under
+`.research-loop/experts/councils/`, and adversarial reports under
+`.research-loop/adversarial-gates/`. These are control-plane review artifacts;
+they do not mutate project core files.
+
+For debugging only, direct `deep-loop` calls can temporarily disable either
+supplemental layer:
+
+```powershell
+python scripts/research_loop.py --cwd "D:\Project" deep-loop `
+  --intent "debug a gate" `
+  --current-subchain P3 `
+  --skip-research-council `
+  --skip-adversarial-gate
 ```
 
 ## Auto-Routed Agent Startup

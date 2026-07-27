@@ -609,6 +609,18 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "name": "deep-loop-router",
         "use_for": "Evaluate subchain gates, create review-for-transition or review-for-retry directives, and route deep loop trees across P1-P10 subchains.",
     },
+    "tool:research-council-reviewer": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "research-council-reviewer",
+        "use_for": "Construct fixed and dynamic expert cards with required reads, diagnostic frames, red flags, output contracts, cross-critique, and route recommendations for deep-loop gates.",
+    },
+    "tool:adversarial-gate-reviewer": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "adversarial-gate-reviewer",
+        "use_for": "Attack premature convergence, fatal objections, missing counterfactuals, and killer tests before an arbiter finalizes deep-loop continuation decisions.",
+    },
     "tool:claim-evidence-verifier": {
         "kind": "built-in-tool",
         "status": "available",
@@ -1244,6 +1256,18 @@ def supervisor_root(cwd: Path) -> Path:
     return loop_root(cwd) / "supervisor"
 
 
+def experts_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "experts"
+
+
+def research_councils_root(cwd: Path) -> Path:
+    return experts_root(cwd) / "councils"
+
+
+def adversarial_gates_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "adversarial-gates"
+
+
 def deep_loops_root(cwd: Path) -> Path:
     return loop_root(cwd) / "deep-loops"
 
@@ -1860,7 +1884,7 @@ def save_passport(cwd: Path, passport: dict[str, Any]) -> None:
 
 def init_project(cwd: Path, stage: str | None = None, storage_style: str | None = None, init_storage: bool = False) -> dict[str, Any]:
     root = loop_root(cwd)
-    for child in ["runs", "checkpoints", "handoffs", "reports", "storage-reports", "deep-loops", "problem-cases", "problem-reports", "promotions", "watchdog"]:
+    for child in ["runs", "checkpoints", "handoffs", "reports", "storage-reports", "deep-loops", "experts", "experts/councils", "adversarial-gates", "problem-cases", "problem-reports", "promotions", "watchdog"]:
         ensure_dir(root / child)
     policy = load_storage_policy(cwd, storage_style)
     if init_storage:
@@ -3027,6 +3051,11 @@ def capability_map_for_subchains(subchains: list[dict[str, Any]]) -> list[dict[s
     controller["id"] = "tool:deep-loop-router"
     rows.append(controller)
     seen.add("tool:deep-loop-router")
+    for controller_id in ["tool:research-council-reviewer", "tool:adversarial-gate-reviewer"]:
+        controller = dict(CAPABILITY_MATRIX[controller_id])
+        controller["id"] = controller_id
+        rows.append(controller)
+        seen.add(controller_id)
     for chain in subchains:
         for capability_id in list(chain.get("capability_ids", [])) + list(chain.get("missing_capability_ids", [])):
             if capability_id in seen:
@@ -4428,6 +4457,644 @@ def build_gate_vector(
     }
 
 
+RESEARCH_COUNCIL_FIXED_EXPERTS: list[dict[str, Any]] = [
+    {
+        "expert_id": "domain_pi",
+        "role": "Domain Principal Investigator",
+        "domain_scope": "Research-question fit, field realism, and scientific contribution boundaries.",
+        "required_reads": ["active research question", "route graph", ".research-loop/material-passport.json"],
+        "diagnostic_frame": [
+            "State what the project can answer with current materials.",
+            "Separate field-standard inference from speculation.",
+            "Name the decisive missing domain evidence.",
+        ],
+        "red_flags": [
+            "The claimed objective cannot be answered by the available materials.",
+            "The project silently shifts research question between subchains.",
+            "A domain convention or physical constraint is ignored.",
+        ],
+        "output_contract": {
+            "verdict": "pass, revise, reroute, or block",
+            "domain_constraints": "Non-negotiable field assumptions and limits.",
+            "next_domain_action": "Smallest domain-grounded step.",
+        },
+    },
+    {
+        "expert_id": "literature_scout",
+        "role": "Literature and Source Scout",
+        "domain_scope": "Search coverage, source quality, citation provenance, and counterevidence.",
+        "required_reads": [".research-loop/material-passport.json", ".research-loop/evidence-ledger.jsonl", "source-hub or ingest reports"],
+        "diagnostic_frame": [
+            "Check whether the source set is broad enough for the current claim.",
+            "Identify missing primary sources, surveys, datasets, or negative evidence.",
+            "Separate metadata candidates from verified sources.",
+        ],
+        "red_flags": [
+            "No recorded source supports a late-stage claim.",
+            "Citation locators or DOI/title identifiers are missing.",
+            "Counterevidence is absent in a novelty or review gate.",
+        ],
+        "output_contract": {
+            "coverage_verdict": "sufficient, partial, or insufficient",
+            "must_read_sources": "Sources or source classes to acquire before advancing.",
+            "evidence_updates": "Evidence ledger records that must be added or repaired.",
+        },
+    },
+    {
+        "expert_id": "methods_critic",
+        "role": "Methods and Design Critic",
+        "domain_scope": "Method validity, protocol fit, metrics, baselines, and compliance constraints.",
+        "required_reads": ["method plan", "experiment or analysis protocol", "route blockers", "harness report"],
+        "diagnostic_frame": [
+            "Test whether the method can answer the research question.",
+            "Check baseline, metric, sampling, and compliance alignment.",
+            "Ask which smaller design test would falsify the current plan.",
+        ],
+        "red_flags": [
+            "Metric success does not imply scientific success.",
+            "A method is selected before its assumptions are checked.",
+            "Compliance, privacy, or data-use constraints are deferred without a recorded decision.",
+        ],
+        "output_contract": {
+            "method_verdict": "valid, partial, invalid, or owner-blocked",
+            "assumption_tests": "Tests or checks required before execution.",
+            "reroute_target": "P4, P5, P6, P10, or pause_for_human when needed.",
+        },
+    },
+    {
+        "expert_id": "data_computation_auditor",
+        "role": "Data, Computation, and Reproducibility Auditor",
+        "domain_scope": "Data packages, code execution, logs, artifacts, and reproducibility evidence.",
+        "required_reads": ["storage-policy.json", "run logs", "artifact refs", "harness evidence"],
+        "diagnostic_frame": [
+            "Trace every result to an input, command, and output artifact.",
+            "Check whether the reported artifact can be regenerated or inspected.",
+            "Distinguish computation failure from interpretation failure.",
+        ],
+        "red_flags": [
+            "A pass gate has no concrete artifact reference.",
+            "Generated files are outside the storage policy or scratch lab.",
+            "A failed command is summarized without stdout/stderr or report path.",
+        ],
+        "output_contract": {
+            "provenance_verdict": "complete, partial, missing, or contaminated",
+            "required_artifacts": "Logs, data packages, figures, or reports needed.",
+            "validation_command": "Smallest command or inspection to prove readiness.",
+        },
+    },
+    {
+        "expert_id": "skeptical_reviewer",
+        "role": "Skeptical Reviewer",
+        "domain_scope": "Adversarial critique, alternative explanations, weak claims, and premature convergence.",
+        "required_reads": ["result summary", "gate issues", "gate vector", "next-work prompt"],
+        "diagnostic_frame": [
+            "Assume the current conclusion is wrong and seek the strongest objection.",
+            "Ask what counterexample would change the route decision.",
+            "Separate fixable local gaps from project-level integrity risks.",
+        ],
+        "red_flags": [
+            "The loop advances because a score passed while key evidence is absent.",
+            "Alternative explanations or negative controls are missing.",
+            "The next subchain would optimize presentation before substance.",
+        ],
+        "output_contract": {
+            "strongest_objection": "Single most damaging objection.",
+            "killer_test": "A test that could invalidate the current route.",
+            "route_challenge": "Why the proposed route is or is not safe.",
+        },
+    },
+    {
+        "expert_id": "novelty_assessor",
+        "role": "Novelty and Contribution Assessor",
+        "domain_scope": "Contribution originality, claim scope, alternative explanations, and positioning.",
+        "required_reads": ["claim map", "literature handoff", "review findings", "target output profile"],
+        "diagnostic_frame": [
+            "Compare the claimed contribution against the source landscape.",
+            "Check whether novelty is a result, framing, method, dataset, or synthesis.",
+            "Identify what would reduce the contribution to routine work.",
+        ],
+        "red_flags": [
+            "Novelty is asserted without a comparison set.",
+            "The claim is broader than the evidence and analysis support.",
+            "The route moves to writing or release before contribution scope is stable.",
+        ],
+        "output_contract": {
+            "novelty_verdict": "strong, plausible, weak, unsupported, or collapsed",
+            "positioning_gap": "Missing comparison or claim boundary.",
+            "next_claim_action": "Revise claim, return to evidence, or escalate.",
+        },
+    },
+    {
+        "expert_id": "failure_mode_diagnostician",
+        "role": "Failure Mode Diagnostician",
+        "domain_scope": "Blockers, repeated failures, brittle gates, and isolated problem-loop triggers.",
+        "required_reads": ["gate vector", "manual issues", "harness evidence", "latest run logs"],
+        "diagnostic_frame": [
+            "Classify the failure as input, method, execution, analysis, evidence, or orchestration.",
+            "Check whether retrying the same route can plausibly fix it.",
+            "Define the escalation boundary for P10 isolated labs.",
+        ],
+        "red_flags": [
+            "The same gate failure recurs without narrowing the next round.",
+            "A problem needs core edits before an isolated diagnosis exists.",
+            "A route executor failure is treated as project completion.",
+        ],
+        "output_contract": {
+            "failure_class": "input, method, execution, analysis, evidence, orchestration, or human authority",
+            "escalation_trigger": "Condition that requires P10.",
+            "retry_scope": "Narrow retry plan if escalation is not yet needed.",
+        },
+    },
+]
+
+
+DIMENSION_EXPERT_SPECS: dict[str, dict[str, Any]] = {
+    "evidence_integrity": {
+        "expert_id": "source_evidence_forensics",
+        "role": "Source Evidence Forensics Specialist",
+        "domain_scope": "Unsupported claims, missing locators, weak citations, and source-to-claim traceability.",
+        "required_reads": [".research-loop/evidence-ledger.jsonl", "claim map", "citation plan"],
+        "diagnostic_frame": ["Trace each risky claim to a source locator.", "Find the first unsupported statement that would break review.", "Decide whether the route must return to P2."],
+        "red_flags": ["Unsupported claim remains.", "Locator is missing.", "Evidence candidate was never verified."],
+        "output_contract": {"evidence_gap": "Exact claim/source gap.", "repair_route": "P2, P3, or P10.", "minimum_evidence": "Record required before writing/review continues."},
+    },
+    "artifact_readiness": {
+        "expert_id": "artifact_provenance_auditor",
+        "role": "Artifact Provenance Auditor",
+        "domain_scope": "Concrete output files, reproducible reports, figures, tables, and package paths.",
+        "required_reads": ["artifact refs", "storage-policy.json", "artifact-registry.jsonl"],
+        "diagnostic_frame": ["Inspect whether outputs exist and match the claimed stage.", "Check storage location and reproducibility record.", "Demand a readback artifact before handoff."],
+        "red_flags": ["No artifact for a late-stage pass.", "Artifact path is temporary or untracked.", "Output cannot be inspected."],
+        "output_contract": {"artifact_gap": "Missing or untrusted output.", "required_readback": "Inspection required.", "route": "Retry current subchain or P10."},
+    },
+    "analysis_validity": {
+        "expert_id": "analysis_validity_auditor",
+        "role": "Analysis Validity Auditor",
+        "domain_scope": "Statistics, uncertainty, result interpretation, and figure/table correctness.",
+        "required_reads": ["analysis report", "figures/tables", "run logs", "method plan"],
+        "diagnostic_frame": ["Check whether interpretation follows from results.", "Name uncertainty or robustness checks.", "Route invalid analysis before writing."],
+        "red_flags": ["Figure exists but analysis is not validated.", "Uncertainty is omitted.", "Result interpretation exceeds the method."],
+        "output_contract": {"analysis_gap": "Invalid or unverified analysis point.", "required_check": "Statistic, table, or figure audit.", "route": "P6 or P10."},
+    },
+    "method_validity": {
+        "expert_id": "method_validity_auditor",
+        "role": "Method Validity Auditor",
+        "domain_scope": "Method assumptions, metric fit, baselines, and feasibility.",
+        "required_reads": ["method plan", "metrics", "baseline notes", "compliance flags"],
+        "diagnostic_frame": ["Check whether the method answers the objective.", "Find mismatched metrics or baselines.", "Define the smallest feasibility test."],
+        "red_flags": ["Objective-method mismatch.", "Metric does not test the claim.", "Compliance gate is unresolved."],
+        "output_contract": {"method_gap": "Assumption or design failure.", "repair_route": "P4, P5, P6, or P10.", "minimum_test": "Feasibility or compliance check."},
+    },
+    "novelty_risk": {
+        "expert_id": "counterclaim_mapper",
+        "role": "Counterclaim and Alternative Explanation Mapper",
+        "domain_scope": "Alternative explanations, novelty threats, and contribution collapse cases.",
+        "required_reads": ["claim map", "literature matrix", "review findings"],
+        "diagnostic_frame": ["List plausible rival explanations.", "Identify the strongest prior-art overlap.", "Set the claim boundary that survives counterevidence."],
+        "red_flags": ["No counterclaim matrix.", "Novelty asserted without comparison.", "Contribution depends on unverified evidence."],
+        "output_contract": {"counterclaims": "Rival explanations to test.", "novelty_gap": "Prior-art or framing gap.", "route": "P2, P3, P8, or P10."},
+    },
+}
+
+
+def gate_vector_levels(gate_vector: dict[str, Any]) -> dict[str, str]:
+    return {key: str(value.get("level")) for key, value in gate_vector.items() if isinstance(value, dict)}
+
+
+def gate_level(gate_vector: dict[str, Any], dimension: str) -> str:
+    value = gate_vector.get(dimension)
+    return str(value.get("level", "low")) if isinstance(value, dict) else "low"
+
+
+def risk_rank(level: str) -> int:
+    return {"low": 0, "medium": 1, "high": 2}.get(str(level), 0)
+
+
+def combined_signal_text(*parts: Any) -> str:
+    chunks: list[str] = []
+    for part in parts:
+        if isinstance(part, str):
+            chunks.append(part)
+        elif isinstance(part, dict):
+            chunks.append(json.dumps(part, ensure_ascii=True, default=str))
+        elif isinstance(part, list):
+            chunks.extend(str(item) for item in part)
+        elif part is not None:
+            chunks.append(str(part))
+    return "\n".join(chunks).lower()
+
+
+def research_council_id(current_subchain: dict[str, Any], gate_vector: dict[str, Any], result_summary: str | None, manual_issues: list[str]) -> str:
+    seed = json.dumps(
+        {
+            "subchain": current_subchain.get("id"),
+            "levels": gate_vector_levels(gate_vector),
+            "summary": result_summary or "",
+            "issues": manual_issues,
+        },
+        sort_keys=True,
+        ensure_ascii=True,
+    )
+    return f"council-{timestamp()}-{slug(str(current_subchain.get('id') or 'subchain'))}-{short_digest(seed)}"
+
+
+def expert_card_from_spec(spec: dict[str, Any], *, project_domain: str | None, current_subchain: dict[str, Any], gate_vector: dict[str, Any], source: str) -> dict[str, Any]:
+    card = json.loads(json.dumps(spec, ensure_ascii=True))
+    card["source"] = source
+    card["subchain_scope"] = str(current_subchain.get("id") or "")
+    card["project_domain"] = project_domain or "(not set)"
+    card["gate_dimensions_to_check"] = gate_vector_levels(gate_vector)
+    return card
+
+
+def dynamic_research_experts(
+    *,
+    project_domain: str | None,
+    current_subchain: dict[str, Any],
+    gate_vector: dict[str, Any],
+    manual_issues: list[str],
+    result_summary: str | None,
+    harness_evidence: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    text = combined_signal_text(manual_issues, result_summary, harness_evidence or {}, gate_vector)
+    experts: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for dimension, spec in DIMENSION_EXPERT_SPECS.items():
+        if risk_rank(gate_level(gate_vector, dimension)) >= 1:
+            card = expert_card_from_spec(spec, project_domain=project_domain, current_subchain=current_subchain, gate_vector=gate_vector, source=f"dynamic:{dimension}")
+            experts.append(card)
+            seen.add(str(card.get("expert_id")))
+    if any(token in text for token in ["data", "dataset", "csv", "schema", "provenance"]):
+        spec = {
+            "expert_id": "data_contract_specialist",
+            "role": "Data Contract Specialist",
+            "domain_scope": "Dataset layout, schema, provenance, and downstream reuse contracts.",
+            "required_reads": ["storage-policy.json", "data package metadata", "schema.json when present"],
+            "diagnostic_frame": ["Verify raw/interim/processed separation.", "Check schema drift and provenance.", "Name the smallest data validation gate."],
+            "red_flags": ["Data bypasses standard package layout.", "Schema is inferred but never checked.", "Analysis consumes an ad hoc temp file."],
+            "output_contract": {"data_contract_gap": "Broken storage or schema contract.", "validation_gate": "Smallest data check.", "route": "P5, P6, or P10."},
+        }
+        if spec["expert_id"] not in seen:
+            experts.append(expert_card_from_spec(spec, project_domain=project_domain, current_subchain=current_subchain, gate_vector=gate_vector, source="dynamic:data-signal"))
+    if any(token in text for token in ["python", "pytest", "command", "exit", "stderr", "runtime", "dependency"]):
+        spec = {
+            "expert_id": "execution_runtime_specialist",
+            "role": "Execution Runtime Specialist",
+            "domain_scope": "Commands, interpreters, dependency boundaries, and test execution failures.",
+            "required_reads": ["run logs", "harness report", "test command list"],
+            "diagnostic_frame": ["Separate environment failure from project failure.", "Check interpreter and dependency assumptions.", "Name retry or P10 reproduction command."],
+            "red_flags": ["Route executor failed but work is treated as complete.", "No stdout/stderr path is recorded.", "Dependency state is guessed from memory."],
+            "output_contract": {"runtime_gap": "Environment or command failure.", "reproduction_command": "Command to rerun in lab.", "route": "P5 or P10."},
+        }
+        if spec["expert_id"] not in seen:
+            experts.append(expert_card_from_spec(spec, project_domain=project_domain, current_subchain=current_subchain, gate_vector=gate_vector, source="dynamic:runtime-signal"))
+    return experts
+
+
+def research_council_route_recommendation(
+    *,
+    current_subchain: dict[str, Any],
+    next_subchains: list[dict[str, Any]],
+    gate_vector: dict[str, Any],
+    manual_issues: list[str],
+    result_summary: str | None,
+) -> dict[str, Any]:
+    current_id = str(current_subchain.get("id"))
+    text = combined_signal_text(manual_issues, result_summary, gate_vector)
+    target_ids = [str(item.get("id")) for item in next_subchains]
+    reason = "delivery_gap_route"
+    action = "route_next" if target_ids else "pause_for_human"
+    if gate_level(gate_vector, "human_blocker") == "high":
+        return {"action": "pause_for_human", "semantic_reason": "systemic_blocker", "target_subchains": [], "rationale": "Human authority or restricted material is required."}
+    if gate_level(gate_vector, "evidence_integrity") == "high" or any(token in text for token in ["unsupported", "citation", "locator", "source"]):
+        reason = "evidence_gap_route"
+        target_ids = ["P2", "P10"] if current_id not in {"P2", "P10"} else [current_id]
+        action = "escalate_problem_loop" if current_id in {"P7", "P8", "P9"} else "retry_same_route"
+    elif gate_level(gate_vector, "method_validity") == "high":
+        reason = "method_gap_route"
+        target_ids = ["P4", "P10"] if current_id not in {"P4", "P10"} else [current_id]
+        action = "escalate_problem_loop" if current_id not in {"P4", "P10"} else "retry_same_route"
+    elif gate_level(gate_vector, "analysis_validity") == "high":
+        reason = "analysis_gap_route"
+        target_ids = ["P6", "P10"] if current_id not in {"P6", "P10"} else [current_id if current_id == "P6" else "P10"]
+        action = "escalate_problem_loop" if current_id in {"P7", "P8", "P9"} else "retry_same_route"
+    elif gate_level(gate_vector, "artifact_readiness") == "high":
+        reason = "delivery_gap_route"
+        target_ids = [current_id, "P10"] if current_id != "P10" else ["P10"]
+        action = "escalate_problem_loop" if current_id in {"P6", "P7", "P8", "P9"} else "retry_same_route"
+    elif risk_rank(gate_level(gate_vector, "novelty_risk")) >= 1 and current_id in {"P3", "P7", "P8"}:
+        reason = "expand_hypothesis_portfolio"
+        target_ids = ["P3", "P2", "P10"] if current_id != "P3" else ["P3", "P2"]
+        action = "retry_same_route"
+    return {
+        "action": action,
+        "semantic_reason": reason,
+        "target_subchains": target_ids,
+        "rationale": "Council recommendation derived from gate-vector dimensions, supplied issues, and current subchain risk.",
+    }
+
+
+def research_council_review(
+    *,
+    cwd: Path,
+    passport: dict[str, Any],
+    route_graph: dict[str, Any],
+    current_subchain: dict[str, Any],
+    next_subchains: list[dict[str, Any]],
+    gate_vector: dict[str, Any],
+    result_summary: str | None,
+    manual_issues: list[str],
+    harness_evidence: dict[str, Any] | None,
+    enabled: bool = True,
+) -> dict[str, Any]:
+    council_id = research_council_id(current_subchain, gate_vector, result_summary, manual_issues)
+    if not enabled:
+        return {
+            "enabled": False,
+            "council_id": council_id,
+            "experts": [],
+            "route_recommendation": {"action": "defer_to_gate", "semantic_reason": "disabled", "target_subchains": []},
+        }
+    project_domain = passport.get("domain")
+    experts = [
+        expert_card_from_spec(spec, project_domain=project_domain, current_subchain=current_subchain, gate_vector=gate_vector, source="fixed")
+        for spec in RESEARCH_COUNCIL_FIXED_EXPERTS
+    ]
+    existing_ids = {str(expert.get("expert_id")) for expert in experts}
+    for expert in dynamic_research_experts(
+        project_domain=project_domain,
+        current_subchain=current_subchain,
+        gate_vector=gate_vector,
+        manual_issues=manual_issues,
+        result_summary=result_summary,
+        harness_evidence=harness_evidence,
+    ):
+        if str(expert.get("expert_id")) not in existing_ids:
+            experts.append(expert)
+            existing_ids.add(str(expert.get("expert_id")))
+    independent_contracts = [
+        {
+            "expert_id": expert["expert_id"],
+            "must_answer": [
+                "What is the strongest reason to pass, retry, reroute, escalate, or pause?",
+                "Which evidence or artifact did you inspect or require?",
+                "What is the smallest next action that changes the gate state?",
+            ],
+            "evidence_required": list(expert.get("required_reads") or []),
+            "output_schema": expert.get("output_contract") or {},
+        }
+        for expert in experts
+    ]
+    route_recommendation = research_council_route_recommendation(
+        current_subchain=current_subchain,
+        next_subchains=next_subchains,
+        gate_vector=gate_vector,
+        manual_issues=manual_issues,
+        result_summary=result_summary,
+    )
+    return {
+        "enabled": True,
+        "council_id": council_id,
+        "created_at": utc_now(),
+        "project_root": psafe(cwd),
+        "current_subchain": current_subchain.get("id"),
+        "route_task_type": route_graph.get("task_type"),
+        "gate_vector_summary": gate_vector_levels(gate_vector),
+        "experts": experts,
+        "independent_review_contracts": independent_contracts,
+        "cross_critique_contract": {
+            "mode": "round_robin_challenge",
+            "required_checks": [
+                "Each expert must name one assumption another expert may be taking for granted.",
+                "The skeptical reviewer must attack the council's easiest pass route.",
+                "The failure-mode diagnostician must decide whether retrying locally is credible.",
+            ],
+        },
+        "synthesis_contract": {
+            "required_output": "A single route recommendation with dissenting objections preserved.",
+            "must_include": ["majority recommendation", "minority objections", "killer tests", "safe next subchain", "promotion or pause boundary"],
+            "no_core_mutation": True,
+        },
+        "route_recommendation": route_recommendation,
+        "paths": {
+            "json": psafe(research_councils_root(cwd) / f"{council_id}.json"),
+            "markdown": psafe(research_councils_root(cwd) / f"{council_id}.md"),
+        },
+    }
+
+
+def adversarial_killer_tests(gate_vector: dict[str, Any], current_subchain: dict[str, Any], manual_issues: list[str]) -> list[str]:
+    current_id = str(current_subchain.get("id"))
+    tests: list[str] = []
+    if risk_rank(gate_level(gate_vector, "evidence_integrity")) >= 1:
+        tests.append("Run claim-evidence verification and inspect every unsupported or partial claim before advancing.")
+    if risk_rank(gate_level(gate_vector, "artifact_readiness")) >= 1:
+        tests.append("Open or read back each claimed artifact path and verify it matches the subchain required outputs.")
+    if risk_rank(gate_level(gate_vector, "method_validity")) >= 1:
+        tests.append("Write a one-page method-assumption check mapping objective, method, metric, baseline, and failure criteria.")
+    if risk_rank(gate_level(gate_vector, "analysis_validity")) >= 1:
+        tests.append("Recompute or directly inspect the analysis/figure/table evidence used by the result summary.")
+    if risk_rank(gate_level(gate_vector, "novelty_risk")) >= 1 or current_id in {"P3", "P8"}:
+        tests.append("Build a counterclaim matrix with at least one plausible rival explanation or prior-art overlap.")
+    if manual_issues:
+        tests.append("For each supplied gate issue, record whether it is fixed, deferred with rationale, or escalated to P10.")
+    return tests or ["Inspect the next-work prompt against the current gate vector before unattended continuation."]
+
+
+def adversarial_gate_review(
+    *,
+    cwd: Path,
+    route_graph: dict[str, Any],
+    current_subchain: dict[str, Any],
+    gate_vector: dict[str, Any],
+    base_gate: dict[str, Any],
+    result_summary: str | None,
+    manual_issues: list[str],
+    artifacts: list[str],
+    harness_evidence: dict[str, Any] | None,
+    enabled: bool = True,
+) -> dict[str, Any]:
+    current_id = str(current_subchain.get("id"))
+    gate_result = str(base_gate.get("decision") or "")
+    review_id_seed = json.dumps(
+        {
+            "subchain": current_id,
+            "gate": gate_result,
+            "levels": gate_vector_levels(gate_vector),
+            "summary": result_summary or "",
+            "issues": manual_issues,
+        },
+        sort_keys=True,
+        ensure_ascii=True,
+    )
+    review_id = f"adv-gate-{timestamp()}-{slug(current_id)}-{short_digest(review_id_seed)}"
+    if not enabled:
+        return {
+            "enabled": False,
+            "review_id": review_id,
+            "premature_convergence_risk": "low",
+            "fatal_objections": [],
+            "nonfatal_objections": [],
+            "route_recommendation": {"action": "defer_to_gate", "semantic_reason": "disabled", "target_subchains": []},
+        }
+    text = combined_signal_text(result_summary, manual_issues, harness_evidence or {}, gate_vector)
+    fatal: list[str] = []
+    nonfatal: list[str] = []
+    missing_counterfactuals: list[str] = []
+    thin_summary = len((result_summary or "").strip()) < 80
+    late_stage = current_id in {"P6", "P7", "P8", "P9"}
+    if gate_level(gate_vector, "human_blocker") == "high":
+        fatal.append("Human authority, restricted data, credential, or compliance signal blocks unattended continuation.")
+    if gate_level(gate_vector, "evidence_integrity") == "high":
+        fatal.append("Evidence integrity is high risk; a pass decision would optimize downstream work around unsupported claims.")
+    if gate_level(gate_vector, "artifact_readiness") == "high" and late_stage:
+        fatal.append("Late-stage handoff has no trustworthy artifact readback.")
+    if gate_level(gate_vector, "analysis_validity") == "high":
+        fatal.append("Analysis validity is high risk; writing or release would be premature.")
+    if gate_level(gate_vector, "method_validity") == "high":
+        fatal.append("Method validity is high risk; execution or synthesis would be built on an unchecked design.")
+    if thin_summary and current_id in {"P3", "P8"}:
+        nonfatal.append("The result summary is too thin for a claim or review gate.")
+    if manual_issues:
+        nonfatal.append(f"{len(manual_issues)} unresolved gate issue(s) remain in the prompt.")
+    if risk_rank(gate_level(gate_vector, "novelty_risk")) >= 1 or any(token in text for token in ["novelty", "alternative", "counter", "prior"]):
+        missing_counterfactuals.append("A counterclaim or prior-art overlap matrix is required before convergence.")
+    if current_id in {"P3", "P8"}:
+        missing_counterfactuals.append("At least one rival interpretation should be tested by the claim/review chain.")
+    if not artifacts and late_stage:
+        missing_counterfactuals.append("The loop needs an artifact readback countercheck against the claimed stage output.")
+    killer_tests = adversarial_killer_tests(gate_vector, current_subchain, manual_issues)
+    risk = "low"
+    if fatal:
+        risk = "high"
+    elif (thin_summary and current_id in {"P3", "P8"}) or manual_issues or missing_counterfactuals:
+        risk = "medium"
+    if gate_result == "route_next" and risk == "medium" and (gate_level(gate_vector, "evidence_integrity") == "high" or gate_level(gate_vector, "novelty_risk") == "medium"):
+        risk = "high"
+    route_recommendation = research_council_route_recommendation(
+        current_subchain=current_subchain,
+        next_subchains=[],
+        gate_vector=gate_vector,
+        manual_issues=manual_issues,
+        result_summary=result_summary,
+    )
+    if risk == "high" and route_recommendation.get("action") == "route_next":
+        route_recommendation = {"action": "retry_same_route", "semantic_reason": "reframe_problem", "target_subchains": [current_id], "rationale": "Adversarial review found high premature-convergence risk."}
+    return {
+        "enabled": True,
+        "review_id": review_id,
+        "created_at": utc_now(),
+        "project_root": psafe(cwd),
+        "current_subchain": current_id,
+        "attack_summary": [
+            "Assume the current gate decision is overconfident.",
+            "Attack missing evidence, artifacts, counterfactuals, and route safety before continuation.",
+        ],
+        "fatal_objections": fatal,
+        "nonfatal_objections": nonfatal,
+        "missing_counterfactuals": missing_counterfactuals,
+        "killer_tests": killer_tests,
+        "premature_convergence_risk": risk,
+        "route_recommendation": route_recommendation,
+        "paths": {
+            "json": psafe(adversarial_gates_root(cwd) / f"{review_id}.json"),
+            "markdown": psafe(adversarial_gates_root(cwd) / f"{review_id}.md"),
+        },
+    }
+
+
+def arbiter_semantic_reason(gate_vector: dict[str, Any], manual_issues: list[str], result_summary: str | None, current_subchain: dict[str, Any]) -> str:
+    text = combined_signal_text(manual_issues, result_summary, gate_vector)
+    current_id = str(current_subchain.get("id"))
+    if gate_level(gate_vector, "human_blocker") == "high":
+        return "systemic_blocker"
+    if gate_level(gate_vector, "evidence_integrity") == "high" or any(token in text for token in ["unsupported", "citation", "locator", "source", "evidence"]):
+        return "evidence_gap_route"
+    if gate_level(gate_vector, "method_validity") == "high":
+        return "method_gap_route"
+    if gate_level(gate_vector, "analysis_validity") == "high":
+        return "analysis_gap_route"
+    if gate_level(gate_vector, "artifact_readiness") == "high":
+        return "delivery_gap_route"
+    if risk_rank(gate_level(gate_vector, "novelty_risk")) >= 1 or current_id in {"P3", "P8"} and "alternative" in text:
+        return "expand_hypothesis_portfolio"
+    if risk_rank(gate_level(gate_vector, "objective_gap")) >= 1:
+        return "reframe_problem"
+    return "ready_route"
+
+
+def merge_route_targets(*recommendations: dict[str, Any]) -> list[str]:
+    targets: list[str] = []
+    for recommendation in recommendations:
+        for target in recommendation.get("target_subchains") or []:
+            append_unique(targets, str(target))
+    return targets
+
+
+def arbiter_decision(
+    *,
+    base_gate: dict[str, Any],
+    current_subchain: dict[str, Any],
+    gate_vector: dict[str, Any],
+    council: dict[str, Any],
+    adversarial: dict[str, Any],
+    manual_issues: list[str],
+    result_summary: str | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    current_id = str(current_subchain.get("id"))
+    gate = json.loads(json.dumps(base_gate, ensure_ascii=True))
+    semantic = arbiter_semantic_reason(gate_vector, manual_issues, result_summary, current_subchain)
+    council_rec = council.get("route_recommendation") or {}
+    adversarial_rec = adversarial.get("route_recommendation") or {}
+    recommended_targets = merge_route_targets(council_rec, adversarial_rec)
+    fatal_count = len(adversarial.get("fatal_objections") or [])
+    premature_risk = str(adversarial.get("premature_convergence_risk") or "low")
+    reasons = list(gate.get("reasons") or [])
+    decision_source = "hard_gate"
+    if gate_level(gate_vector, "human_blocker") == "high" or semantic == "systemic_blocker":
+        gate["decision"] = "pause_for_human"
+        gate["review_mode"] = "human_checkpoint"
+        append_unique(reasons, "Arbiter paused because human authority or restricted material is required.")
+        decision_source = "arbiter_human_blocker"
+    elif gate.get("decision") == "route_next" and (fatal_count or premature_risk == "high"):
+        if semantic in {"evidence_gap_route", "method_gap_route", "analysis_gap_route", "delivery_gap_route"} and current_id != "P10":
+            gate["decision"] = "escalate_problem_loop"
+            gate["review_mode"] = "review_for_problem_escalation"
+            append_unique(reasons, f"Arbiter overrode route_next because adversarial review found {semantic}.")
+            decision_source = "adversarial_override"
+        else:
+            gate["decision"] = "retry_same_route"
+            gate["review_mode"] = "review_for_retry"
+            append_unique(reasons, "Arbiter requires another same-subchain round before transition.")
+            decision_source = "adversarial_retry"
+    elif gate.get("decision") == "route_next" and semantic in {"evidence_gap_route", "method_gap_route", "analysis_gap_route"} and manual_issues:
+        gate["decision"] = "retry_same_route"
+        gate["review_mode"] = "review_for_retry"
+        append_unique(reasons, f"Arbiter converted pass to retry because unresolved issues indicate {semantic}.")
+        decision_source = "council_issue_override"
+    elif gate.get("decision") in {"retry_same_route", "escalate_problem_loop"}:
+        append_unique(reasons, f"Arbiter preserved {gate.get('decision')} with semantic reason {semantic}.")
+    gate["reasons"] = reasons
+    gate["arbiter_semantic_reason"] = semantic
+    gate["arbiter_decision_source"] = decision_source
+    arbiter = {
+        "semantic_reason": semantic,
+        "decision": gate.get("decision"),
+        "decision_source": decision_source,
+        "base_decision": base_gate.get("decision"),
+        "premature_convergence_risk": premature_risk,
+        "fatal_objection_count": fatal_count,
+        "route_recommendation": {
+            "action": gate.get("decision"),
+            "target_subchains": recommended_targets or (["P10"] if gate.get("decision") == "escalate_problem_loop" else [current_id] if gate.get("decision") == "retry_same_route" else []),
+            "semantic_reason": semantic,
+            "rationale": "Arbiter combined hard gate constraints, research council recommendation, and adversarial objections.",
+        },
+        "reasons": reasons,
+    }
+    return gate, arbiter
+
+
 def expert_escalation_reasons(current_subchain: dict[str, Any], depth: str, gate_vector: dict[str, Any]) -> list[str]:
     current_id = str(current_subchain.get("id"))
     critical = {"objective_gap", "evidence_integrity", "method_validity", "analysis_validity", "uncertainty_level", "failure_mode_risk"}
@@ -4733,6 +5400,9 @@ def deep_loop_continuation_contract(
     handoff: dict[str, Any],
     subchain_agent: dict[str, Any],
     gate_vector: dict[str, Any],
+    research_council: dict[str, Any] | None = None,
+    adversarial_gate: dict[str, Any] | None = None,
+    arbiter: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     decision = str(gate.get("decision"))
     target_ids = list(handoff.get("target_subchains") or [])
@@ -4742,6 +5412,9 @@ def deep_loop_continuation_contract(
         for key, value in gate_vector.items()
         if isinstance(value, dict) and value.get("level") == "high"
     ]
+    council = research_council or {}
+    adversarial = adversarial_gate or {}
+    arbiter_payload = arbiter or {}
     return {
         "decision": decision,
         "from_subchain": current_subchain.get("id"),
@@ -4754,6 +5427,22 @@ def deep_loop_continuation_contract(
         "harness_protocol": handoff.get("harness_protocol"),
         "gate_vector_summary": {key: value.get("level") for key, value in gate_vector.items() if isinstance(value, dict)},
         "blocking_dimensions": blocking_dimensions,
+        "council_findings": {
+            "council_id": council.get("council_id"),
+            "expert_ids": [expert.get("expert_id") for expert in council.get("experts") or []],
+            "route_recommendation": council.get("route_recommendation") or {},
+        },
+        "adversarial_findings": {
+            "review_id": adversarial.get("review_id"),
+            "premature_convergence_risk": adversarial.get("premature_convergence_risk"),
+            "fatal_objection_count": len(adversarial.get("fatal_objections") or []),
+            "killer_tests": list(adversarial.get("killer_tests") or []),
+        },
+        "arbiter_findings": {
+            "semantic_reason": arbiter_payload.get("semantic_reason"),
+            "decision_source": arbiter_payload.get("decision_source"),
+            "route_recommendation": arbiter_payload.get("route_recommendation") or {},
+        },
         "stop_conditions": [
             "pause_for_human only when owner-only authorization, credentials, restricted data, payment, or ethics approval is required",
             "escalate_problem_loop when high-risk gate-vector dimensions remain unresolved",
@@ -4849,7 +5538,7 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         next_subchains=next_subchains,
     )
     expert_reasons = expert_escalation_reasons(current, depth, gate_vector)
-    gate = deep_loop_gate_decision(
+    base_gate = deep_loop_gate_decision(
         gate_result=effective_gate_result,
         current_subchain=current,
         route_graph=graph,
@@ -4865,6 +5554,39 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         gate_vector=gate_vector,
         expert_reasons=expert_reasons,
     )
+    council = research_council_review(
+        cwd=cwd,
+        passport=passport,
+        route_graph=graph,
+        current_subchain=current,
+        next_subchains=next_subchains,
+        gate_vector=gate_vector,
+        result_summary=result_summary,
+        manual_issues=manual_issues,
+        harness_evidence=harness_evidence,
+        enabled=not bool(getattr(args, "skip_research_council", False)),
+    )
+    adversarial = adversarial_gate_review(
+        cwd=cwd,
+        route_graph=graph,
+        current_subchain=current,
+        gate_vector=gate_vector,
+        base_gate=base_gate,
+        result_summary=result_summary,
+        manual_issues=manual_issues,
+        artifacts=artifacts,
+        harness_evidence=harness_evidence,
+        enabled=not bool(getattr(args, "skip_adversarial_gate", False)),
+    )
+    gate, arbiter = arbiter_decision(
+        base_gate=base_gate,
+        current_subchain=current,
+        gate_vector=gate_vector,
+        council=council,
+        adversarial=adversarial,
+        manual_issues=manual_issues,
+        result_summary=result_summary,
+    )
     review = deep_loop_review_directive(cwd, graph, current, next_subchains, gate, result_summary, manual_issues, harness_evidence)
     handoff = deep_loop_handoff_package(graph, current, next_subchains, gate, review, artifacts)
     continuation = deep_loop_continuation_contract(
@@ -4873,6 +5595,9 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         handoff=handoff,
         subchain_agent=subchain_agent,
         gate_vector=gate_vector,
+        research_council=council,
+        adversarial_gate=adversarial,
+        arbiter=arbiter,
     )
     loop_id = args.loop_id or f"deep-{timestamp()}-{slug(str(current.get('id', 'subchain')))}"
     return {
@@ -4899,6 +5624,9 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         },
         "harness_evidence": harness_evidence,
         "gate_vector": gate_vector,
+        "research_council": council,
+        "adversarial_gate": adversarial,
+        "arbiter": arbiter,
         "gate": gate,
         "review_directive": review,
         "next_subchains": next_subchains if gate.get("decision") == "route_next" else [],
@@ -4972,6 +5700,45 @@ def deep_loop_markdown(payload: dict[str, Any]) -> list[str]:
         if isinstance(value, dict):
             signals = "; ".join(str(item) for item in value.get("signals") or [])
             lines.append(f"- `{key}`: {value.get('level')} - {signals}")
+    council = payload.get("research_council") if isinstance(payload.get("research_council"), dict) else {}
+    if council:
+        lines.extend(["", "## Research Council", ""])
+        lines.append(f"- Council id: `{council.get('council_id')}`")
+        lines.append(f"- Experts: {len(council.get('experts') or [])}")
+        council_rec = council.get("route_recommendation") if isinstance(council.get("route_recommendation"), dict) else {}
+        lines.append(f"- Recommendation: `{council_rec.get('action')}` reason=`{council_rec.get('semantic_reason')}`")
+        lines.append("- Target subchains: " + (", ".join(str(item) for item in council_rec.get("target_subchains") or []) or "(none)"))
+        for expert in (council.get("experts") or [])[:12]:
+            lines.append(f"- `{expert.get('expert_id')}` {expert.get('role')}: {expert.get('domain_scope')}")
+    adversarial = payload.get("adversarial_gate") if isinstance(payload.get("adversarial_gate"), dict) else {}
+    if adversarial:
+        lines.extend(["", "## Adversarial Gate", ""])
+        lines.append(f"- Review id: `{adversarial.get('review_id')}`")
+        lines.append(f"- Premature convergence risk: `{adversarial.get('premature_convergence_risk')}`")
+        fatal = adversarial.get("fatal_objections") or []
+        nonfatal = adversarial.get("nonfatal_objections") or []
+        lines.append(f"- Fatal objections: {len(fatal)}")
+        for item in fatal[:8]:
+            lines.append(f"  - {item}")
+        if nonfatal:
+            lines.append(f"- Nonfatal objections: {len(nonfatal)}")
+            for item in nonfatal[:8]:
+                lines.append(f"  - {item}")
+        if adversarial.get("missing_counterfactuals"):
+            lines.append("- Missing counterfactuals:")
+            lines.extend(f"  - {item}" for item in adversarial.get("missing_counterfactuals") or [])
+        if adversarial.get("killer_tests"):
+            lines.append("- Killer tests:")
+            lines.extend(f"  - {item}" for item in adversarial.get("killer_tests") or [])
+    arbiter = payload.get("arbiter") if isinstance(payload.get("arbiter"), dict) else {}
+    if arbiter:
+        lines.extend(["", "## Arbiter", ""])
+        lines.append(f"- Final decision: `{arbiter.get('decision')}`")
+        lines.append(f"- Base decision: `{arbiter.get('base_decision')}`")
+        lines.append(f"- Decision source: `{arbiter.get('decision_source')}`")
+        lines.append(f"- Semantic reason: `{arbiter.get('semantic_reason')}`")
+        arbiter_rec = arbiter.get("route_recommendation") if isinstance(arbiter.get("route_recommendation"), dict) else {}
+        lines.append("- Recommended targets: " + (", ".join(str(item) for item in arbiter_rec.get("target_subchains") or []) or "(none)"))
     lines.extend(["", "## Subchain Agent Contract", ""])
     lines.append(f"- Mission: {agent.get('mission')}")
     lines.append(f"- Planning mode: {agent.get('planning_mode')}")
@@ -5029,6 +5796,98 @@ def deep_loop_markdown(payload: dict[str, Any]) -> list[str]:
     return lines
 
 
+def research_council_markdown(council: dict[str, Any]) -> list[str]:
+    lines = [
+        "# Research Council Review",
+        "",
+        f"- Council id: `{council.get('council_id')}`",
+        f"- Created at UTC: {council.get('created_at')}",
+        f"- Project root: {council.get('project_root')}",
+        f"- Current subchain: `{council.get('current_subchain')}`",
+        "",
+        "## Route Recommendation",
+        "",
+    ]
+    rec = council.get("route_recommendation") if isinstance(council.get("route_recommendation"), dict) else {}
+    lines.append(f"- Action: `{rec.get('action')}`")
+    lines.append(f"- Semantic reason: `{rec.get('semantic_reason')}`")
+    lines.append("- Target subchains: " + (", ".join(str(item) for item in rec.get("target_subchains") or []) or "(none)"))
+    if rec.get("rationale"):
+        lines.append(f"- Rationale: {rec.get('rationale')}")
+    lines.extend(["", "## Experts", ""])
+    for expert in council.get("experts") or []:
+        lines.append(f"### {expert.get('expert_id')} - {expert.get('role')}")
+        lines.append("")
+        lines.append(f"- Source: {expert.get('source')}")
+        lines.append(f"- Domain scope: {expert.get('domain_scope')}")
+        lines.append("- Required reads: " + ", ".join(str(item) for item in expert.get("required_reads") or []))
+        lines.append("- Red flags: " + "; ".join(str(item) for item in expert.get("red_flags") or []))
+        lines.append("")
+    lines.extend(["## Synthesis Contract", ""])
+    synthesis = council.get("synthesis_contract") if isinstance(council.get("synthesis_contract"), dict) else {}
+    for key, value in synthesis.items():
+        if isinstance(value, list):
+            lines.append(f"- `{key}`: " + ", ".join(str(item) for item in value))
+        else:
+            lines.append(f"- `{key}`: {value}")
+    return lines
+
+
+def adversarial_gate_markdown(adversarial: dict[str, Any]) -> list[str]:
+    lines = [
+        "# Adversarial Gate Review",
+        "",
+        f"- Review id: `{adversarial.get('review_id')}`",
+        f"- Created at UTC: {adversarial.get('created_at')}",
+        f"- Project root: {adversarial.get('project_root')}",
+        f"- Current subchain: `{adversarial.get('current_subchain')}`",
+        f"- Premature convergence risk: `{adversarial.get('premature_convergence_risk')}`",
+        "",
+        "## Fatal Objections",
+        "",
+    ]
+    fatal = adversarial.get("fatal_objections") or []
+    lines.extend(f"- {item}" for item in fatal) if fatal else lines.append("- None.")
+    lines.extend(["", "## Nonfatal Objections", ""])
+    nonfatal = adversarial.get("nonfatal_objections") or []
+    lines.extend(f"- {item}" for item in nonfatal) if nonfatal else lines.append("- None.")
+    lines.extend(["", "## Missing Counterfactuals", ""])
+    counterfactuals = adversarial.get("missing_counterfactuals") or []
+    lines.extend(f"- {item}" for item in counterfactuals) if counterfactuals else lines.append("- None.")
+    lines.extend(["", "## Killer Tests", ""])
+    tests = adversarial.get("killer_tests") or []
+    lines.extend(f"- {item}" for item in tests) if tests else lines.append("- None.")
+    rec = adversarial.get("route_recommendation") if isinstance(adversarial.get("route_recommendation"), dict) else {}
+    lines.extend(["", "## Route Recommendation", ""])
+    lines.append(f"- Action: `{rec.get('action')}`")
+    lines.append(f"- Semantic reason: `{rec.get('semantic_reason')}`")
+    lines.append("- Target subchains: " + (", ".join(str(item) for item in rec.get("target_subchains") or []) or "(none)"))
+    return lines
+
+
+def persist_deep_loop_auxiliary_reviews(cwd: Path, payload: dict[str, Any]) -> None:
+    council = payload.get("research_council") if isinstance(payload.get("research_council"), dict) else {}
+    if council and council.get("enabled", True):
+        ensure_dir(research_councils_root(cwd))
+        paths = council.setdefault("paths", {})
+        json_path = Path(str(paths.get("json") or (research_councils_root(cwd) / f"{council.get('council_id')}.json")))
+        md_path = Path(str(paths.get("markdown") or (research_councils_root(cwd) / f"{council.get('council_id')}.md")))
+        write_json(json_path, council)
+        write_lines(md_path, research_council_markdown(council))
+        paths["json"] = psafe(json_path)
+        paths["markdown"] = psafe(md_path)
+    adversarial = payload.get("adversarial_gate") if isinstance(payload.get("adversarial_gate"), dict) else {}
+    if adversarial and adversarial.get("enabled", True):
+        ensure_dir(adversarial_gates_root(cwd))
+        paths = adversarial.setdefault("paths", {})
+        json_path = Path(str(paths.get("json") or (adversarial_gates_root(cwd) / f"{adversarial.get('review_id')}.json")))
+        md_path = Path(str(paths.get("markdown") or (adversarial_gates_root(cwd) / f"{adversarial.get('review_id')}.md")))
+        write_json(json_path, adversarial)
+        write_lines(md_path, adversarial_gate_markdown(adversarial))
+        paths["json"] = psafe(json_path)
+        paths["markdown"] = psafe(md_path)
+
+
 def persist_deep_loop_payload(
     cwd: Path,
     state: dict[str, Any],
@@ -5040,6 +5899,7 @@ def persist_deep_loop_payload(
     report_stem = f"{timestamp()}-{slug(payload['loop_id'], 'deep-loop')}"
     json_path = deep_loops_root(cwd) / f"{report_stem}.json"
     md_path = deep_loops_root(cwd) / f"{report_stem}.md"
+    persist_deep_loop_auxiliary_reviews(cwd, payload)
     write_json(json_path, payload)
     write_lines(md_path, deep_loop_markdown(payload))
     payload["report_json"] = psafe(json_path)
@@ -10161,6 +11021,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_deep_loop.add_argument("--harness-report", action="append", help="Structured JSON harness/test report to parse as gate evidence. Repeat for multiple reports.")
     p_deep_loop.add_argument("--round-index", type=int, help="Explicit round index for this subchain. Defaults from previous deep-loop records.")
     p_deep_loop.add_argument("--max-rounds", type=int, help="Maximum retry rounds for this subchain before escalation. Defaults from depth.")
+    p_deep_loop.add_argument("--skip-research-council", action="store_true", help="Disable the supplemental research-council review for this gate. Default is enabled.")
+    p_deep_loop.add_argument("--skip-adversarial-gate", action="store_true", help="Disable the supplemental adversarial gate review for this gate. Default is enabled.")
     p_deep_loop.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output deep-loop directive format.")
     p_deep_loop.add_argument("--write", action="store_true", help="Write the deep-loop directive under .research-loop/deep-loops and record a next action.")
     p_deep_loop.set_defaults(func=command_deep_loop)

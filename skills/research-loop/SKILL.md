@@ -166,6 +166,9 @@ The project-local directory is:
   promotions/
   reports/
   storage-reports/
+  experts/
+  experts/councils/
+  adversarial-gates/
 ```
 
 Read `material-passport.json`, `state.json`, and the latest handoff before
@@ -546,10 +549,27 @@ cases, and report paths into the gate. It emits one of four decisions:
 - `pause_for_human`: restricted data, credentials, authorization, terminal
   finalization, or other owner-only decisions require a human checkpoint.
 
+By default, `deep-loop` also runs a Research Council and an Adversarial Gate
+before finalizing the decision. The Research Council builds fixed and dynamic
+expert cards with `required_reads`, `diagnostic_frame`, `red_flags`, and
+`output_contract` fields, then produces independent review contracts,
+cross-critique requirements, and a synthesis contract. The Adversarial Gate
+attacks premature convergence by listing fatal objections, missing
+counterfactuals, and killer tests. The Arbiter merges the hard gate, council,
+and adversarial findings back into the same four control decisions above, with
+a semantic reason such as `evidence_gap_route`, `method_gap_route`,
+`analysis_gap_route`, `expand_hypothesis_portfolio`, `delivery_gap_route`, or
+`systemic_blocker`.
+
 Reports are written under `.research-loop/deep-loops/`. With `--write`, the
 command records a `deep_loop_gate` decision, a `deep_loop_report` artifact, and
-a next action containing the generated review/handoff prompt. The command is a
-dispatcher: it does not directly mutate core research files.
+a next action containing the generated review/handoff prompt. Supplemental
+Research Council reports are written under `.research-loop/experts/councils/`;
+Adversarial Gate reports are written under `.research-loop/adversarial-gates/`.
+The command is a dispatcher: it does not directly mutate core research files.
+
+Use `--skip-research-council` or `--skip-adversarial-gate` only for debugging
+legacy gate behavior. Unattended runs should keep both layers enabled.
 
 ## Multi-Path Subchains
 
@@ -581,8 +601,9 @@ before continuing unattended.
 
 Every deep-loop report also includes a `continuation_contract` with the next
 target subchains, next Head Agent, required reads, artifact refs, blocking
-dimensions, and unattended safety flags. Auto-loop consumes this contract when
-starting the next subchain.
+dimensions, council findings, adversarial findings, arbiter findings, and
+unattended safety flags. Auto-loop consumes this contract when starting the next
+subchain.
 
 The generated next-work prompt embeds the target Head Agent contract directly.
 When auto-loop starts Codex CLI or a custom route executor, that executor should
@@ -602,7 +623,8 @@ Run `capabilities` when a task asks which tools are already available or what
 needs to be added. The matrix separates available skills/apps from missing tool
 gaps. Built-in local tools now include `prompt-normalizer`,
 `storage-policy`, `research-source-hub`, `content-ingest`, `zotero-bridge`,
-`claim-evidence-verifier`, `deep-loop-router`, `problem-loop`, and
+`claim-evidence-verifier`, `deep-loop-router`,
+`research-council-reviewer`, `adversarial-gate-reviewer`, `problem-loop`, and
 `auto-loop-runner` with `auto-loop-watchdog`. Current missing tool gaps are
 advisory until implemented:
 

@@ -136,6 +136,13 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("If using reproducible cases", payload["downstream_prompt"])
         self.assertTrue(any("inspect generated artifacts or logs directly" in item for item in payload["harness_protocol"]["guardrails"]))
 
+    def test_capability_matrix_exposes_council_and_adversarial_gate(self):
+        payload = research_loop.capability_matrix_payload()
+        available_ids = {item["id"] for item in payload["available_capabilities"]}
+
+        self.assertIn("tool:research-council-reviewer", available_ids)
+        self.assertIn("tool:adversarial-gate-reviewer", available_ids)
+
     def test_route_adds_research_experiment_harness_protocol(self):
         with tempfile.TemporaryDirectory() as tmp:
             cwd = Path(tmp)
@@ -271,6 +278,101 @@ class DeepLoopSubagentTests(unittest.TestCase):
             self.assertTrue(spec["entry_read"])
             self.assertTrue(spec["quality_vector"])
             self.assertTrue(spec["handoff_contract"])
+
+    def test_deep_loop_builds_research_council_with_rich_expert_cards(self):
+        payload = research_loop.build_deep_loop_payload(
+            deep_args(
+                intent="assess whether the proposed astronomy claim is novel and supported",
+                current_subchain="P3",
+                next_subchain=["P7"],
+                gate_result="auto",
+                gate_issue=["novelty is unclear", "one core claim is unsupported by source evidence"],
+                result_summary="A preliminary claim map exists, but counterevidence is not resolved.",
+            ),
+            ROOT,
+            minimal_state("SYNTHESIS"),
+            minimal_passport(),
+        )
+
+        council = payload["research_council"]
+        self.assertGreaterEqual(len(council["experts"]), 6)
+        expert_ids = {expert["expert_id"] for expert in council["experts"]}
+        self.assertIn("domain_pi", expert_ids)
+        self.assertIn("skeptical_reviewer", expert_ids)
+        self.assertIn("novelty_assessor", expert_ids)
+        for expert in council["experts"]:
+            self.assertTrue(expert["role"])
+            self.assertTrue(expert["domain_scope"])
+            self.assertTrue(expert["required_reads"])
+            self.assertTrue(expert["diagnostic_frame"])
+            self.assertTrue(expert["red_flags"])
+            self.assertTrue(expert["output_contract"])
+        self.assertTrue(council["independent_review_contracts"])
+        self.assertTrue(council["cross_critique_contract"])
+        self.assertTrue(council["synthesis_contract"])
+
+    def test_adversarial_gate_flags_premature_convergence_for_late_review(self):
+        payload = research_loop.build_deep_loop_payload(
+            deep_args(
+                intent="finalize a research report after review",
+                current_subchain="P8",
+                next_subchain=["P9"],
+                gate_result="pass",
+                result_summary="Review looks acceptable.",
+                artifact=[],
+            ),
+            ROOT,
+            minimal_state("REVIEW"),
+            minimal_passport(),
+        )
+
+        adversarial = payload["adversarial_gate"]
+        self.assertIn(adversarial["premature_convergence_risk"], {"medium", "high"})
+        self.assertTrue(adversarial["killer_tests"])
+        self.assertTrue(adversarial["missing_counterfactuals"])
+
+    def test_arbiter_marks_unsupported_evidence_as_evidence_gap_route(self):
+        payload = research_loop.build_deep_loop_payload(
+            deep_args(
+                intent="prepare the report draft for review",
+                current_subchain="P7",
+                next_subchain=["P8"],
+                gate_result="pass",
+                gate_issue=["unsupported claim remains", "missing source locator for a key citation"],
+                result_summary="Draft is formatted, but citation support is incomplete.",
+                artifact=["reports/draft.md"],
+            ),
+            ROOT,
+            minimal_state("WRITING"),
+            minimal_passport(),
+        )
+
+        arbiter = payload["arbiter"]
+        self.assertEqual(arbiter["semantic_reason"], "evidence_gap_route")
+        self.assertIn(payload["gate"]["decision"], {"retry_same_route", "escalate_problem_loop"})
+        self.assertTrue({"P2", "P10"} & set(arbiter["route_recommendation"]["target_subchains"]))
+        self.assertIn("evidence_gap_route", payload["continuation_contract"]["arbiter_findings"]["semantic_reason"])
+
+    def test_deep_loop_markdown_includes_council_adversarial_and_arbiter_sections(self):
+        payload = research_loop.build_deep_loop_payload(
+            deep_args(
+                intent="review a thin claim synthesis",
+                current_subchain="P3",
+                next_subchain=["P7"],
+                gate_result="pass",
+                gate_issue=["alternative explanations are missing"],
+                result_summary="Claims were drafted without a counterargument matrix.",
+            ),
+            ROOT,
+            minimal_state("SYNTHESIS"),
+            minimal_passport(),
+        )
+
+        markdown = "\n".join(research_loop.deep_loop_markdown(payload))
+        self.assertIn("## Research Council", markdown)
+        self.assertIn("## Adversarial Gate", markdown)
+        self.assertIn("## Arbiter", markdown)
+        self.assertIn("skeptical_reviewer", markdown)
 
     def test_p6_pass_without_analysis_artifact_escalates_to_problem_loop(self):
         payload = research_loop.build_deep_loop_payload(
@@ -430,6 +532,21 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertEqual(len(report_positions), 2)
         self.assertEqual(command[report_positions[0] + 1], "reports\\summary.json")
         self.assertEqual(command[report_positions[1] + 1], "reports\\cases.json")
+
+    def test_mcp_deep_loop_maps_council_and_adversarial_skip_flags(self):
+        command = mcp_server.tool_to_cli(
+            "research_loop_deep_loop",
+            {
+                "cwd": "D:\\Project",
+                "intent": "debug legacy gate behavior",
+                "current_subchain": "P3",
+                "skip_research_council": True,
+                "skip_adversarial_gate": True,
+            },
+        )
+
+        self.assertIn("--skip-research-council", command)
+        self.assertIn("--skip-adversarial-gate", command)
 
     def test_mcp_auto_loop_legacy_mode_keeps_bare_auto_loop(self):
         command = mcp_server.tool_to_cli(

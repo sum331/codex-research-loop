@@ -84,6 +84,8 @@ TOOLS: list[dict[str, Any]] = [
                 "harness_reports": {"type": "array", "items": {"type": "string"}, "description": "Structured JSON harness/test reports to parse as gate evidence."},
                 "round_index": {"type": "integer", "description": "Explicit round index for this subchain."},
                 "max_rounds": {"type": "integer", "description": "Maximum retry rounds before escalation."},
+                "skip_research_council": {"type": "boolean", "description": "Disable supplemental research-council review for this gate. Default is enabled."},
+                "skip_adversarial_gate": {"type": "boolean", "description": "Disable supplemental adversarial gate review for this gate. Default is enabled."},
                 "format": {"type": "string", "description": "markdown or json."},
                 "write": {"type": "boolean", "description": "Write the directive and record a next action."},
             },
@@ -663,6 +665,10 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
             add_option(command, "--harness-report", report)
         add_option(command, "--round-index", args.get("round_index"))
         add_option(command, "--max-rounds", args.get("max_rounds"))
+        if as_bool(args.get("skip_research_council")):
+            command.append("--skip-research-council")
+        if as_bool(args.get("skip_adversarial_gate")):
+            command.append("--skip-adversarial-gate")
         add_option(command, "--format", args.get("format"))
         if as_bool(args.get("write")):
             command.append("--write")
