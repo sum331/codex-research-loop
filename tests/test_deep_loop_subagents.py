@@ -119,6 +119,28 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("documents@openai-primary-runtime", [item["id"] for item in channels["runtime_plugins"]])
         self.assertTrue(channels["auto_install"]["fail_open"])
 
+    def test_prompt_router_dispatches_research_loop_requests(self):
+        portable = ROOT / "portable"
+        dispatch_path = portable / "dispatch" / "codex_capability_dispatch_inventory_20260702.md"
+        router_path = portable / "plugins" / "prompt-submit-skill-router" / "scripts" / "user_prompt_submit_router.py"
+        registry = dispatch_path.read_text(encoding="utf-8")
+        self.assertIn("skill:research-loop", registry)
+        self.assertIn("capability-registry-id: skill:research-loop", registry)
+
+        env = os.environ.copy()
+        env["CODEX_CAPABILITY_REGISTRY"] = str(dispatch_path)
+        result = subprocess.run(
+            [sys.executable, str(router_path)],
+            input=json.dumps({"prompt": "继续完善 research loop deep-loop 专家委员会和对抗 gate"}),
+            text=True,
+            capture_output=True,
+            encoding="utf-8",
+            env=env,
+            check=True,
+        )
+
+        self.assertIn("skill:research-loop", result.stdout)
+
     def test_normalize_adds_standard_harness_protocol(self):
         with tempfile.TemporaryDirectory() as tmp:
             cwd = Path(tmp)

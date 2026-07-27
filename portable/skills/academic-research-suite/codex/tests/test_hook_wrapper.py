@@ -34,7 +34,7 @@ def test_announce_reports_canonical_aliases_without_slashes() -> None:
 
 
 def test_cli_announce_does_not_echo_environment_values(monkeypatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-should-not-appear")
+    monkeypatch.setenv("OPENAI_API_KEY", "OPENAI_API_KEY_TEST_SENTINEL")
 
     result = subprocess.run(
         [sys.executable, str(HOOK_PATH), "announce"],
@@ -43,6 +43,6 @@ def test_cli_announce_does_not_echo_environment_values(monkeypatch) -> None:
         text=True,
     )
 
-    assert "sk-test-should-not-appear" not in result.stdout
+    assert "OPENAI_API_KEY_TEST_SENTINEL" not in result.stdout
     payload = json.loads(result.stdout)
     assert payload["hooks"] == "opt-in with ARS_CODEX_HOOKS=1"
