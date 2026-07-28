@@ -289,6 +289,118 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertEqual(mechanism[:3], ["--cwd", "C:\\project", "mechanism"])
         self.assertIn("--negative-result", mechanism)
 
+    def test_deep_loop_reads_pending_ophi_effect_gate_before_route_next(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    str(cwd),
+                    "ophi-cycle",
+                    "--observation",
+                    "Analysis artifacts look complete but variance has not been validated.",
+                    "--problem",
+                    "The analysis gate may still be prematurely promoting unstable results.",
+                    "--hypothesis",
+                    "A pending variance mechanism must be validated before writing promotion.",
+                    "--intervention",
+                    "Replay the variance harness before P7 handoff.",
+                    "--expected-effect",
+                    "Unstable reports remain in P6 instead of moving to P7.",
+                    "--validation",
+                    "Run the variance harness on two held-out reports.",
+                    "--stage",
+                    "ANALYSIS",
+                    "--subchain",
+                    "P6",
+                    "--write",
+                    "--format",
+                    "json",
+                ],
+                text=True,
+                capture_output=True,
+                encoding="utf-8",
+                check=True,
+            )
+            cycle = json.loads(proc.stdout)
+            state = research_loop.load_state(cwd)
+            passport = research_loop.load_passport(cwd, state)
+
+            payload = research_loop.build_deep_loop_payload(
+                deep_args(
+                    intent="promote analysis results into writing",
+                    current_subchain="P6",
+                    next_subchain=["P7"],
+                    gate_result="pass",
+                    result_summary="Analysis artifact was generated and appears ready.",
+                    artifact=["outputs/figures/main.png"],
+                ),
+                cwd,
+                state,
+                passport,
+            )
+
+        context = payload["mechanistic_context"]
+        self.assertEqual(context["pending_effect_gates"][0]["id"], cycle["effect_gate"]["id"])
+        self.assertEqual(payload["gate"]["decision"], "retry_same_route")
+        self.assertEqual(payload["arbiter"]["semantic_reason"], "mechanism_validation_pending")
+        self.assertIn("pending effect gate", "; ".join(payload["gate_vector"]["uncertainty_level"]["signals"]).lower())
+        self.assertIn("effect-gate-ledger", "\n".join(payload["continuation_contract"]["required_reads"]))
+
+    def test_deep_loop_reuses_supported_mechanism_in_next_prompt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    str(cwd),
+                    "mechanism",
+                    "--mechanism",
+                    "Variance harnesses should run before P7 promotion.",
+                    "--status",
+                    "supported",
+                    "--scope",
+                    "P6 to P7 analysis handoff",
+                    "--subchain",
+                    "P6",
+                    "--write",
+                    "--format",
+                    "json",
+                ],
+                text=True,
+                capture_output=True,
+                encoding="utf-8",
+                check=True,
+            )
+            state = research_loop.load_state(cwd)
+            passport = research_loop.load_passport(cwd, state)
+
+            payload = research_loop.build_deep_loop_payload(
+                deep_args(
+                    intent="promote stable analysis into writing",
+                    current_subchain="P6",
+                    next_subchain=["P7"],
+                    gate_result="pass",
+                    result_summary="Variance harness passed and final figure exists.",
+                    artifact=["outputs/figures/main.png"],
+                ),
+                cwd,
+                state,
+                passport,
+            )
+
+        self.assertEqual(payload["gate"]["decision"], "route_next")
+        self.assertTrue(payload["mechanistic_context"]["supported_mechanisms"])
+        prompt = payload["continuation_contract"]["next_work_prompt"]
+        self.assertIn("Variance harnesses should run before P7 promotion", prompt)
+        self.assertIn("mechanism-library", "\n".join(payload["continuation_contract"]["required_reads"]))
+        expert_ids = {expert["expert_id"] for expert in payload["research_council"]["experts"]}
+        self.assertIn("mechanism_memory_auditor", expert_ids)
+
     def test_route_adds_research_experiment_harness_protocol(self):
         with tempfile.TemporaryDirectory() as tmp:
             cwd = Path(tmp)

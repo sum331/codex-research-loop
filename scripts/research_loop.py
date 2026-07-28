@@ -4455,15 +4455,23 @@ def build_gate_vector(
     result_summary: str | None,
     artifacts: list[str],
     next_subchains: list[dict[str, Any]],
+    mechanistic_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     current_id = str(current_subchain.get("id"))
     task_type = str(route_graph.get("task_type") or "")
     blockers = [item for item in route_graph.get("blockers") or [] if isinstance(item, dict)]
     warnings = [item for item in route_graph.get("warnings") or [] if isinstance(item, dict)]
+    mechanism_context = mechanistic_context or {}
+    mechanism_signals = [str(item) for item in mechanism_context.get("signals") or []]
+    pending_effect_gates = list(mechanism_context.get("pending_effect_gates") or [])
+    rejected_mechanisms = list(mechanism_context.get("rejected_mechanisms") or [])
+    negative_results = list(mechanism_context.get("negative_results") or [])
+    candidate_mechanisms = list(mechanism_context.get("candidate_mechanisms") or [])
     issue_text = "\n".join(
         manual_issues
         + [str(item.get("text") or "") for item in blockers]
         + [str(item.get("text") or "") for item in warnings]
+        + mechanism_signals
         + [result_summary or ""]
     ).lower()
     summary_missing = not (result_summary or "").strip()
@@ -4527,6 +4535,10 @@ def build_gate_vector(
         uncertainty_signals.append("Uncertainty, assumption, conflict, or limitation signal appears in gate text.")
     if depth in {"L5", "L6"} and summary_missing:
         uncertainty_signals.append("Deep task has no result summary for this round.")
+    if pending_effect_gates:
+        uncertainty_signals.append("OPHIS pending effect gate requires validation before route transition.")
+    if candidate_mechanisms:
+        uncertainty_signals.append("Candidate mechanism memory still needs validation or scoping.")
     uncertainty_level = "high" if uncertainty_signals and (summary_missing or gate_result in {"fail", "block"}) else ("medium" if uncertainty_signals else "low")
 
     failure_signals: list[str] = []
@@ -4536,6 +4548,10 @@ def build_gate_vector(
         failure_signals.append(f"Gate result is {gate_result}.")
     if warnings:
         failure_signals.append(f"{len(warnings)} route warning(s) are present.")
+    if pending_effect_gates:
+        failure_signals.append("OPHIS pending effect gate has not yet been validated.")
+    if rejected_mechanisms or negative_results:
+        failure_signals.append("Rejected or negative mechanism memory warns against repeating a failed intervention.")
     failure_level = "high" if gate_result in {"fail", "block"} else ("medium" if failure_signals else "low")
 
     handoff_signals: list[str] = []
@@ -4791,6 +4807,145 @@ def combined_signal_text(*parts: Any) -> str:
     return "\n".join(chunks).lower()
 
 
+def recent_jsonl_records(path: Path, limit: int = 8) -> list[dict[str, Any]]:
+    records = read_jsonl(path)
+    if limit <= 0:
+        return records
+    return records[-limit:]
+
+
+def record_matches_subchain(record: dict[str, Any], subchain_id: str, stage: str | None = None) -> bool:
+    fields = [
+        record.get("subchain"),
+        record.get("owner_subchain"),
+        record.get("scope"),
+        record.get("stage"),
+    ]
+    text = " ".join(str(value) for value in fields if value is not None).lower()
+    if not text:
+        return True
+    if subchain_id.lower() in text:
+        return True
+    if stage and str(stage).lower() in text:
+        return True
+    return False
+
+
+def slim_mechanistic_record(record: dict[str, Any], limit: int = 360) -> dict[str, Any]:
+    keep = [
+        "id",
+        "type",
+        "timestamp",
+        "kind",
+        "stage",
+        "subchain",
+        "owner_subchain",
+        "status",
+        "text",
+        "summary",
+        "mechanism",
+        "plan",
+        "expected_effect",
+        "validation",
+        "scope",
+        "negative_result",
+        "hypothesis_id",
+        "intervention_id",
+        "mechanism_id",
+    ]
+    item = {key: record.get(key) for key in keep if key in record and record.get(key) is not None}
+    for key in ["text", "summary", "mechanism", "plan", "expected_effect", "validation", "scope"]:
+        if key in item and isinstance(item[key], str) and len(item[key]) > limit:
+            item[key] = item[key][:limit] + "... truncated ..."
+    return item
+
+
+def build_mechanistic_context(cwd: Path, current_subchain: dict[str, Any], state: dict[str, Any], limit: int = 8) -> dict[str, Any]:
+    subchain_id = str(current_subchain.get("id") or "")
+    stage = str(state.get("current_stage") or "")
+    observations = recent_jsonl_records(observation_ledger_path(cwd), limit)
+    phenomena = recent_jsonl_records(phenomenon_ledger_path(cwd), limit)
+    hypotheses = recent_jsonl_records(hypothesis_ledger_path(cwd), limit)
+    interventions = recent_jsonl_records(intervention_ledger_path(cwd), limit * 2)
+    effect_gates = recent_jsonl_records(effect_gate_ledger_path(cwd), limit * 2)
+    mechanisms = recent_jsonl_records(mechanism_library_path(cwd), limit * 2)
+    negative_results = recent_jsonl_records(negative_results_path(cwd), limit)
+
+    interventions_by_id = {str(item.get("id")): item for item in interventions if item.get("id")}
+    mechanisms_by_id = {str(item.get("id")): item for item in mechanisms if item.get("id")}
+
+    relevant_observations = [item for item in observations if record_matches_subchain(item, subchain_id, stage)]
+    relevant_phenomena = [item for item in phenomena if record_matches_subchain(item, subchain_id, stage)]
+    relevant_hypotheses = [item for item in hypotheses if record_matches_subchain(item, subchain_id, stage)]
+    relevant_interventions = [item for item in interventions if record_matches_subchain(item, subchain_id, stage)]
+    relevant_mechanisms = [item for item in mechanisms if record_matches_subchain(item, subchain_id, stage)]
+    relevant_negative_results = [item for item in negative_results if record_matches_subchain(item, subchain_id, stage)]
+
+    relevant_effect_gates: list[dict[str, Any]] = []
+    for gate in effect_gates:
+        related_intervention = interventions_by_id.get(str(gate.get("intervention_id")))
+        related_mechanism = mechanisms_by_id.get(str(gate.get("mechanism_id")))
+        merged = dict(gate)
+        if related_intervention:
+            merged["related_intervention"] = slim_mechanistic_record(related_intervention)
+        if related_mechanism:
+            merged["related_mechanism"] = slim_mechanistic_record(related_mechanism)
+        if record_matches_subchain(merged, subchain_id, stage) or (related_intervention and record_matches_subchain(related_intervention, subchain_id, stage)) or (related_mechanism and record_matches_subchain(related_mechanism, subchain_id, stage)):
+            relevant_effect_gates.append(merged)
+
+    pending_effect_gates = [item for item in relevant_effect_gates if str(item.get("status") or "").lower() in {"pending_validation", "pending", "open", ""}]
+    supported_mechanisms = [item for item in relevant_mechanisms if str(item.get("status") or "").lower() == "supported"]
+    rejected_mechanisms = [item for item in relevant_mechanisms if str(item.get("status") or "").lower() in {"rejected", "needs_replication"}]
+    candidate_mechanisms = [item for item in relevant_mechanisms if str(item.get("status") or "").lower() == "candidate"]
+    signals: list[str] = []
+    if pending_effect_gates:
+        signals.append(f"{len(pending_effect_gates)} OPHIS pending effect gate(s) require validation before route transition.")
+    if supported_mechanisms:
+        signals.append(f"{len(supported_mechanisms)} supported mechanism(s) can guide the next subchain.")
+    if rejected_mechanisms or relevant_negative_results:
+        signals.append(f"{len(rejected_mechanisms) + len(relevant_negative_results)} rejected or negative mechanism record(s) warn against repeating failed interventions.")
+    if candidate_mechanisms:
+        signals.append(f"{len(candidate_mechanisms)} candidate mechanism(s) need validation or scoping.")
+
+    required_reads = [
+        ".research-loop/observations/observation-ledger.jsonl",
+        ".research-loop/phenomena/phenomenon-ledger.jsonl",
+        ".research-loop/hypotheses/hypothesis-ledger.jsonl",
+        ".research-loop/interventions/intervention-ledger.jsonl",
+        ".research-loop/effect-gates/effect-gate-ledger.jsonl",
+        ".research-loop/mechanisms/mechanism-library.jsonl",
+        ".research-loop/mechanisms/negative-results.jsonl",
+    ]
+    return {
+        "enabled": True,
+        "subchain": subchain_id,
+        "stage": stage,
+        "summary": {
+            "observations": len(relevant_observations),
+            "phenomena": len(relevant_phenomena),
+            "hypotheses": len(relevant_hypotheses),
+            "interventions": len(relevant_interventions),
+            "effect_gates": len(relevant_effect_gates),
+            "pending_effect_gates": len(pending_effect_gates),
+            "candidate_mechanisms": len(candidate_mechanisms),
+            "supported_mechanisms": len(supported_mechanisms),
+            "rejected_mechanisms": len(rejected_mechanisms),
+            "negative_results": len(relevant_negative_results),
+        },
+        "signals": signals,
+        "observations": [slim_mechanistic_record(item) for item in relevant_observations[-limit:]],
+        "phenomena": [slim_mechanistic_record(item) for item in relevant_phenomena[-limit:]],
+        "hypotheses": [slim_mechanistic_record(item) for item in relevant_hypotheses[-limit:]],
+        "interventions": [slim_mechanistic_record(item) for item in relevant_interventions[-limit:]],
+        "pending_effect_gates": [slim_mechanistic_record(item) for item in pending_effect_gates[-limit:]],
+        "candidate_mechanisms": [slim_mechanistic_record(item) for item in candidate_mechanisms[-limit:]],
+        "supported_mechanisms": [slim_mechanistic_record(item) for item in supported_mechanisms[-limit:]],
+        "rejected_mechanisms": [slim_mechanistic_record(item) for item in rejected_mechanisms[-limit:]],
+        "negative_results": [slim_mechanistic_record(item) for item in relevant_negative_results[-limit:]],
+        "required_reads": required_reads,
+    }
+
+
 def research_council_id(current_subchain: dict[str, Any], gate_vector: dict[str, Any], result_summary: str | None, manual_issues: list[str]) -> str:
     seed = json.dumps(
         {
@@ -4822,8 +4977,10 @@ def dynamic_research_experts(
     manual_issues: list[str],
     result_summary: str | None,
     harness_evidence: dict[str, Any] | None,
+    mechanistic_context: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    text = combined_signal_text(manual_issues, result_summary, harness_evidence or {}, gate_vector)
+    mechanism_context = mechanistic_context or {}
+    text = combined_signal_text(manual_issues, result_summary, harness_evidence or {}, gate_vector, mechanism_context)
     experts: list[dict[str, Any]] = []
     seen: set[str] = set()
     for dimension, spec in DIMENSION_EXPERT_SPECS.items():
@@ -4855,6 +5012,42 @@ def dynamic_research_experts(
         }
         if spec["expert_id"] not in seen:
             experts.append(expert_card_from_spec(spec, project_domain=project_domain, current_subchain=current_subchain, gate_vector=gate_vector, source="dynamic:runtime-signal"))
+    if (
+        mechanism_context.get("signals")
+        or mechanism_context.get("pending_effect_gates")
+        or mechanism_context.get("supported_mechanisms")
+        or mechanism_context.get("candidate_mechanisms")
+        or mechanism_context.get("rejected_mechanisms")
+        or mechanism_context.get("negative_results")
+    ):
+        spec = {
+            "expert_id": "mechanism_memory_auditor",
+            "role": "Mechanism Memory Auditor",
+            "domain_scope": "OPHIS mechanism ledgers, pending effect gates, supported reuse patterns, and negative-result avoidance.",
+            "required_reads": [
+                ".research-loop/effect-gates/effect-gate-ledger.jsonl",
+                ".research-loop/mechanisms/mechanism-library.jsonl",
+                ".research-loop/mechanisms/negative-results.jsonl",
+            ],
+            "diagnostic_frame": [
+                "Check whether every pending effect gate is validated before a route transition.",
+                "Decide which supported mechanisms should be reused by the target subchain.",
+                "Use rejected mechanisms and negative results to prevent repeated failed interventions.",
+            ],
+            "red_flags": [
+                "A pending OPHIS effect gate is ignored by a passing hard gate.",
+                "Supported mechanism memory is available but absent from the next-work prompt.",
+                "A rejected intervention is repeated without a new falsifier or validation condition.",
+            ],
+            "output_contract": {
+                "pending_gate_status": "Validated, still pending, or rejected.",
+                "reuse_guidance": "Mechanisms safe to reuse and their scope.",
+                "negative_memory_warning": "Rejected patterns that must not be repeated.",
+                "route": "retry_same_route, route_next, or P10.",
+            },
+        }
+        if spec["expert_id"] not in seen:
+            experts.append(expert_card_from_spec(spec, project_domain=project_domain, current_subchain=current_subchain, gate_vector=gate_vector, source="dynamic:mechanism-memory"))
     return experts
 
 
@@ -4865,14 +5058,23 @@ def research_council_route_recommendation(
     gate_vector: dict[str, Any],
     manual_issues: list[str],
     result_summary: str | None,
+    mechanistic_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     current_id = str(current_subchain.get("id"))
-    text = combined_signal_text(manual_issues, result_summary, gate_vector)
+    mechanism_context = mechanistic_context or {}
+    text = combined_signal_text(manual_issues, result_summary, gate_vector, mechanism_context)
     target_ids = [str(item.get("id")) for item in next_subchains]
     reason = "delivery_gap_route"
     action = "route_next" if target_ids else "pause_for_human"
     if gate_level(gate_vector, "human_blocker") == "high":
         return {"action": "pause_for_human", "semantic_reason": "systemic_blocker", "target_subchains": [], "rationale": "Human authority or restricted material is required."}
+    if mechanism_context.get("pending_effect_gates"):
+        return {
+            "action": "retry_same_route",
+            "semantic_reason": "mechanism_validation_pending",
+            "target_subchains": [current_id],
+            "rationale": "Pending OPHIS effect gates must be validated before this subchain can hand off.",
+        }
     if gate_level(gate_vector, "evidence_integrity") == "high" or any(token in text for token in ["unsupported", "citation", "locator", "source"]):
         reason = "evidence_gap_route"
         target_ids = ["P2", "P10"] if current_id not in {"P2", "P10"} else [current_id]
@@ -4912,6 +5114,7 @@ def research_council_review(
     result_summary: str | None,
     manual_issues: list[str],
     harness_evidence: dict[str, Any] | None,
+    mechanistic_context: dict[str, Any] | None = None,
     enabled: bool = True,
 ) -> dict[str, Any]:
     council_id = research_council_id(current_subchain, gate_vector, result_summary, manual_issues)
@@ -4935,6 +5138,7 @@ def research_council_review(
         manual_issues=manual_issues,
         result_summary=result_summary,
         harness_evidence=harness_evidence,
+        mechanistic_context=mechanistic_context,
     ):
         if str(expert.get("expert_id")) not in existing_ids:
             experts.append(expert)
@@ -4958,6 +5162,7 @@ def research_council_review(
         gate_vector=gate_vector,
         manual_issues=manual_issues,
         result_summary=result_summary,
+        mechanistic_context=mechanistic_context,
     )
     return {
         "enabled": True,
@@ -4967,6 +5172,8 @@ def research_council_review(
         "current_subchain": current_subchain.get("id"),
         "route_task_type": route_graph.get("task_type"),
         "gate_vector_summary": gate_vector_levels(gate_vector),
+        "mechanistic_context_summary": (mechanistic_context or {}).get("summary") or {},
+        "mechanistic_signals": list((mechanistic_context or {}).get("signals") or []),
         "experts": experts,
         "independent_review_contracts": independent_contracts,
         "cross_critique_contract": {
@@ -4990,9 +5197,17 @@ def research_council_review(
     }
 
 
-def adversarial_killer_tests(gate_vector: dict[str, Any], current_subchain: dict[str, Any], manual_issues: list[str]) -> list[str]:
+def adversarial_killer_tests(
+    gate_vector: dict[str, Any],
+    current_subchain: dict[str, Any],
+    manual_issues: list[str],
+    mechanistic_context: dict[str, Any] | None = None,
+) -> list[str]:
     current_id = str(current_subchain.get("id"))
+    mechanism_context = mechanistic_context or {}
     tests: list[str] = []
+    if mechanism_context.get("pending_effect_gates"):
+        tests.append("Validate each pending OPHIS effect gate and record the outcome before any route transition.")
     if risk_rank(gate_level(gate_vector, "evidence_integrity")) >= 1:
         tests.append("Run claim-evidence verification and inspect every unsupported or partial claim before advancing.")
     if risk_rank(gate_level(gate_vector, "artifact_readiness")) >= 1:
@@ -5019,9 +5234,11 @@ def adversarial_gate_review(
     manual_issues: list[str],
     artifacts: list[str],
     harness_evidence: dict[str, Any] | None,
+    mechanistic_context: dict[str, Any] | None = None,
     enabled: bool = True,
 ) -> dict[str, Any]:
     current_id = str(current_subchain.get("id"))
+    mechanism_context = mechanistic_context or {}
     gate_result = str(base_gate.get("decision") or "")
     review_id_seed = json.dumps(
         {
@@ -5044,7 +5261,7 @@ def adversarial_gate_review(
             "nonfatal_objections": [],
             "route_recommendation": {"action": "defer_to_gate", "semantic_reason": "disabled", "target_subchains": []},
         }
-    text = combined_signal_text(result_summary, manual_issues, harness_evidence or {}, gate_vector)
+    text = combined_signal_text(result_summary, manual_issues, harness_evidence or {}, gate_vector, mechanism_context)
     fatal: list[str] = []
     nonfatal: list[str] = []
     missing_counterfactuals: list[str] = []
@@ -5052,6 +5269,12 @@ def adversarial_gate_review(
     late_stage = current_id in {"P6", "P7", "P8", "P9"}
     if gate_level(gate_vector, "human_blocker") == "high":
         fatal.append("Human authority, restricted data, credential, or compliance signal blocks unattended continuation.")
+    if mechanism_context.get("pending_effect_gates"):
+        message = "Pending OPHIS effect gate has not been validated."
+        if gate_result == "route_next":
+            fatal.append(message)
+        else:
+            nonfatal.append(message)
     if gate_level(gate_vector, "evidence_integrity") == "high":
         fatal.append("Evidence integrity is high risk; a pass decision would optimize downstream work around unsupported claims.")
     if gate_level(gate_vector, "artifact_readiness") == "high" and late_stage:
@@ -5070,7 +5293,7 @@ def adversarial_gate_review(
         missing_counterfactuals.append("At least one rival interpretation should be tested by the claim/review chain.")
     if not artifacts and late_stage:
         missing_counterfactuals.append("The loop needs an artifact readback countercheck against the claimed stage output.")
-    killer_tests = adversarial_killer_tests(gate_vector, current_subchain, manual_issues)
+    killer_tests = adversarial_killer_tests(gate_vector, current_subchain, manual_issues, mechanism_context)
     risk = "low"
     if fatal:
         risk = "high"
@@ -5084,6 +5307,7 @@ def adversarial_gate_review(
         gate_vector=gate_vector,
         manual_issues=manual_issues,
         result_summary=result_summary,
+        mechanistic_context=mechanism_context,
     )
     if risk == "high" and route_recommendation.get("action") == "route_next":
         route_recommendation = {"action": "retry_same_route", "semantic_reason": "reframe_problem", "target_subchains": [current_id], "rationale": "Adversarial review found high premature-convergence risk."}
@@ -5110,11 +5334,20 @@ def adversarial_gate_review(
     }
 
 
-def arbiter_semantic_reason(gate_vector: dict[str, Any], manual_issues: list[str], result_summary: str | None, current_subchain: dict[str, Any]) -> str:
-    text = combined_signal_text(manual_issues, result_summary, gate_vector)
+def arbiter_semantic_reason(
+    gate_vector: dict[str, Any],
+    manual_issues: list[str],
+    result_summary: str | None,
+    current_subchain: dict[str, Any],
+    mechanistic_context: dict[str, Any] | None = None,
+) -> str:
+    mechanism_context = mechanistic_context or {}
+    text = combined_signal_text(manual_issues, result_summary, gate_vector, mechanism_context)
     current_id = str(current_subchain.get("id"))
     if gate_level(gate_vector, "human_blocker") == "high":
         return "systemic_blocker"
+    if mechanism_context.get("pending_effect_gates"):
+        return "mechanism_validation_pending"
     if gate_level(gate_vector, "evidence_integrity") == "high" or any(token in text for token in ["unsupported", "citation", "locator", "source", "evidence"]):
         return "evidence_gap_route"
     if gate_level(gate_vector, "method_validity") == "high":
@@ -5147,10 +5380,12 @@ def arbiter_decision(
     adversarial: dict[str, Any],
     manual_issues: list[str],
     result_summary: str | None,
+    mechanistic_context: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     current_id = str(current_subchain.get("id"))
     gate = json.loads(json.dumps(base_gate, ensure_ascii=True))
-    semantic = arbiter_semantic_reason(gate_vector, manual_issues, result_summary, current_subchain)
+    mechanism_context = mechanistic_context or {}
+    semantic = arbiter_semantic_reason(gate_vector, manual_issues, result_summary, current_subchain, mechanism_context)
     council_rec = council.get("route_recommendation") or {}
     adversarial_rec = adversarial.get("route_recommendation") or {}
     recommended_targets = merge_route_targets(council_rec, adversarial_rec)
@@ -5163,6 +5398,11 @@ def arbiter_decision(
         gate["review_mode"] = "human_checkpoint"
         append_unique(reasons, "Arbiter paused because human authority or restricted material is required.")
         decision_source = "arbiter_human_blocker"
+    elif gate.get("decision") == "route_next" and semantic == "mechanism_validation_pending":
+        gate["decision"] = "retry_same_route"
+        gate["review_mode"] = "review_for_retry"
+        append_unique(reasons, "Arbiter converted route_next to retry_same_route because OPHIS effect-gate validation is still pending.")
+        decision_source = "mechanism_validation_retry"
     elif gate.get("decision") == "route_next" and (fatal_count or premature_risk == "high"):
         if semantic in {"evidence_gap_route", "method_gap_route", "analysis_gap_route", "delivery_gap_route"} and current_id != "P10":
             gate["decision"] = "escalate_problem_loop"
@@ -5442,6 +5682,44 @@ def deep_loop_review_directive(
     }
 
 
+def mechanistic_required_reads(mechanistic_context: dict[str, Any] | None) -> list[str]:
+    reads: list[str] = []
+    for item in (mechanistic_context or {}).get("required_reads") or []:
+        append_unique(reads, str(item))
+    return reads
+
+
+def mechanistic_record_line(record: dict[str, Any]) -> str:
+    identifier = str(record.get("id") or "mechanism-record")
+    status = str(record.get("status") or "unknown")
+    text = record.get("mechanism") or record.get("summary") or record.get("expected_effect") or record.get("validation") or record.get("text") or record.get("plan") or ""
+    return f"- `{identifier}` status `{status}`: {text}"
+
+
+def mechanistic_prompt_block(mechanistic_context: dict[str, Any] | None) -> str:
+    context = mechanistic_context or {}
+    lines: list[str] = []
+    supported = [item for item in context.get("supported_mechanisms") or [] if isinstance(item, dict)]
+    pending = [item for item in context.get("pending_effect_gates") or [] if isinstance(item, dict)]
+    rejected = [item for item in context.get("rejected_mechanisms") or [] if isinstance(item, dict)]
+    negative = [item for item in context.get("negative_results") or [] if isinstance(item, dict)]
+    if supported:
+        lines.extend(["## Mechanism Memory To Reuse", ""])
+        lines.extend(mechanistic_record_line(item) for item in supported[:5])
+        lines.append("")
+    if pending:
+        lines.extend(["## Pending Mechanism Validation", ""])
+        lines.extend(mechanistic_record_line(item) for item in pending[:5])
+        lines.append("")
+        lines.append("Do not route to a later subchain until these effect gates have direct validation outcomes.")
+        lines.append("")
+    if rejected or negative:
+        lines.extend(["## Mechanism Memory To Avoid", ""])
+        lines.extend(mechanistic_record_line(item) for item in (rejected + negative)[:5])
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
 def deep_loop_handoff_package(
     route_graph: dict[str, Any],
     current_subchain: dict[str, Any],
@@ -5449,6 +5727,7 @@ def deep_loop_handoff_package(
     gate: dict[str, Any],
     review: dict[str, Any],
     artifacts: list[str],
+    mechanistic_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     current_id = str(current_subchain.get("id"))
     decision = str(gate.get("decision"))
@@ -5460,23 +5739,27 @@ def deep_loop_handoff_package(
         target_ids = ["P10"]
     else:
         target_ids = []
+    must_read = [
+        ".research-loop/state.json",
+        ".research-loop/material-passport.json",
+        ".research-loop/decision-log.jsonl",
+        ".research-loop/evidence-ledger.jsonl",
+        "latest .research-loop/checkpoints/*.md when present",
+        "latest .research-loop/handoffs/*.md when present",
+    ]
+    for item in mechanistic_required_reads(mechanistic_context):
+        append_unique(must_read, item)
     return {
         "from_subchain": current_id,
         "gate_decision": decision,
         "target_subchains": target_ids,
-        "must_read": [
-            ".research-loop/state.json",
-            ".research-loop/material-passport.json",
-            ".research-loop/decision-log.jsonl",
-            ".research-loop/evidence-ledger.jsonl",
-            "latest .research-loop/checkpoints/*.md when present",
-            "latest .research-loop/handoffs/*.md when present",
-        ],
+        "must_read": must_read,
         "artifact_refs": artifacts,
         "review_mode": review.get("mode"),
         "review_output_contract": review.get("output_contract"),
         "harness_protocol": route_graph.get("harness_protocol"),
-        "next_work_prompt": deep_loop_next_work_prompt(route_graph, current_subchain, next_subchains, gate, review),
+        "mechanistic_context_summary": (mechanistic_context or {}).get("summary") or {},
+        "next_work_prompt": deep_loop_next_work_prompt(route_graph, current_subchain, next_subchains, gate, review, mechanistic_context),
     }
 
 
@@ -5510,6 +5793,7 @@ def deep_loop_continuation_contract(
     research_council: dict[str, Any] | None = None,
     adversarial_gate: dict[str, Any] | None = None,
     arbiter: dict[str, Any] | None = None,
+    mechanistic_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     decision = str(gate.get("decision"))
     target_ids = list(handoff.get("target_subchains") or [])
@@ -5522,6 +5806,10 @@ def deep_loop_continuation_contract(
     council = research_council or {}
     adversarial = adversarial_gate or {}
     arbiter_payload = arbiter or {}
+    mechanism_context = mechanistic_context or {}
+    required_reads = list(handoff.get("must_read") or [])
+    for item in mechanistic_required_reads(mechanism_context):
+        append_unique(required_reads, item)
     return {
         "decision": decision,
         "from_subchain": current_subchain.get("id"),
@@ -5529,11 +5817,19 @@ def deep_loop_continuation_contract(
         "target_subchains": target_ids,
         "next_agent": next_agent,
         "next_work_prompt": handoff.get("next_work_prompt"),
-        "required_reads": list(handoff.get("must_read") or []),
+        "required_reads": required_reads,
         "artifact_refs": list(handoff.get("artifact_refs") or []),
         "harness_protocol": handoff.get("harness_protocol"),
         "gate_vector_summary": {key: value.get("level") for key, value in gate_vector.items() if isinstance(value, dict)},
         "blocking_dimensions": blocking_dimensions,
+        "mechanistic_findings": {
+            "summary": mechanism_context.get("summary") or {},
+            "signals": list(mechanism_context.get("signals") or []),
+            "pending_effect_gate_ids": [item.get("id") for item in mechanism_context.get("pending_effect_gates") or [] if isinstance(item, dict)],
+            "supported_mechanism_ids": [item.get("id") for item in mechanism_context.get("supported_mechanisms") or [] if isinstance(item, dict)],
+            "rejected_mechanism_ids": [item.get("id") for item in mechanism_context.get("rejected_mechanisms") or [] if isinstance(item, dict)],
+            "negative_result_ids": [item.get("id") for item in mechanism_context.get("negative_results") or [] if isinstance(item, dict)],
+        },
         "council_findings": {
             "council_id": council.get("council_id"),
             "expert_ids": [expert.get("expert_id") for expert in council.get("experts") or []],
@@ -5567,11 +5863,14 @@ def deep_loop_next_work_prompt(
     next_subchains: list[dict[str, Any]],
     gate: dict[str, Any],
     review: dict[str, Any],
+    mechanistic_context: dict[str, Any] | None = None,
 ) -> str:
     current_id = str(current_subchain.get("id"))
     decision = str(gate.get("decision"))
     normalized = route_graph.get("normalized_input") or {}
     inherited_prompt = normalized.get("downstream_prompt") or route_graph.get("intent") or "Continue the current research-loop task."
+    mechanism_block = mechanistic_prompt_block(mechanistic_context)
+    mechanism_section = f"\n\n{mechanism_block}\n\n" if mechanism_block else "\n\n"
     if decision == "route_next":
         target = next_subchains[0] if next_subchains else {}
         target_id = target.get("id", "next-subchain")
@@ -5581,6 +5880,7 @@ def deep_loop_next_work_prompt(
             f"Run subchain {target_id} ({target_name}) after review_for_transition. "
             f"Read the handoff, preserve verified outputs from {current_id}, then execute this project-grounded task:\n\n"
             f"{subchain_agent_prompt_block(target_agent)}\n\n"
+            f"{mechanism_section}"
             "## Project Task\n\n"
             f"{inherited_prompt}"
         )
@@ -5590,6 +5890,7 @@ def deep_loop_next_work_prompt(
             f"Retry subchain {current_id} ({current_subchain.get('name')}) after review_for_retry. "
             "Limit the next round to the diagnosed failed gate criteria, then rerun the same gate.\n\n"
             f"{subchain_agent_prompt_block(current_agent)}\n\n"
+            f"{mechanism_section}"
             "## Project Task And Harness\n\n"
             f"{inherited_prompt}"
         )
@@ -5600,6 +5901,7 @@ def deep_loop_next_work_prompt(
             "Convert the failed gate into a precise problem-loop case, capture reproduction or validation commands, "
             "and promote only after the threshold gate approves the adjustment plan.\n\n"
             f"{subchain_agent_prompt_block(problem_agent)}\n\n"
+            f"{mechanism_section}"
             "## Original Project Task And Harness\n\n"
             f"{inherited_prompt}"
         )
@@ -5633,6 +5935,7 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
     if harness_evidence.get("summary"):
         result_summary = "\n\n".join(part for part in [result_summary, f"Harness evidence: {harness_evidence['summary']}"] if part)
     subchain_agent = subchain_agent_spec(str(current.get("id")))
+    mechanistic_context = build_mechanistic_context(cwd, current, state)
     gate_vector = build_gate_vector(
         gate_result=effective_gate_result,
         current_subchain=current,
@@ -5643,6 +5946,7 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         result_summary=result_summary,
         artifacts=artifacts,
         next_subchains=next_subchains,
+        mechanistic_context=mechanistic_context,
     )
     expert_reasons = expert_escalation_reasons(current, depth, gate_vector)
     base_gate = deep_loop_gate_decision(
@@ -5671,6 +5975,7 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         result_summary=result_summary,
         manual_issues=manual_issues,
         harness_evidence=harness_evidence,
+        mechanistic_context=mechanistic_context,
         enabled=not bool(getattr(args, "skip_research_council", False)),
     )
     adversarial = adversarial_gate_review(
@@ -5683,6 +5988,7 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         manual_issues=manual_issues,
         artifacts=artifacts,
         harness_evidence=harness_evidence,
+        mechanistic_context=mechanistic_context,
         enabled=not bool(getattr(args, "skip_adversarial_gate", False)),
     )
     gate, arbiter = arbiter_decision(
@@ -5693,9 +5999,10 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         adversarial=adversarial,
         manual_issues=manual_issues,
         result_summary=result_summary,
+        mechanistic_context=mechanistic_context,
     )
     review = deep_loop_review_directive(cwd, graph, current, next_subchains, gate, result_summary, manual_issues, harness_evidence)
-    handoff = deep_loop_handoff_package(graph, current, next_subchains, gate, review, artifacts)
+    handoff = deep_loop_handoff_package(graph, current, next_subchains, gate, review, artifacts, mechanistic_context)
     continuation = deep_loop_continuation_contract(
         current_subchain=current,
         gate=gate,
@@ -5705,6 +6012,7 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         research_council=council,
         adversarial_gate=adversarial,
         arbiter=arbiter,
+        mechanistic_context=mechanistic_context,
     )
     loop_id = args.loop_id or f"deep-{timestamp()}-{slug(str(current.get('id', 'subchain')))}"
     return {
@@ -5716,6 +6024,7 @@ def build_deep_loop_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         "intent": args.intent,
         "current_subchain": current,
         "subchain_agent": subchain_agent,
+        "mechanistic_context": mechanistic_context,
         "depth_level": depth,
         "route_graph": graph,
         "gate_input": {
@@ -5802,6 +6111,26 @@ def deep_loop_markdown(payload: dict[str, Any]) -> list[str]:
         if harness_evidence.get("errors"):
             lines.append("- Adapter errors:")
             lines.extend(f"  - {item}" for item in harness_evidence.get("errors") or [])
+    mechanistic = payload.get("mechanistic_context") if isinstance(payload.get("mechanistic_context"), dict) else {}
+    if mechanistic:
+        lines.extend(["", "## Mechanistic Context", ""])
+        summary = mechanistic.get("summary") if isinstance(mechanistic.get("summary"), dict) else {}
+        if summary:
+            lines.append("- Summary: " + ", ".join(f"{key}={value}" for key, value in sorted(summary.items())))
+        for signal in mechanistic.get("signals") or []:
+            lines.append(f"- Signal: {signal}")
+        pending = [item for item in mechanistic.get("pending_effect_gates") or [] if isinstance(item, dict)]
+        supported = [item for item in mechanistic.get("supported_mechanisms") or [] if isinstance(item, dict)]
+        negative = [item for item in (mechanistic.get("rejected_mechanisms") or []) + (mechanistic.get("negative_results") or []) if isinstance(item, dict)]
+        if pending:
+            lines.append("- Pending effect gates:")
+            lines.extend(f"  {mechanistic_record_line(item)}" for item in pending[:8])
+        if supported:
+            lines.append("- Supported mechanisms:")
+            lines.extend(f"  {mechanistic_record_line(item)}" for item in supported[:8])
+        if negative:
+            lines.append("- Rejected or negative mechanisms:")
+            lines.extend(f"  {mechanistic_record_line(item)}" for item in negative[:8])
     lines.extend(["", "## Gate Vector", ""])
     for key, value in (payload.get("gate_vector") or {}).items():
         if isinstance(value, dict):

@@ -627,6 +627,15 @@ Treat OPHIS records as control-plane knowledge: they guide deep-loop,
 problem-loop, expert review, and future project routing, but they do not mutate
 core project files directly.
 
+Deep-loop reads OPHIS memory before finalizing every gate. A pending effect gate
+adds uncertainty/failure-mode risk and converts a passing transition into
+`retry_same_route` with semantic reason `mechanism_validation_pending` until the
+validation outcome is recorded. Supported mechanisms are copied into the
+continuation contract, required reads, and the next-work prompt under
+`Mechanism Memory To Reuse`. Rejected mechanisms and negative results become
+failure-mode warnings. Research Council adds `mechanism_memory_auditor` for
+these cases, and Adversarial Gate adds killer tests for pending effect gates.
+
 ## Multi-Path Subchains
 
 Use these canonical subchains when interpreting route output:

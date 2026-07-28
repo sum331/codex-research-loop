@@ -143,6 +143,19 @@ Records are stored under `.research-loop/observations/`,
 `.research-loop/mechanisms/`. They guide deep-loop, problem-loop, expert
 review, and future routing; they do not mutate core project files directly.
 
+`deep-loop` consumes this mechanism memory on every gate:
+
+- Pending effect gates raise uncertainty and failure-mode risk. A passing hard
+  gate is converted to `retry_same_route` with semantic reason
+  `mechanism_validation_pending` until the effect gate has a validation
+  outcome.
+- Supported mechanisms are inserted into the `continuation_contract`,
+  `required_reads`, and next-work prompt as `Mechanism Memory To Reuse`.
+- Rejected mechanisms and negative results are surfaced as failure-mode
+  warnings so a later subchain does not repeat a failed intervention.
+- Research Council adds `mechanism_memory_auditor` whenever mechanism memory is
+  relevant, and Adversarial Gate adds killer tests for pending effect gates.
+
 ## Research Council And Adversarial Gate
 
 `deep-loop` now runs three review layers by default:
