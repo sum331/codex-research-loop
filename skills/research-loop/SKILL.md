@@ -94,6 +94,9 @@ as `cwd` for every tool call. Available tool names mirror the CLI surface:
 `research_problem_loop`, `research_problem_promote`,
 `research_loop_auto_loop`, `research_loop_auto_loop_watchdog`,
 `research_claim_evidence_verify`,
+`research_loop_observe`, `research_loop_hypothesis`,
+`research_loop_intervention`, `research_loop_ophi_cycle`,
+`research_loop_mechanism`,
 `research_loop_checkpoint`,
 `research_loop_handoff`, `research_loop_resume`, `research_loop_validate`, and
 `research_loop_run`.
@@ -121,6 +124,11 @@ python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\t
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "write the paper" --current-subchain P7 --gate-result pass --write
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "verify evidence" --current-subchain P3 --gate-result fail --gate-issue "unsupported claim remains" --write
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "verify harness report" --current-subchain P6 --gate-result auto --harness-report "reports\harness.json" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" ophi-cycle --observation "metric improves on smoke cases but fails held-out cases" --problem "gate may be overfitting a narrow validation slice" --hypothesis "the loop lacks a variance-sensitive gate" --intervention "add a variance audit before promotion" --expected-effect "unstable results route back to analysis" --validation "replay two harness reports" --subchain P6 --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" observe --text "claim has no verified locator" --kind evidence_gap --subchain P3 --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" hypothesis --mechanism "missing locator checks cause unsupported final claims" --phenomenon-id phen-id --prediction "claim-evidence fails before writing" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" intervention --plan "run claim-evidence before P7 promotion" --hypothesis-id hyp-id --expected-effect "unsupported claims stop before writing" --validation "claim-evidence --fail-on-issue" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" mechanism --mechanism "pre-writing claim-evidence gates prevent fabricated citation drift" --status supported --scope "P3 to P7 transitions" --write
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" capabilities
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" source-hub --query "10.1038/s41586-020-2649-2" --provider auto
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" content-ingest --source "paper.html" --mode article --record-materials --write
@@ -164,6 +172,12 @@ The project-local directory is:
   problem-cases/
   problem-reports/
   promotions/
+  observations/
+  phenomena/
+  hypotheses/
+  interventions/
+  effect-gates/
+  mechanisms/
   reports/
   storage-reports/
   experts/
@@ -571,6 +585,48 @@ The command is a dispatcher: it does not directly mutate core research files.
 Use `--skip-research-council` or `--skip-adversarial-gate` only for debugging
 legacy gate behavior. Unattended runs should keep both layers enabled.
 
+## Mechanistic OPHIS Layer
+
+Use the OPHIS layer when the loop needs deeper scientific judgment than a hard
+score gate can provide. It records why a problem appears, what mechanism might
+explain it, what intervention should test that mechanism, and whether the
+result should become reusable workflow knowledge.
+
+The local mapping is:
+
+- Observation: concrete signal from metrics, logs, artifacts, reviews, data, or
+  failures.
+- Problem/Phenomenon: stable issue pattern induced by one or more observations.
+- Hypothesis: falsifiable mechanism explanation with predictions and
+  falsifiers.
+- Intervention: minimal, scoped action with expected effect, validation, and
+  rollback.
+- Speed-up/Mechanism: reusable supported, rejected, candidate, or
+  negative-result mechanism.
+
+For a complete cycle:
+
+```powershell
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" ophi-cycle --observation "analysis passes smoke data but fails held-out reports" --problem "promotion gate may be insensitive to variance" --hypothesis "the current gate overweights artifact readiness and underweights uncertainty" --intervention "add a variance-sensitive harness check before P7 promotion" --expected-effect "unstable outputs retry P6 instead of advancing to writing" --validation "replay two harness reports and compare route decisions" --subchain P6 --write --format json
+```
+
+For single-node calls, use `observe`, `hypothesis`, `intervention`, and
+`mechanism`. With `--write`, they append to:
+
+```text
+.research-loop/observations/observation-ledger.jsonl
+.research-loop/hypotheses/hypothesis-ledger.jsonl
+.research-loop/interventions/intervention-ledger.jsonl
+.research-loop/effect-gates/effect-gate-ledger.jsonl
+.research-loop/mechanisms/mechanism-library.jsonl
+.research-loop/mechanisms/negative-results.jsonl
+```
+
+`ophi-cycle --write` also writes a phenomenon record and a pending effect gate.
+Treat OPHIS records as control-plane knowledge: they guide deep-loop,
+problem-loop, expert review, and future project routing, but they do not mutate
+core project files directly.
+
 ## Multi-Path Subchains
 
 Use these canonical subchains when interpreting route output:
@@ -624,7 +680,9 @@ needs to be added. The matrix separates available skills/apps from missing tool
 gaps. Built-in local tools now include `prompt-normalizer`,
 `storage-policy`, `research-source-hub`, `content-ingest`, `zotero-bridge`,
 `claim-evidence-verifier`, `deep-loop-router`,
-`research-council-reviewer`, `adversarial-gate-reviewer`, `problem-loop`, and
+`research-council-reviewer`, `adversarial-gate-reviewer`,
+`mechanistic-observer`, `phenomenon-miner`, `hypothesis-portfolio`,
+`intervention-planner`, `mechanism-library`, `problem-loop`, and
 `auto-loop-runner` with `auto-loop-watchdog`. Current missing tool gaps are
 advisory until implemented:
 

@@ -16,7 +16,7 @@ from typing import Any
 
 SCRIPT = Path(__file__).resolve().parent / "research_loop.py"
 SERVER_NAME = "codex-research-loop"
-SERVER_VERSION = "0.9.2"
+SERVER_VERSION = "0.9.6"
 
 
 def schema(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -90,6 +90,121 @@ TOOLS: list[dict[str, Any]] = [
                 "write": {"type": "boolean", "description": "Write the directive and record a next action."},
             },
             ["cwd"],
+        ),
+    },
+    {
+        "name": "research_loop_observe",
+        "description": "Record an OPHIS-style observation from metrics, logs, artifacts, reviews, data, or failures.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "text": {"type": "string", "description": "Observation text."},
+                "kind": {"type": "string", "description": "Observation kind, e.g. metric, log, evidence_gap, artifact, review, data, failure."},
+                "stage": {"type": "string", "description": "Optional stage override."},
+                "subchain": {"type": "string", "description": "P1-P10 subchain that owns this observation."},
+                "source": {"type": "string", "description": "Source of the observation."},
+                "artifacts": {"type": "array", "items": {"type": "string"}, "description": "Artifact paths or ids supporting the observation."},
+                "signal_strength": {"type": "string", "description": "low, medium, or high."},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags for later phenomenon mining and gate routing."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "write": {"type": "boolean", "description": "Append to the observation ledger."},
+            },
+            ["cwd", "text"],
+        ),
+    },
+    {
+        "name": "research_loop_hypothesis",
+        "description": "Record a falsifiable mechanism hypothesis with predictions, falsifiers, confidence, and required reads.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "mechanism": {"type": "string", "description": "Mechanism hypothesis text."},
+                "phenomenon_id": {"type": "string", "description": "Phenomenon id this hypothesis explains."},
+                "stage": {"type": "string", "description": "Optional stage override."},
+                "subchain": {"type": "string", "description": "P1-P10 subchain that owns this hypothesis."},
+                "predictions": {"type": "array", "items": {"type": "string"}, "description": "Predictions if the mechanism is true."},
+                "falsifiers": {"type": "array", "items": {"type": "string"}, "description": "Conditions that would falsify the hypothesis."},
+                "confidence": {"type": "string", "description": "low, medium, or high."},
+                "required_reads": {"type": "array", "items": {"type": "string"}, "description": "Required sources, artifacts, or reports."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "write": {"type": "boolean", "description": "Append to the hypothesis ledger."},
+            },
+            ["cwd", "mechanism"],
+        ),
+    },
+    {
+        "name": "research_loop_intervention",
+        "description": "Record a minimal intervention bound to a mechanism hypothesis.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "plan": {"type": "string", "description": "Minimal intervention plan."},
+                "hypothesis_id": {"type": "string", "description": "Hypothesis id this intervention tests."},
+                "kind": {"type": "string", "description": "Intervention kind."},
+                "stage": {"type": "string", "description": "Optional stage override."},
+                "subchain": {"type": "string", "description": "P1-P10 subchain that owns this intervention."},
+                "expected_effect": {"type": "string", "description": "Expected measurable or review-visible effect."},
+                "validation": {"type": "string", "description": "Validation check or harness surface."},
+                "rollback": {"type": "string", "description": "Rollback or containment plan."},
+                "unattended_safe": {"type": "boolean", "description": "Whether unattended auto-loop may execute follow-up work."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "write": {"type": "boolean", "description": "Append to the intervention ledger."},
+            },
+            ["cwd", "plan"],
+        ),
+    },
+    {
+        "name": "research_loop_ophi_cycle",
+        "description": "Run one OPHIS mechanistic cycle: observation, problem, hypothesis, intervention, effect gate, and mechanism candidate.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "observation": {"type": "string", "description": "Observation from the current research loop or project artifact."},
+                "problem": {"type": "string", "description": "Problem or phenomenon summary induced by the observation."},
+                "hypothesis": {"type": "string", "description": "Falsifiable mechanism hypothesis."},
+                "intervention": {"type": "string", "description": "Minimal intervention plan."},
+                "expected_effect": {"type": "string", "description": "Expected effect if the hypothesis is useful."},
+                "validation": {"type": "string", "description": "Validation check that determines whether the intervention worked."},
+                "stage": {"type": "string", "description": "Optional stage override."},
+                "subchain": {"type": "string", "description": "P1-P10 subchain that owns this cycle."},
+                "kind": {"type": "string", "description": "Observation kind."},
+                "phenomenon_kind": {"type": "string", "description": "Phenomenon kind."},
+                "source": {"type": "string", "description": "Source of the observation."},
+                "artifacts": {"type": "array", "items": {"type": "string"}, "description": "Artifact paths or ids supporting the cycle."},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags for later mechanism retrieval and gate routing."},
+                "signal_strength": {"type": "string", "description": "low, medium, or high."},
+                "confidence": {"type": "string", "description": "low, medium, or high."},
+                "intervention_kind": {"type": "string", "description": "Intervention kind."},
+                "rollback": {"type": "string", "description": "Rollback or containment plan."},
+                "unattended_safe": {"type": "boolean", "description": "Whether unattended auto-loop may act on generated next action."},
+                "mechanism_status": {"type": "string", "description": "candidate, supported, rejected, or needs_replication."},
+                "negative_result": {"type": "boolean", "description": "Mark the generated mechanism candidate as a negative result."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "write": {"type": "boolean", "description": "Persist all generated OPHIS records."},
+            },
+            ["cwd", "observation", "problem", "hypothesis", "intervention", "expected_effect", "validation"],
+        ),
+    },
+    {
+        "name": "research_loop_mechanism",
+        "description": "Record a reusable mechanism or negative result in the mechanism library.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "mechanism": {"type": "string", "description": "Mechanism statement to preserve for reuse."},
+                "hypothesis_id": {"type": "string", "description": "Source hypothesis id."},
+                "intervention_id": {"type": "string", "description": "Source intervention id."},
+                "stage": {"type": "string", "description": "Optional stage override."},
+                "subchain": {"type": "string", "description": "P1-P10 subchain where this mechanism applies."},
+                "status": {"type": "string", "description": "candidate, supported, rejected, or needs_replication."},
+                "scope": {"type": "string", "description": "Scope where this mechanism may be reused."},
+                "effect_summary": {"type": "string", "description": "Observed or expected effect summary."},
+                "reuse_conditions": {"type": "array", "items": {"type": "string"}, "description": "Conditions required before reusing this mechanism."},
+                "negative_result": {"type": "boolean", "description": "Also append this mechanism to negative-results.jsonl."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "write": {"type": "boolean", "description": "Append to the mechanism library."},
+            },
+            ["cwd", "mechanism"],
         ),
     },
     {
@@ -669,6 +784,107 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
             command.append("--skip-research-council")
         if as_bool(args.get("skip_adversarial_gate")):
             command.append("--skip-adversarial-gate")
+        add_option(command, "--format", args.get("format"))
+        if as_bool(args.get("write")):
+            command.append("--write")
+        return command
+    if name == "research_loop_observe":
+        command.append("observe")
+        add_option(command, "--text", args.get("text"))
+        add_option(command, "--kind", args.get("kind"))
+        add_option(command, "--stage", args.get("stage"))
+        add_option(command, "--subchain", args.get("subchain"))
+        add_option(command, "--source", args.get("source"))
+        for artifact in args.get("artifacts") or []:
+            add_option(command, "--artifact", artifact)
+        add_option(command, "--signal-strength", args.get("signal_strength"))
+        for tag in args.get("tags") or []:
+            add_option(command, "--tag", tag)
+        add_option(command, "--format", args.get("format"))
+        if as_bool(args.get("write")):
+            command.append("--write")
+        return command
+    if name == "research_loop_hypothesis":
+        command.append("hypothesis")
+        add_option(command, "--mechanism", args.get("mechanism"))
+        add_option(command, "--phenomenon-id", args.get("phenomenon_id"))
+        add_option(command, "--stage", args.get("stage"))
+        add_option(command, "--subchain", args.get("subchain"))
+        for prediction in args.get("predictions") or []:
+            add_option(command, "--prediction", prediction)
+        for falsifier in args.get("falsifiers") or []:
+            add_option(command, "--falsifier", falsifier)
+        add_option(command, "--confidence", args.get("confidence"))
+        for required_read in args.get("required_reads") or []:
+            add_option(command, "--required-read", required_read)
+        add_option(command, "--format", args.get("format"))
+        if as_bool(args.get("write")):
+            command.append("--write")
+        return command
+    if name == "research_loop_intervention":
+        command.append("intervention")
+        add_option(command, "--plan", args.get("plan"))
+        add_option(command, "--hypothesis-id", args.get("hypothesis_id"))
+        add_option(command, "--kind", args.get("kind"))
+        add_option(command, "--stage", args.get("stage"))
+        add_option(command, "--subchain", args.get("subchain"))
+        add_option(command, "--expected-effect", args.get("expected_effect"))
+        add_option(command, "--validation", args.get("validation"))
+        add_option(command, "--rollback", args.get("rollback"))
+        if args.get("unattended_safe") is False:
+            command.append("--no-unattended-safe")
+        elif as_bool(args.get("unattended_safe")):
+            command.append("--unattended-safe")
+        add_option(command, "--format", args.get("format"))
+        if as_bool(args.get("write")):
+            command.append("--write")
+        return command
+    if name == "research_loop_ophi_cycle":
+        command.append("ophi-cycle")
+        add_option(command, "--observation", args.get("observation"))
+        add_option(command, "--problem", args.get("problem"))
+        add_option(command, "--hypothesis", args.get("hypothesis"))
+        add_option(command, "--intervention", args.get("intervention"))
+        add_option(command, "--expected-effect", args.get("expected_effect"))
+        add_option(command, "--validation", args.get("validation"))
+        add_option(command, "--stage", args.get("stage"))
+        add_option(command, "--subchain", args.get("subchain"))
+        add_option(command, "--kind", args.get("kind"))
+        add_option(command, "--phenomenon-kind", args.get("phenomenon_kind"))
+        add_option(command, "--source", args.get("source"))
+        for artifact in args.get("artifacts") or []:
+            add_option(command, "--artifact", artifact)
+        for tag in args.get("tags") or []:
+            add_option(command, "--tag", tag)
+        add_option(command, "--signal-strength", args.get("signal_strength"))
+        add_option(command, "--confidence", args.get("confidence"))
+        add_option(command, "--intervention-kind", args.get("intervention_kind"))
+        add_option(command, "--rollback", args.get("rollback"))
+        if args.get("unattended_safe") is False:
+            command.append("--no-unattended-safe")
+        elif as_bool(args.get("unattended_safe")):
+            command.append("--unattended-safe")
+        add_option(command, "--mechanism-status", args.get("mechanism_status"))
+        if as_bool(args.get("negative_result")):
+            command.append("--negative-result")
+        add_option(command, "--format", args.get("format"))
+        if as_bool(args.get("write")):
+            command.append("--write")
+        return command
+    if name == "research_loop_mechanism":
+        command.append("mechanism")
+        add_option(command, "--mechanism", args.get("mechanism"))
+        add_option(command, "--hypothesis-id", args.get("hypothesis_id"))
+        add_option(command, "--intervention-id", args.get("intervention_id"))
+        add_option(command, "--stage", args.get("stage"))
+        add_option(command, "--subchain", args.get("subchain"))
+        add_option(command, "--status", args.get("status"))
+        add_option(command, "--scope", args.get("scope"))
+        add_option(command, "--effect-summary", args.get("effect_summary"))
+        for reuse_condition in args.get("reuse_conditions") or []:
+            add_option(command, "--reuse-condition", reuse_condition)
+        if as_bool(args.get("negative_result")):
+            command.append("--negative-result")
         add_option(command, "--format", args.get("format"))
         if as_bool(args.get("write")):
             command.append("--write")

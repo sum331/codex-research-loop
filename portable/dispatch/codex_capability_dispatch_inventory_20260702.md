@@ -284,7 +284,7 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 | Registry ID | 调用方式 | 功能 | 状态 |
 |---|---|---|---|
 | `skill:academic-research-suite` | `$academic-research-suite` 或 ARS 别名 | 深度研究、文献综述、论文草稿、审稿与研究流程 | OK |
-| `skill:research-loop` | `$research-loop`；research loop、loop、deep-loop、auto-loop、problem-loop、无人值守、专家委员会、对抗 gate、阀门、科研工作流请求 | 项目级科研 loop 控制面：状态、材料、证据、存储、深循环、专家委员会、对抗 gate、仲裁与无人值守续跑 | OK |
+| `skill:research-loop` | `$research-loop`；research loop、loop、deep-loop、auto-loop、problem-loop、OPHIS、机制观察、机制假设、机制干预、机制库、无人值守、专家委员会、对抗 gate、阀门、科研工作流请求 | 项目级科研 loop 控制面：状态、材料、证据、存储、机制账本、深循环、专家委员会、对抗 gate、仲裁与无人值守续跑 | OK |
 | `skill:cleanshot` | `$cleanshot`；截图、OCR、录屏类请求 | CleanShot X 截图、OCR、标注 | 平台注意: macOS 工具，Windows 下仅登记不作为主路径 |
 | `skill:diagnose` | `$diagnose`；debug/诊断/排查请求 | 复现、最小化、假设、插桩、修复、回归测试 | OK |
 | `skill:electron-dev` | `$electron-dev`；Electron/桌面应用请求 | Electron、React、Vite、IPC、打包 | OK |

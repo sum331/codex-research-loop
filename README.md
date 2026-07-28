@@ -18,6 +18,9 @@ It provides:
 - Default Research Council and Adversarial Gate review inside `deep-loop`, with
   rich expert cards, killer tests, and an arbiter that converts critique back
   into the same four unattended-safe control decisions.
+- OPHIS-style mechanistic research memory: observations, phenomena,
+  falsifiable hypotheses, interventions, effect gates, mechanism candidates,
+  and negative results.
 - Isolated problem-loop diagnosis with generated expert panels and gated
   promotion before core project edits.
 - Watchdog-supervised unattended validation/test/repair cycles connected to
@@ -97,6 +100,48 @@ configuration still complete.
 ```powershell
 python scripts/research_loop.py --cwd "D:\Loop\scratch\research-loop-smoke" auto-loop-watchdog --goal "smoke test" --skip-validate --skip-deep-loop --test-command "cmd /c exit /b 0" --format json
 ```
+
+## OPHIS Mechanistic Layer
+
+The mechanism layer is a cross-cutting control plane for deep scientific
+judgment. It follows the OPHIS pattern:
+
+```text
+Observation -> Problem -> Hypothesis -> Intervention -> Speed-up
+```
+
+In this plugin, that becomes durable project-local records:
+
+- `observe`: writes observations from metrics, logs, artifacts, reviews, data,
+  or failures.
+- `hypothesis`: writes falsifiable mechanism hypotheses with predictions and
+  falsifiers.
+- `intervention`: writes minimal interventions with expected effect,
+  validation, rollback, and unattended-safety flags.
+- `ophi-cycle`: writes a full observation, phenomenon, hypothesis,
+  intervention, pending effect gate, and mechanism candidate.
+- `mechanism`: writes reusable mechanisms and negative results.
+
+Example:
+
+```powershell
+python scripts/research_loop.py --cwd "D:\Project" ophi-cycle `
+  --observation "analysis passes smoke data but fails held-out reports" `
+  --problem "promotion gate may be insensitive to variance" `
+  --hypothesis "the current gate overweights artifact readiness and underweights uncertainty" `
+  --intervention "add a variance-sensitive harness check before P7 promotion" `
+  --expected-effect "unstable outputs retry P6 instead of advancing to writing" `
+  --validation "replay two harness reports and compare route decisions" `
+  --subchain P6 `
+  --write `
+  --format json
+```
+
+Records are stored under `.research-loop/observations/`,
+`.research-loop/phenomena/`, `.research-loop/hypotheses/`,
+`.research-loop/interventions/`, `.research-loop/effect-gates/`, and
+`.research-loop/mechanisms/`. They guide deep-loop, problem-loop, expert
+review, and future routing; they do not mutate core project files directly.
 
 ## Research Council And Adversarial Gate
 

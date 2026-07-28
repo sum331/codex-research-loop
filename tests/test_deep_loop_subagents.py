@@ -165,6 +165,130 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("tool:research-council-reviewer", available_ids)
         self.assertIn("tool:adversarial-gate-reviewer", available_ids)
 
+    def test_capability_matrix_exposes_ophi_mechanistic_tools(self):
+        payload = research_loop.capability_matrix_payload()
+        available_ids = {item["id"] for item in payload["available_capabilities"]}
+
+        self.assertIn("tool:mechanistic-observer", available_ids)
+        self.assertIn("tool:phenomenon-miner", available_ids)
+        self.assertIn("tool:hypothesis-portfolio", available_ids)
+        self.assertIn("tool:intervention-planner", available_ids)
+        self.assertIn("tool:mechanism-library", available_ids)
+
+    def test_ophi_cycle_records_mechanistic_layers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    str(cwd),
+                    "ophi-cycle",
+                    "--observation",
+                    "Metric improves on smoke data but collapses on held-out cases.",
+                    "--problem",
+                    "The current analysis may be overfitting a narrow validation slice.",
+                    "--hypothesis",
+                    "The gate is optimizing artifact readiness without enough variance checks.",
+                    "--intervention",
+                    "Add a variance-focused harness gate before writing-stage promotion.",
+                    "--expected-effect",
+                    "Late-stage routes should retry analysis instead of promoting unstable results.",
+                    "--validation",
+                    "Compare pass/fail decisions before and after the variance gate on two reports.",
+                    "--stage",
+                    "ANALYSIS",
+                    "--subchain",
+                    "P6",
+                    "--artifact",
+                    "reports/harness.json",
+                    "--tag",
+                    "variance",
+                    "--write",
+                    "--format",
+                    "json",
+                ],
+                text=True,
+                capture_output=True,
+                encoding="utf-8",
+                check=True,
+            )
+
+            payload = json.loads(proc.stdout)
+            root = cwd / ".research-loop"
+
+            self.assertEqual(payload["schema_version"], research_loop.SCHEMA_VERSION)
+            self.assertEqual(payload["observation"]["type"], "observation")
+            self.assertEqual(payload["phenomenon"]["type"], "phenomenon")
+            self.assertEqual(payload["hypothesis"]["type"], "hypothesis")
+            self.assertEqual(payload["intervention"]["type"], "intervention")
+            self.assertEqual(payload["mechanism_candidate"]["type"], "mechanism")
+            self.assertEqual(payload["effect_gate"]["status"], "pending_validation")
+            self.assertIn("mechanism_candidate", payload["next_actions"][0]["text"])
+
+            self.assertTrue((root / "observations" / "observation-ledger.jsonl").exists())
+            self.assertTrue((root / "phenomena" / "phenomenon-ledger.jsonl").exists())
+            self.assertTrue((root / "hypotheses" / "hypothesis-ledger.jsonl").exists())
+            self.assertTrue((root / "interventions" / "intervention-ledger.jsonl").exists())
+            self.assertTrue((root / "effect-gates" / "effect-gate-ledger.jsonl").exists())
+            self.assertTrue((root / "mechanisms" / "mechanism-library.jsonl").exists())
+
+            mechanisms = research_loop.read_jsonl(root / "mechanisms" / "mechanism-library.jsonl")
+            self.assertEqual(mechanisms[-1]["hypothesis_id"], payload["hypothesis"]["id"])
+            self.assertEqual(mechanisms[-1]["status"], "candidate")
+
+    def test_mcp_maps_ophi_tools(self):
+        observe = mcp_server.tool_to_cli(
+            "research_loop_observe",
+            {
+                "cwd": "C:\\project",
+                "text": "Observed a recurring evidence gap.",
+                "kind": "evidence_gap",
+                "stage": "LITERATURE",
+                "subchain": "P2",
+                "tags": ["citation"],
+                "write": True,
+            },
+        )
+        cycle = mcp_server.tool_to_cli(
+            "research_loop_ophi_cycle",
+            {
+                "cwd": "C:\\project",
+                "observation": "Observed unstable figure gate.",
+                "problem": "Figure readiness hides uncertainty.",
+                "hypothesis": "The analysis gate is too shallow.",
+                "intervention": "Add a variance audit.",
+                "expected_effect": "Gate routes back to P6.",
+                "validation": "Replay two harness reports.",
+                "subchain": "P6",
+                "format": "json",
+                "write": True,
+            },
+        )
+        mechanism = mcp_server.tool_to_cli(
+            "research_loop_mechanism",
+            {
+                "cwd": "C:\\project",
+                "mechanism": "Variance gates prevent premature writing promotion.",
+                "status": "supported",
+                "scope": "analysis-stage gates",
+                "negative_result": True,
+                "write": True,
+            },
+        )
+
+        self.assertEqual(observe[:3], ["--cwd", "C:\\project", "observe"])
+        self.assertIn("--text", observe)
+        self.assertIn("--tag", observe)
+        self.assertIn("--write", observe)
+        self.assertEqual(cycle[:3], ["--cwd", "C:\\project", "ophi-cycle"])
+        self.assertIn("--expected-effect", cycle)
+        self.assertIn("--validation", cycle)
+        self.assertIn("--write", cycle)
+        self.assertEqual(mechanism[:3], ["--cwd", "C:\\project", "mechanism"])
+        self.assertIn("--negative-result", mechanism)
+
     def test_route_adds_research_experiment_harness_protocol(self):
         with tempfile.TemporaryDirectory() as tmp:
             cwd = Path(tmp)

@@ -34,7 +34,7 @@ from typing import Any
 
 
 LOOP_DIR = ".research-loop"
-SCHEMA_VERSION = "0.9.2"
+SCHEMA_VERSION = "0.9.6"
 PAYLOAD_LIMIT = 24000
 INVENTORY_LIMIT = int(os.environ.get("RESEARCH_LOOP_INVENTORY_LIMIT", "1200"))
 INVENTORY_SECONDS = float(os.environ.get("RESEARCH_LOOP_INVENTORY_SECONDS", "2.0"))
@@ -621,6 +621,36 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "name": "adversarial-gate-reviewer",
         "use_for": "Attack premature convergence, fatal objections, missing counterfactuals, and killer tests before an arbiter finalizes deep-loop continuation decisions.",
     },
+    "tool:mechanistic-observer": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "mechanistic-observer",
+        "use_for": "Record OPHIS-style observations from metrics, logs, artifacts, reviews, data, and failures into a durable observation ledger.",
+    },
+    "tool:phenomenon-miner": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "phenomenon-miner",
+        "use_for": "Turn repeated observations or blockers into explicit phenomena and problem statements that downstream subchains can reason about.",
+    },
+    "tool:hypothesis-portfolio": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "hypothesis-portfolio",
+        "use_for": "Maintain falsifiable mechanism hypotheses, predictions, falsifiers, confidence, and required reads across research-loop rounds.",
+    },
+    "tool:intervention-planner": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "intervention-planner",
+        "use_for": "Bind hypotheses to minimal interventions, expected effects, validation checks, rollback plans, and unattended-safety flags.",
+    },
+    "tool:mechanism-library": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "mechanism-library",
+        "use_for": "Persist supported, rejected, candidate, and negative-result mechanisms so future projects can reuse proven research-loop patterns.",
+    },
     "tool:claim-evidence-verifier": {
         "kind": "built-in-tool",
         "status": "available",
@@ -1071,6 +1101,11 @@ SHORT_MUTATING_COMMANDS = {
     "next",
     "update",
     "problem-promote",
+    "observe",
+    "hypothesis",
+    "intervention",
+    "mechanism",
+    "ophi-cycle",
     "checkpoint",
     "handoff",
 }
@@ -1282,6 +1317,58 @@ def problem_reports_root(cwd: Path) -> Path:
 
 def promotions_root(cwd: Path) -> Path:
     return loop_root(cwd) / "promotions"
+
+
+def observations_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "observations"
+
+
+def phenomena_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "phenomena"
+
+
+def hypotheses_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "hypotheses"
+
+
+def interventions_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "interventions"
+
+
+def effect_gates_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "effect-gates"
+
+
+def mechanisms_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "mechanisms"
+
+
+def observation_ledger_path(cwd: Path) -> Path:
+    return observations_root(cwd) / "observation-ledger.jsonl"
+
+
+def phenomenon_ledger_path(cwd: Path) -> Path:
+    return phenomena_root(cwd) / "phenomenon-ledger.jsonl"
+
+
+def hypothesis_ledger_path(cwd: Path) -> Path:
+    return hypotheses_root(cwd) / "hypothesis-ledger.jsonl"
+
+
+def intervention_ledger_path(cwd: Path) -> Path:
+    return interventions_root(cwd) / "intervention-ledger.jsonl"
+
+
+def effect_gate_ledger_path(cwd: Path) -> Path:
+    return effect_gates_root(cwd) / "effect-gate-ledger.jsonl"
+
+
+def mechanism_library_path(cwd: Path) -> Path:
+    return mechanisms_root(cwd) / "mechanism-library.jsonl"
+
+
+def negative_results_path(cwd: Path) -> Path:
+    return mechanisms_root(cwd) / "negative-results.jsonl"
 
 
 def storage_policy_path(cwd: Path) -> Path:
@@ -1884,7 +1971,27 @@ def save_passport(cwd: Path, passport: dict[str, Any]) -> None:
 
 def init_project(cwd: Path, stage: str | None = None, storage_style: str | None = None, init_storage: bool = False) -> dict[str, Any]:
     root = loop_root(cwd)
-    for child in ["runs", "checkpoints", "handoffs", "reports", "storage-reports", "deep-loops", "experts", "experts/councils", "adversarial-gates", "problem-cases", "problem-reports", "promotions", "watchdog"]:
+    for child in [
+        "runs",
+        "checkpoints",
+        "handoffs",
+        "reports",
+        "storage-reports",
+        "deep-loops",
+        "experts",
+        "experts/councils",
+        "adversarial-gates",
+        "problem-cases",
+        "problem-reports",
+        "promotions",
+        "observations",
+        "phenomena",
+        "hypotheses",
+        "interventions",
+        "effect-gates",
+        "mechanisms",
+        "watchdog",
+    ]:
         ensure_dir(root / child)
     policy = load_storage_policy(cwd, storage_style)
     if init_storage:
@@ -6017,6 +6124,385 @@ def command_capabilities(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
     else:
         print("\n".join(capabilities_markdown(payload)).rstrip() + "\n")
+    return 0
+
+
+def infer_phenomenon_kind(text: str) -> str:
+    lowered = text.lower()
+    if any(token in lowered for token in ["citation", "evidence", "unsupported", "locator", "source"]):
+        return "evidence_gap"
+    if any(token in lowered for token in ["metric", "variance", "score", "accuracy", "loss", "baseline"]):
+        return "metric_instability"
+    if any(token in lowered for token in ["method", "protocol", "experiment", "design"]):
+        return "method_mismatch"
+    if any(token in lowered for token in ["novelty", "contribution", "claim"]):
+        return "novelty_weakness"
+    if any(token in lowered for token in ["argument", "logic", "writing", "draft"]):
+        return "argument_break"
+    return "failure_pattern"
+
+
+def build_observation_record(args: argparse.Namespace, cwd: Path, state: dict[str, Any]) -> dict[str, Any]:
+    text = str(getattr(args, "text", "") or getattr(args, "observation", "")).strip()
+    if not text:
+        raise ValueError("Observation text is required.")
+    return {
+        "id": record_id("obs", text),
+        "timestamp": utc_now(),
+        "type": "observation",
+        "kind": getattr(args, "kind", None) or "failure",
+        "stage": state.get("current_stage", "INTAKE"),
+        "subchain": getattr(args, "subchain", None),
+        "text": text,
+        "source": getattr(args, "source", None),
+        "artifact_refs": getattr(args, "artifact", None) or [],
+        "signal_strength": getattr(args, "signal_strength", None) or "medium",
+        "tags": getattr(args, "tag", None) or [],
+        "project_root": psafe(cwd),
+    }
+
+
+def build_phenomenon_record(args: argparse.Namespace, observation: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    problem = str(getattr(args, "problem", "") or observation.get("text") or "").strip()
+    if not problem:
+        raise ValueError("Problem text is required to construct a phenomenon.")
+    phenomenon_kind = getattr(args, "phenomenon_kind", None) or infer_phenomenon_kind(problem + " " + str(observation.get("text") or ""))
+    return {
+        "id": record_id("phen", problem),
+        "timestamp": utc_now(),
+        "type": "phenomenon",
+        "observation_ids": [observation["id"]],
+        "kind": phenomenon_kind,
+        "summary": problem,
+        "scope": getattr(args, "scope", None) or getattr(args, "subchain", None) or state.get("current_stage", "INTAKE"),
+        "reproducibility": getattr(args, "reproducibility", None) or "single",
+        "owner_subchain": getattr(args, "subchain", None),
+        "stage": state.get("current_stage", "INTAKE"),
+    }
+
+
+def build_hypothesis_record(args: argparse.Namespace, state: dict[str, Any], phenomenon_id: str | None = None) -> dict[str, Any]:
+    mechanism = str(getattr(args, "mechanism", "") or getattr(args, "hypothesis", "")).strip()
+    if not mechanism:
+        raise ValueError("Hypothesis mechanism text is required.")
+    predictions = list(getattr(args, "prediction", None) or [])
+    expected_effect = getattr(args, "expected_effect", None)
+    if expected_effect:
+        predictions.append(str(expected_effect))
+    falsifiers = list(getattr(args, "falsifier", None) or [])
+    validation = getattr(args, "validation", None)
+    if validation:
+        falsifiers.append(f"Validation fails or produces no material effect: {validation}")
+    return {
+        "id": record_id("hyp", mechanism),
+        "timestamp": utc_now(),
+        "type": "hypothesis",
+        "phenomenon_id": phenomenon_id or getattr(args, "phenomenon_id", None),
+        "stage": state.get("current_stage", "INTAKE"),
+        "subchain": getattr(args, "subchain", None),
+        "mechanism": mechanism,
+        "predictions": predictions,
+        "falsifiers": falsifiers,
+        "confidence": getattr(args, "confidence", None) or "medium",
+        "required_reads": getattr(args, "required_read", None) or [],
+        "status": getattr(args, "hypothesis_status", None) or "active",
+    }
+
+
+def build_intervention_record(args: argparse.Namespace, state: dict[str, Any], hypothesis_id: str | None = None) -> dict[str, Any]:
+    plan = str(getattr(args, "plan", "") or getattr(args, "intervention", "")).strip()
+    if not plan:
+        raise ValueError("Intervention plan is required.")
+    return {
+        "id": record_id("int", plan),
+        "timestamp": utc_now(),
+        "type": "intervention",
+        "hypothesis_id": hypothesis_id or getattr(args, "hypothesis_id", None),
+        "stage": state.get("current_stage", "INTAKE"),
+        "subchain": getattr(args, "subchain", None),
+        "kind": getattr(args, "intervention_kind", None) or getattr(args, "kind", None) or "method_intervention",
+        "plan": plan,
+        "expected_effect": getattr(args, "expected_effect", None),
+        "validation": getattr(args, "validation", None),
+        "rollback": getattr(args, "rollback", None) or "Keep the intervention outside core project files and record the outcome as a negative result if validation fails.",
+        "unattended_safe": bool(getattr(args, "unattended_safe", True)),
+    }
+
+
+def build_mechanism_record(
+    args: argparse.Namespace,
+    state: dict[str, Any],
+    hypothesis_id: str | None = None,
+    intervention_id: str | None = None,
+) -> dict[str, Any]:
+    mechanism = str(getattr(args, "mechanism", "") or getattr(args, "hypothesis", "") or "").strip()
+    if not mechanism:
+        raise ValueError("Mechanism text is required.")
+    return {
+        "id": record_id("mech", mechanism + str(intervention_id or "")),
+        "timestamp": utc_now(),
+        "type": "mechanism",
+        "hypothesis_id": hypothesis_id or getattr(args, "hypothesis_id", None),
+        "intervention_id": intervention_id or getattr(args, "intervention_id", None),
+        "stage": state.get("current_stage", "INTAKE"),
+        "subchain": getattr(args, "subchain", None),
+        "status": getattr(args, "mechanism_status", None) or getattr(args, "status", None) or "candidate",
+        "mechanism": mechanism,
+        "scope": getattr(args, "scope", None) or getattr(args, "subchain", None) or "project",
+        "effect_summary": getattr(args, "effect_summary", None) or getattr(args, "expected_effect", None),
+        "reuse_conditions": getattr(args, "reuse_condition", None) or [],
+        "negative_result": bool(getattr(args, "negative_result", False)),
+    }
+
+
+def build_effect_gate(args: argparse.Namespace, intervention: dict[str, Any], mechanism: dict[str, Any]) -> dict[str, Any]:
+    validation = getattr(args, "validation", None) or intervention.get("validation")
+    expected_effect = getattr(args, "expected_effect", None) or intervention.get("expected_effect")
+    return {
+        "id": record_id("gate", str(expected_effect or "") + str(validation or "")),
+        "timestamp": utc_now(),
+        "type": "effect_gate",
+        "status": "pending_validation",
+        "intervention_id": intervention["id"],
+        "mechanism_id": mechanism["id"],
+        "expected_effect": expected_effect,
+        "validation": validation,
+        "success_criteria": [
+            "The expected effect is visible in direct artifacts, metrics, or review output.",
+            "The result survives at least one counterfactual, variance, or negative-control check appropriate to the task.",
+            "The mechanism can be scoped with clear reuse conditions before promotion.",
+        ],
+        "failure_policy": "If validation fails, mark the mechanism as rejected or negative_result and route back through retry_same_route or problem-loop.",
+        "artifact_refs": getattr(args, "artifact", None) or [],
+    }
+
+
+def build_ophi_cycle_payload(args: argparse.Namespace, cwd: Path, state: dict[str, Any], passport: dict[str, Any]) -> dict[str, Any]:
+    observation = build_observation_record(args, cwd, state)
+    phenomenon = build_phenomenon_record(args, observation, state)
+    hypothesis = build_hypothesis_record(args, state, phenomenon_id=phenomenon["id"])
+    intervention = build_intervention_record(args, state, hypothesis_id=hypothesis["id"])
+    mechanism_args = argparse.Namespace(**vars(args))
+    mechanism_args.mechanism = getattr(args, "hypothesis", None)
+    mechanism = build_mechanism_record(mechanism_args, state, hypothesis_id=hypothesis["id"], intervention_id=intervention["id"])
+    effect_gate = build_effect_gate(args, intervention, mechanism)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "timestamp": utc_now(),
+        "project_root": psafe(cwd),
+        "paradigm": {
+            "id": "OPHIS",
+            "sequence": ["Observation", "Problem", "Hypothesis", "Intervention", "Speed-up"],
+            "local_mapping": ["observation", "phenomenon", "hypothesis", "intervention", "effect_gate", "mechanism_candidate"],
+        },
+        "stage": state.get("current_stage", "INTAKE"),
+        "subchain": getattr(args, "subchain", None),
+        "project_context": project_context_payload(cwd, state, passport),
+        "observation": observation,
+        "phenomenon": phenomenon,
+        "hypothesis": hypothesis,
+        "intervention": intervention,
+        "effect_gate": effect_gate,
+        "mechanism_candidate": mechanism,
+        "next_actions": [
+            {
+                "id": record_id("next", mechanism["id"] + str(effect_gate.get("validation") or "")),
+                "text": f"Validate mechanism_candidate {mechanism['id']}: {effect_gate.get('validation') or 'define a concrete validation check before promotion'}.",
+                "stage": state.get("current_stage", "INTAKE"),
+                "status": "todo",
+                "owner": "agent" if intervention.get("unattended_safe") else "human",
+                "created_at": utc_now(),
+            }
+        ],
+    }
+
+
+def ophi_cycle_markdown(payload: dict[str, Any]) -> list[str]:
+    lines = [
+        "# OPHIS Mechanistic Cycle",
+        "",
+        f"- Generated at UTC: {payload['timestamp']}",
+        f"- Stage: `{payload.get('stage')}`",
+        f"- Subchain: `{payload.get('subchain') or '(not set)'}`",
+        "",
+        "## Observation",
+        "",
+        f"- `{payload['observation']['id']}` {payload['observation']['text']}",
+        "",
+        "## Problem / Phenomenon",
+        "",
+        f"- `{payload['phenomenon']['id']}` {payload['phenomenon']['summary']}",
+        f"- Kind: `{payload['phenomenon']['kind']}`",
+        "",
+        "## Hypothesis",
+        "",
+        f"- `{payload['hypothesis']['id']}` {payload['hypothesis']['mechanism']}",
+        f"- Predictions: {'; '.join(payload['hypothesis'].get('predictions') or []) or '(none)'}",
+        f"- Falsifiers: {'; '.join(payload['hypothesis'].get('falsifiers') or []) or '(none)'}",
+        "",
+        "## Intervention",
+        "",
+        f"- `{payload['intervention']['id']}` {payload['intervention']['plan']}",
+        f"- Expected effect: {payload['intervention'].get('expected_effect') or '(not set)'}",
+        f"- Validation: {payload['intervention'].get('validation') or '(not set)'}",
+        f"- Unattended safe: {payload['intervention'].get('unattended_safe')}",
+        "",
+        "## Effect Gate And Mechanism",
+        "",
+        f"- Gate: `{payload['effect_gate']['id']}` status `{payload['effect_gate']['status']}`",
+        f"- Mechanism candidate: `{payload['mechanism_candidate']['id']}` status `{payload['mechanism_candidate']['status']}`",
+        "",
+        "## Next Actions",
+        "",
+    ]
+    for item in payload.get("next_actions") or []:
+        lines.append(f"- `{item['id']}` [{item['status']}] {item['text']}")
+    return lines
+
+
+def single_mechanistic_markdown(title: str, record: dict[str, Any]) -> list[str]:
+    lines = [
+        f"# {title}",
+        "",
+        f"- ID: `{record['id']}`",
+        f"- Type: `{record.get('type')}`",
+        f"- Created at UTC: {record.get('timestamp')}",
+        f"- Stage: `{record.get('stage')}`",
+    ]
+    if record.get("subchain"):
+        lines.append(f"- Subchain: `{record.get('subchain')}`")
+    primary = record.get("text") or record.get("mechanism") or record.get("plan") or record.get("summary")
+    if primary:
+        lines.extend(["", primary])
+    return lines
+
+
+def persist_observation(cwd: Path, state: dict[str, Any], record: dict[str, Any]) -> None:
+    append_jsonl(observation_ledger_path(cwd), record)
+    append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "observation", "id": record["id"], "ledger": psafe(observation_ledger_path(cwd))})
+    state["counters"]["observations"] = int(state["counters"].get("observations", 0)) + 1
+
+
+def persist_hypothesis(cwd: Path, state: dict[str, Any], record: dict[str, Any]) -> None:
+    append_jsonl(hypothesis_ledger_path(cwd), record)
+    append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "hypothesis", "id": record["id"], "ledger": psafe(hypothesis_ledger_path(cwd))})
+    state["counters"]["hypotheses"] = int(state["counters"].get("hypotheses", 0)) + 1
+
+
+def persist_intervention(cwd: Path, state: dict[str, Any], record: dict[str, Any]) -> None:
+    append_jsonl(intervention_ledger_path(cwd), record)
+    append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "intervention", "id": record["id"], "ledger": psafe(intervention_ledger_path(cwd))})
+    state["counters"]["interventions"] = int(state["counters"].get("interventions", 0)) + 1
+
+
+def persist_mechanism(cwd: Path, state: dict[str, Any], record: dict[str, Any]) -> None:
+    append_jsonl(mechanism_library_path(cwd), record)
+    if record.get("negative_result"):
+        append_jsonl(negative_results_path(cwd), record)
+    append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "mechanism", "id": record["id"], "ledger": psafe(mechanism_library_path(cwd))})
+    state["counters"]["mechanisms"] = int(state["counters"].get("mechanisms", 0)) + 1
+
+
+def persist_ophi_cycle_payload(cwd: Path, state: dict[str, Any], passport: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    persist_observation(cwd, state, payload["observation"])
+    append_jsonl(phenomenon_ledger_path(cwd), payload["phenomenon"])
+    append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "phenomenon", "id": payload["phenomenon"]["id"], "ledger": psafe(phenomenon_ledger_path(cwd))})
+    state["counters"]["phenomena"] = int(state["counters"].get("phenomena", 0)) + 1
+    persist_hypothesis(cwd, state, payload["hypothesis"])
+    persist_intervention(cwd, state, payload["intervention"])
+    append_jsonl(effect_gate_ledger_path(cwd), payload["effect_gate"])
+    append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "effect_gate", "id": payload["effect_gate"]["id"], "ledger": psafe(effect_gate_ledger_path(cwd))})
+    state["counters"]["effect_gates"] = int(state["counters"].get("effect_gates", 0)) + 1
+    persist_mechanism(cwd, state, payload["mechanism_candidate"])
+    report_json = reports_root(cwd) / f"{timestamp()}-ophi-cycle.json"
+    report_md = reports_root(cwd) / f"{timestamp()}-ophi-cycle.md"
+    payload["report_path"] = psafe(report_json)
+    write_json(report_json, payload)
+    write_lines(report_md, ophi_cycle_markdown(payload))
+    append_jsonl(decisions_path(cwd), {"timestamp": utc_now(), "type": "ophi_cycle", "mechanism_id": payload["mechanism_candidate"]["id"], "report_path": psafe(report_json)})
+    for action in payload.get("next_actions") or []:
+        update_list_item(passport["next_actions"], action)
+    save_passport(cwd, passport)
+    save_state(cwd, state)
+    return payload
+
+
+def command_observe(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd, args.stage)
+    state = load_state(cwd)
+    record = build_observation_record(args, cwd, state)
+    if args.write:
+        persist_observation(cwd, state, record)
+        save_state(cwd, state)
+    payload = {"schema_version": SCHEMA_VERSION, "timestamp": utc_now(), "project_root": psafe(cwd), "observation": record}
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(single_mechanistic_markdown("Research Observation", record)).rstrip() + "\n")
+    return 0
+
+
+def command_hypothesis(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd, args.stage)
+    state = load_state(cwd)
+    record = build_hypothesis_record(args, state)
+    if args.write:
+        persist_hypothesis(cwd, state, record)
+        save_state(cwd, state)
+    payload = {"schema_version": SCHEMA_VERSION, "timestamp": utc_now(), "project_root": psafe(cwd), "hypothesis": record}
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(single_mechanistic_markdown("Research Hypothesis", record)).rstrip() + "\n")
+    return 0
+
+
+def command_intervention(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd, args.stage)
+    state = load_state(cwd)
+    record = build_intervention_record(args, state)
+    if args.write:
+        persist_intervention(cwd, state, record)
+        save_state(cwd, state)
+    payload = {"schema_version": SCHEMA_VERSION, "timestamp": utc_now(), "project_root": psafe(cwd), "intervention": record}
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(single_mechanistic_markdown("Research Intervention", record)).rstrip() + "\n")
+    return 0
+
+
+def command_mechanism(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd, args.stage)
+    state = load_state(cwd)
+    record = build_mechanism_record(args, state)
+    if args.write:
+        persist_mechanism(cwd, state, record)
+        save_state(cwd, state)
+    payload = {"schema_version": SCHEMA_VERSION, "timestamp": utc_now(), "project_root": psafe(cwd), "mechanism": record}
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(single_mechanistic_markdown("Research Mechanism", record)).rstrip() + "\n")
+    return 0
+
+
+def command_ophi_cycle(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd, args.stage)
+    state = load_state(cwd)
+    passport = load_passport(cwd, state)
+    payload = build_ophi_cycle_payload(args, cwd, state, passport)
+    if args.write:
+        payload = persist_ophi_cycle_payload(cwd, state, passport, payload)
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(ophi_cycle_markdown(payload)).rstrip() + "\n")
     return 0
 
 
@@ -11026,6 +11512,86 @@ def build_parser() -> argparse.ArgumentParser:
     p_deep_loop.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output deep-loop directive format.")
     p_deep_loop.add_argument("--write", action="store_true", help="Write the deep-loop directive under .research-loop/deep-loops and record a next action.")
     p_deep_loop.set_defaults(func=command_deep_loop)
+
+    p_observe = sub.add_parser("observe", help="Record an OPHIS-style observation into the mechanistic observation ledger.")
+    p_observe.add_argument("--text", required=True, help="Observation text from a metric, log, artifact, review, data point, or failure.")
+    p_observe.add_argument("--kind", default="observation", help="Observation kind, e.g. metric, log, evidence_gap, artifact, review, data, failure.")
+    p_observe.add_argument("--stage", help=f"Set current stage before recording. Allowed: {', '.join(STAGES)}")
+    p_observe.add_argument("--subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="P1-P10 subchain that owns this observation.")
+    p_observe.add_argument("--source", help="Source of the observation, such as a command, report, URL, DOI, or reviewer note.")
+    p_observe.add_argument("--artifact", action="append", help="Artifact path or id supporting the observation. Repeat for multiple artifacts.")
+    p_observe.add_argument("--signal-strength", choices=["low", "medium", "high"], default="medium", help="How strong this signal is.")
+    p_observe.add_argument("--tag", action="append", help="Tag used for later phenomenon mining and gate routing.")
+    p_observe.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output observation format.")
+    p_observe.add_argument("--write", action="store_true", help="Append to .research-loop/observations/observation-ledger.jsonl.")
+    p_observe.set_defaults(func=command_observe)
+
+    p_hypothesis = sub.add_parser("hypothesis", help="Record a falsifiable mechanism hypothesis.")
+    p_hypothesis.add_argument("--mechanism", required=True, help="Mechanism hypothesis text.")
+    p_hypothesis.add_argument("--phenomenon-id", help="Phenomenon id this hypothesis explains.")
+    p_hypothesis.add_argument("--stage", help=f"Set current stage before recording. Allowed: {', '.join(STAGES)}")
+    p_hypothesis.add_argument("--subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="P1-P10 subchain that owns this hypothesis.")
+    p_hypothesis.add_argument("--prediction", action="append", help="Observable prediction if this mechanism is true.")
+    p_hypothesis.add_argument("--falsifier", action="append", help="Condition or result that would falsify this hypothesis.")
+    p_hypothesis.add_argument("--confidence", choices=["low", "medium", "high"], default="medium", help="Current confidence before validation.")
+    p_hypothesis.add_argument("--required-read", action="append", help="Required source, artifact, or report to read before acting on this hypothesis.")
+    p_hypothesis.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output hypothesis format.")
+    p_hypothesis.add_argument("--write", action="store_true", help="Append to .research-loop/hypotheses/hypothesis-ledger.jsonl.")
+    p_hypothesis.set_defaults(func=command_hypothesis)
+
+    p_intervention = sub.add_parser("intervention", help="Record a minimal intervention bound to a mechanism hypothesis.")
+    p_intervention.add_argument("--plan", required=True, help="Minimal intervention plan.")
+    p_intervention.add_argument("--hypothesis-id", help="Hypothesis id this intervention tests.")
+    p_intervention.add_argument("--kind", default="method_intervention", help="Intervention kind, e.g. information_intervention, method_intervention, artifact_intervention, search_intervention.")
+    p_intervention.add_argument("--stage", help=f"Set current stage before recording. Allowed: {', '.join(STAGES)}")
+    p_intervention.add_argument("--subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="P1-P10 subchain that owns this intervention.")
+    p_intervention.add_argument("--expected-effect", help="Expected measurable or review-visible effect.")
+    p_intervention.add_argument("--validation", help="Validation check or harness surface.")
+    p_intervention.add_argument("--rollback", help="Rollback or containment plan if the intervention fails.")
+    p_intervention.add_argument("--unattended-safe", action=argparse.BooleanOptionalAction, default=True, help="Whether unattended auto-loop may execute follow-up work from this intervention.")
+    p_intervention.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output intervention format.")
+    p_intervention.add_argument("--write", action="store_true", help="Append to .research-loop/interventions/intervention-ledger.jsonl.")
+    p_intervention.set_defaults(func=command_intervention)
+
+    p_mechanism = sub.add_parser("mechanism", help="Record a reusable mechanism or negative result in the mechanism library.")
+    p_mechanism.add_argument("--mechanism", required=True, help="Mechanism statement to preserve for reuse.")
+    p_mechanism.add_argument("--hypothesis-id", help="Source hypothesis id.")
+    p_mechanism.add_argument("--intervention-id", help="Source intervention id.")
+    p_mechanism.add_argument("--stage", help=f"Set current stage before recording. Allowed: {', '.join(STAGES)}")
+    p_mechanism.add_argument("--subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="P1-P10 subchain where this mechanism applies.")
+    p_mechanism.add_argument("--status", choices=["candidate", "supported", "rejected", "needs_replication"], default="candidate", help="Mechanism validation status.")
+    p_mechanism.add_argument("--scope", help="Scope where this mechanism may be reused.")
+    p_mechanism.add_argument("--effect-summary", help="Observed or expected effect summary.")
+    p_mechanism.add_argument("--reuse-condition", action="append", help="Condition required before reusing this mechanism.")
+    p_mechanism.add_argument("--negative-result", action="store_true", help="Also append this mechanism to negative-results.jsonl.")
+    p_mechanism.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output mechanism format.")
+    p_mechanism.add_argument("--write", action="store_true", help="Append to .research-loop/mechanisms/mechanism-library.jsonl.")
+    p_mechanism.set_defaults(func=command_mechanism)
+
+    p_ophi_cycle = sub.add_parser("ophi-cycle", help="Run one OPHIS mechanistic cycle: observation, problem, hypothesis, intervention, effect gate, and mechanism candidate.")
+    p_ophi_cycle.add_argument("--observation", required=True, help="Observation from the current research loop or project artifact.")
+    p_ophi_cycle.add_argument("--problem", required=True, help="Problem or phenomenon summary induced by the observation.")
+    p_ophi_cycle.add_argument("--hypothesis", required=True, help="Falsifiable mechanism hypothesis.")
+    p_ophi_cycle.add_argument("--intervention", required=True, help="Minimal intervention plan for testing the hypothesis.")
+    p_ophi_cycle.add_argument("--expected-effect", required=True, help="Expected effect if the hypothesis is useful.")
+    p_ophi_cycle.add_argument("--validation", required=True, help="Validation check that determines whether the intervention worked.")
+    p_ophi_cycle.add_argument("--stage", help=f"Set current stage before recording. Allowed: {', '.join(STAGES)}")
+    p_ophi_cycle.add_argument("--subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="P1-P10 subchain that owns this cycle.")
+    p_ophi_cycle.add_argument("--kind", default="failure", help="Observation kind for the generated observation record.")
+    p_ophi_cycle.add_argument("--phenomenon-kind", help="Phenomenon kind. Defaults to local inference from the observation/problem text.")
+    p_ophi_cycle.add_argument("--source", help="Source of the observation.")
+    p_ophi_cycle.add_argument("--artifact", action="append", help="Artifact path or id supporting the cycle. Repeat for multiple artifacts.")
+    p_ophi_cycle.add_argument("--tag", action="append", help="Tag used for later mechanism retrieval and gate routing.")
+    p_ophi_cycle.add_argument("--signal-strength", choices=["low", "medium", "high"], default="medium", help="How strong the observation signal is.")
+    p_ophi_cycle.add_argument("--confidence", choices=["low", "medium", "high"], default="medium", help="Initial confidence in the hypothesis.")
+    p_ophi_cycle.add_argument("--intervention-kind", default="method_intervention", help="Intervention kind for the generated intervention record.")
+    p_ophi_cycle.add_argument("--rollback", help="Rollback or containment plan if validation fails.")
+    p_ophi_cycle.add_argument("--unattended-safe", action=argparse.BooleanOptionalAction, default=True, help="Whether unattended auto-loop may act on the generated next action.")
+    p_ophi_cycle.add_argument("--mechanism-status", choices=["candidate", "supported", "rejected", "needs_replication"], default="candidate", help="Initial mechanism library status.")
+    p_ophi_cycle.add_argument("--negative-result", action="store_true", help="Mark the generated mechanism candidate as a negative result.")
+    p_ophi_cycle.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output OPHIS cycle format.")
+    p_ophi_cycle.add_argument("--write", action="store_true", help="Persist all generated OPHIS records under .research-loop control ledgers.")
+    p_ophi_cycle.set_defaults(func=command_ophi_cycle)
 
     p_capabilities = sub.add_parser("capabilities", help="Print the research loop capability matrix and missing tool gaps.")
     p_capabilities.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output capability matrix format.")
