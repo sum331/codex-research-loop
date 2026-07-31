@@ -6,8 +6,8 @@
 
 | 组件层 | 当前状态 | 结论 |
 |---|---|---|
-| 本地 skills | 能力扫描识别 141 个 skill；`C:\Users\ROG\.codex\skills` 下有 37 个顶层目录 | OK。实际使用时仍需按触发规则读取对应 `SKILL.md` |
-| 插件 | 能力扫描识别 24 个插件 manifest；`config.toml` 当前启用 11 个插件 | OK。以后以 `config.toml` 中启用项为准，不把缓存副本等同于已启用插件 |
+| 本地 skills | 能力扫描识别 250 个 skill；`C:\Users\ASUS\.codex\skills` 下有 39 个用户级顶层目录（不含 `.system` 与 `_shared`）；磁盘实测总计 249 个 `SKILL.md`（含插件缓存） | OK。实际使用时仍需按触发规则读取对应 `SKILL.md` |
+| 插件 | 能力扫描识别 38 个插件 manifest；`config.toml` 当前启用 11 个插件 | OK。以后以 `config.toml` 中启用项为准，不把缓存副本等同于已启用插件 |
 | classic MCP servers | `codex doctor` 报告 `MCP servers 0` | 注意。当前没有传统 `[mcp_servers]` 配置，但 Codex app connector 工具可通过 `tool_search` 按需暴露 |
 | Codex app connector MCP tools | GitHub、Google Drive、Figma、Linear、Hugging Face、Codex app automation/list_projects 已可发现 | 按需可用。调用前先用 `tool_search` 暴露工具，并遵守对应 skill 前置要求 |
 | 用户级 hooks | `UserPromptSubmit`、`SessionStart`、`PostToolUse`、`Stop` 已配置 | OK。`UserPromptSubmit` 已升级为调度表驱动的 pre-run dispatcher；local-task-hooks 生命周期记录通过基础烟测 |
@@ -26,14 +26,14 @@
 能力扫描命令:
 
 ```powershell
-python C:\Users\ROG\.codex\skills\skill-plugin-router\scripts\scan_codex_capabilities.py --format markdown
+python C:\Users\ASUS\.codex\skills\skill-plugin-router\scripts\scan_codex_capabilities.py --format markdown
 ```
 
 扫描结论:
 
-- Codex home: `C:\Users\ROG\.codex`
-- Skills: 141
-- Plugin manifests: 24
+- Codex home: `C:\Users\ASUS\.codex`
+- Skills: 250
+- Plugin manifests: 38
 - Marketplace entries: 0
 
 本地顶层 skill 目录:
@@ -56,7 +56,7 @@ python C:\Users\ROG\.codex\skills\skill-plugin-router\scripts\scan_codex_capabil
 
 ## 3. 插件分区
 
-当前 `C:\Users\ROG\.codex\config.toml` 启用插件:
+当前 `C:\Users\ASUS\.codex\config.toml` 启用插件:
 
 | 插件 ID | 主要功能 | 状态 |
 |---|---|---|
@@ -74,15 +74,15 @@ python C:\Users\ROG\.codex\skills\skill-plugin-router\scripts\scan_codex_capabil
 
 插件缓存根目录:
 
-- `C:\Users\ROG\.codex\plugins\cache\chatgpt-global`
-- `C:\Users\ROG\.codex\plugins\cache\openai-bundled`
-- `C:\Users\ROG\.codex\plugins\cache\openai-curated`
-- `C:\Users\ROG\.codex\plugins\cache\openai-curated-remote`
-- `C:\Users\ROG\.codex\plugins\cache\openai-primary-runtime`
+- `C:\Users\ASUS\.codex\plugins\cache\chatgpt-global`
+- `C:\Users\ASUS\.codex\plugins\cache\openai-bundled`
+- `C:\Users\ASUS\.codex\plugins\cache\openai-curated`
+- `C:\Users\ASUS\.codex\plugins\cache\openai-curated-remote`
+- `C:\Users\ASUS\.codex\plugins\cache\openai-primary-runtime`
 
 本机个人插件:
 
-- `C:\Users\ROG\.codex\plugins\prompt-submit-skill-router`
+- `C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router`
 
 治理原则:
 
@@ -115,20 +115,20 @@ python C:\Users\ROG\.codex\skills\skill-plugin-router\scripts\scan_codex_capabil
 
 ### 5.1 用户级 hooks
 
-文件: `C:\Users\ROG\.codex\hooks.json`
+文件: `C:\Users\ASUS\.codex\hooks.json`
 
 | 事件 | 命令 | 功能 | 状态 |
 |---|---|---|---|
-| `UserPromptSubmit` | `python "C:\Users\ROG\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py"` | 读取当前 prompt、可用上文 payload、近期 router 日志与项目调度表，注入 skill/plugin/MCP/hook 调用建议 | OK |
-| `SessionStart` | `python "C:\Users\ROG\.codex\hooks\local-task-hooks\codex_lifecycle_hook.py" SessionStart` | 捕获本地 hook 快照 | OK |
-| `PostToolUse` | `python "C:\Users\ROG\.codex\hooks\local-task-hooks\codex_lifecycle_hook.py" PostToolUse` | 收集 hook 失败日志 | OK |
-| `Stop` | `python "C:\Users\ROG\.codex\hooks\local-task-hooks\codex_lifecycle_hook.py" Stop` | 写入本地 hook 汇总 | OK |
+| `UserPromptSubmit` | `python "C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py"` | 读取当前 prompt、可用上文 payload、近期 router 日志与项目调度表，注入 skill/plugin/MCP/hook 调用建议 | OK |
+| `SessionStart` | `python "C:\Users\ASUS\.codex\hooks\local-task-hooks\codex_lifecycle_hook.py" SessionStart` | 捕获本地 hook 快照 | OK |
+| `PostToolUse` | `python "C:\Users\ASUS\.codex\hooks\local-task-hooks\codex_lifecycle_hook.py" PostToolUse` | 收集 hook 失败日志 | OK |
+| `Stop` | `python "C:\Users\ASUS\.codex\hooks\local-task-hooks\codex_lifecycle_hook.py" Stop` | 写入本地 hook 汇总 | OK |
 
 已做验证:
 
 ```powershell
-python -m py_compile C:\Users\ROG\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py C:\Users\ROG\.codex\hooks\local-task-hooks\codex_lifecycle_hook.py
-'{"prompt":"统一整理 skill plugin mcp hooks 调度 状态 功能"}' | python C:\Users\ROG\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py
+python -m py_compile C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py C:\Users\ASUS\.codex\hooks\local-task-hooks\codex_lifecycle_hook.py
+'{"prompt":"统一整理 skill plugin mcp hooks 调度 状态 功能"}' | python C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py
 ```
 
 router smoke 输出可按场景推荐 `skill-plugin-router`、`local-task-hooks`、`browser`、`figma`、`nature-reader`、`nature-citation`、`github`、`linear` 等注册能力，说明 `UserPromptSubmit` 入口可运行，并已从静态表升级为调度表驱动。
@@ -140,7 +140,7 @@ router smoke 输出可按场景推荐 `skill-plugin-router`、`local-task-hooks`
 当前命令:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-Location -LiteralPath 'E:\work\pr_due_upload_files_20260317_220257'; python scripts\codex_stop_quijote_change_hook.py"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-Location -LiteralPath 'D:\work\pr_due_upload_files_20260317_220257'; python scripts\codex_stop_quijote_change_hook.py"
 ```
 
 功能:
@@ -206,7 +206,7 @@ python scripts\record_quijote_change.py --auto --scope hook-inventory-smoke --so
 
 ## 6.1 每轮运行前调度 hook
 
-入口: `C:\Users\ROG\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py`
+入口: `C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py`
 
 触发: 用户提交 prompt 后、模型正式处理本轮请求前，由用户级 `UserPromptSubmit` hook 自动执行。
 
@@ -214,7 +214,7 @@ python scripts\record_quijote_change.py --auto --scope hook-inventory-smoke --so
 
 - 当前 hook payload 中的 `prompt` / `userPrompt` / `input` / `message`。
 - hook payload 中可能存在的 `messages` / `conversation` / `transcript` / `thread` / `context`，作为上文上下文信号。
-- `C:\Users\ROG\.codex\plugins\prompt-submit-skill-router\router.log` 的近期匹配记录；仅当当前 prompt 含“继续”“接着”“下一步”“上文”等延续语义时作为弱信号。
+- `C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\router.log` 的近期匹配记录；仅当当前 prompt 含“继续”“接着”“下一步”“上文”等延续语义时作为弱信号。
 - 本项目 `docs\codex_capability_dispatch_inventory_20260702.md` 的调度注册表。
 
 输出:
@@ -263,10 +263,10 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 
 用途:
 
-- 扫描 `C:\Users\ROG\.codex\skills` 中的本地 skills 与 `.system` system skills。
-- 扫描 `C:\Users\ROG\.codex\config.toml` 中启用的插件与 classic MCP server 配置。
-- 扫描 `C:\Users\ROG\.codex\plugins` 下的个人插件 manifest。
-- 扫描用户级 `C:\Users\ROG\.codex\hooks.json`、项目级 `.codex\hooks.json` 与 Git `core.hooksPath` 下的 hooks。
+- 扫描 `C:\Users\ASUS\.codex\skills` 中的本地 skills 与 `.system` system skills。
+- 扫描 `C:\Users\ASUS\.codex\config.toml` 中启用的插件与 classic MCP server 配置。
+- 扫描 `C:\Users\ASUS\.codex\plugins` 下的个人插件 manifest。
+- 扫描用户级 `C:\Users\ASUS\.codex\hooks.json`、项目级 `.codex\hooks.json` 与 Git `core.hooksPath` 下的 hooks。
 - 如果存在未登记的能力 ID，则返回非零退出码。
 
 新增能力的准入流程:
@@ -321,7 +321,7 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 | `skill:word` | `$word`；Word/DOCX 请求 | Word 文档创建、编辑、转换、验证 | OK |
 | `skill:z2-harness-loop` | `$z2-harness-loop`；z2/z2quijote/Quijote manuscript/project 请求 | z2quijote 长线工作、论文、harness loop、验证规划 | OK |
 
-说明: `C:\Users\ROG\.codex\skills\codex-primary-runtime` 是运行时目录，不含 `SKILL.md`，不按 skill 注册。
+说明: `C:\Users\ASUS\.codex\skills\codex-primary-runtime` 是运行时目录，不含 `SKILL.md`，不按 skill 注册。
 
 ### 9.2 system skills
 
@@ -452,33 +452,33 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 
 本轮修复:
 
-- `C:\Users\ROG\.codex\skills\.system\skill-creator\scripts\quick_validate.py` 改为显式 UTF-8 读取 `SKILL.md`，修复 Windows 默认 GBK 导致的 `UnicodeDecodeError`。
+- `C:\Users\ASUS\.codex\skills\.system\skill-creator\scripts\quick_validate.py` 改为显式 UTF-8 读取 `SKILL.md`，修复 Windows 默认 GBK 导致的 `UnicodeDecodeError`。
 - `quick_validate.py` 增加对现有本机 skill frontmatter 兼容字段的识别，包括 `author`、`version`、`status`、`argument-hint`、`tools`、`tags` 等；这些字段已存在于可发现 skills 中，不再误判为失效。
 - `.githooks\pre-commit` 接入 `scripts\maintenance\check_codex_capability_registry.py`，提交前先检查能力注册表，再执行原有 Quijote change-log hook。
 - 新增 `.gitattributes`，固定 `.githooks/*` 与 `*.sh` 为 LF，避免 Windows 换行破坏 shell hook。
-- `C:\Users\ROG\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py` 已重写为调度表驱动的 pre-run dispatcher，读取当前输入、可用上文 payload、近期 router 日志和本项目注册表，并输出推荐调用顺序。
-- `C:\Users\ROG\.codex\plugins\prompt-submit-skill-router\.codex-plugin\plugin.json` 版本更新为 `0.2.0`，描述同步为 registry-driven routing。
+- `C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py` 已重写为调度表驱动的 pre-run dispatcher，读取当前输入、可用上文 payload、近期 router 日志和本项目注册表，并输出推荐调用顺序。
+- `C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\.codex-plugin\plugin.json` 版本更新为 `0.2.0`，描述同步为 registry-driven routing。
 
 已执行并通过:
 
 ```powershell
-python C:\Users\ROG\.codex\skills\skill-plugin-router\scripts\scan_codex_capabilities.py --format markdown
+python C:\Users\ASUS\.codex\skills\skill-plugin-router\scripts\scan_codex_capabilities.py --format markdown
 codex doctor
-python -m py_compile C:\Users\ROG\.codex\skills\.system\skill-creator\scripts\quick_validate.py
-python C:\Users\ROG\.codex\skills\.system\skill-creator\scripts\quick_validate.py <each local skill directory>
-python -m py_compile C:\Users\ROG\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py C:\Users\ROG\.codex\hooks\local-task-hooks\codex_lifecycle_hook.py scripts\codex_stop_quijote_change_hook.py scripts\record_quijote_change.py
+python -m py_compile C:\Users\ASUS\.codex\skills\.system\skill-creator\scripts\quick_validate.py
+python C:\Users\ASUS\.codex\skills\.system\skill-creator\scripts\quick_validate.py <each local skill directory>
+python -m py_compile C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py C:\Users\ASUS\.codex\hooks\local-task-hooks\codex_lifecycle_hook.py scripts\codex_stop_quijote_change_hook.py scripts\record_quijote_change.py
 python -m py_compile scripts\maintenance\check_codex_capability_registry.py
 python scripts\maintenance\check_codex_capability_registry.py
 & "C:\Program Files\Git\bin\sh.exe" -n .githooks\pre-commit
-'{"prompt":"统一整理 skill plugin mcp hooks 调度 状态 功能"}' | python C:\Users\ROG\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py
-'{"prompt":"\u6839\u636e Figma \u8bbe\u8ba1\u7a3f\u5b9e\u73b0\u9875\u9762\uff0c\u5e76\u7528\u6d4f\u89c8\u5668\u6253\u5f00\u672c\u5730 localhost \u9a8c\u8bc1","cwd":"E:\\work\\pr_due_upload_files_20260317_220257"}' | python C:\Users\ROG\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py
-'{"prompt":"\u6253\u5f00\u4e00\u4e2a PDF \u8bba\u6587\uff0c\u505a\u4e2d\u6587\u7cbe\u8bfb\u5e76\u6574\u7406\u5f15\u7528","cwd":"E:\\work\\pr_due_upload_files_20260317_220257"}' | python C:\Users\ROG\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py
-'{"prompt":"检查这个 GitHub PR 的 CI 并修复 review comments，然后同步 Linear issue","cwd":"E:\\work\\pr_due_upload_files_20260317_220257"}' | python C:\Users\ROG\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py
+'{"prompt":"统一整理 skill plugin mcp hooks 调度 状态 功能"}' | python C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py
+'{"prompt":"\u6839\u636e Figma \u8bbe\u8ba1\u7a3f\u5b9e\u73b0\u9875\u9762\uff0c\u5e76\u7528\u6d4f\u89c8\u5668\u6253\u5f00\u672c\u5730 localhost \u9a8c\u8bc1","cwd":"D:\\work\\pr_due_upload_files_20260317_220257"}' | python C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py
+'{"prompt":"\u6253\u5f00\u4e00\u4e2a PDF \u8bba\u6587\uff0c\u505a\u4e2d\u6587\u7cbe\u8bfb\u5e76\u6574\u7406\u5f15\u7528","cwd":"D:\\work\\pr_due_upload_files_20260317_220257"}' | python C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py
+'{"prompt":"检查这个 GitHub PR 的 CI 并修复 review comments，然后同步 Linear issue","cwd":"D:\\work\\pr_due_upload_files_20260317_220257"}' | python C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py
 python scripts\record_quijote_change.py --auto --scope hook-inventory-smoke --source codex-inventory --include-working-tree --no-codex --diff-char-limit 2000 --dry-run
 git check-attr text eol -- .githooks\pre-commit
 ```
 
-另外，`C:\Users\ROG\.codex\hooks\local-task-hooks\*.ps1` 已完成 PowerShell parser 解析检查。
+另外，`C:\Users\ASUS\.codex\hooks\local-task-hooks\*.ps1` 已完成 PowerShell parser 解析检查。
 
 2026-07-08 追加 `explain-complex-concepts`:
 

@@ -12,7 +12,7 @@ Use the bundled PowerShell scripts in `scripts/` to run local tasks with durable
 - `stdout.log` / `stderr.log`
 - `failure.md` on non-zero exit
 
-The global installation also registers `codex_lifecycle_hook.py` in `C:\Users\ROG\.codex\hooks.json` for:
+The global installation also registers `codex_lifecycle_hook.py` in `$env:USERPROFILE\.codex\hooks.json` for:
 
 - `SessionStart`: capture a pre-change snapshot for a Codex thread workspace.
 - `PostToolUse`: collect failure payloads after tool calls.
@@ -23,13 +23,13 @@ The global installation also registers `codex_lifecycle_hook.py` in `C:\Users\RO
 Use `Invoke-HookTask.ps1` when Codex controls the command:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\ROG\.codex\skills\local-task-hooks\scripts\Invoke-HookTask.ps1 -Name "task-name" -WorkingDirectory "C:\path\to\project" -Command "pytest -q"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\local-task-hooks\scripts\Invoke-HookTask.ps1" -Name "task-name" -WorkingDirectory "C:\path\to\project" -Command "pytest -q"
 ```
 
 Use `-Shell cmd` for legacy `.bat` or `cmd.exe` commands:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\ROG\.codex\skills\local-task-hooks\scripts\Invoke-HookTask.ps1 -Name "legacy-build" -Shell cmd -WorkingDirectory "C:\path\to\project" -Command "build.bat"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\local-task-hooks\scripts\Invoke-HookTask.ps1" -Name "legacy-build" -Shell cmd -WorkingDirectory "C:\path\to\project" -Command "build.bat"
 ```
 
 ## Manual Flow
@@ -37,11 +37,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\ROG\.codex\skills\l
 Use `Start-HookTask.ps1` and `Complete-HookTask.ps1` when another tool or human action performs the real work:
 
 ```powershell
-$run = powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\ROG\.codex\skills\local-task-hooks\scripts\Start-HookTask.ps1 -Name "manual-task" -WorkingDirectory "C:\path\to\project"
+$run = powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\local-task-hooks\scripts\Start-HookTask.ps1" -Name "manual-task" -WorkingDirectory "C:\path\to\project"
 
 # Real work happens here.
 
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\ROG\.codex\skills\local-task-hooks\scripts\Complete-HookTask.ps1 -RunDirectory $run -WorkingDirectory "C:\path\to\project" -ExitCode 0 -Command "manual task"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\local-task-hooks\scripts\Complete-HookTask.ps1" -RunDirectory $run -WorkingDirectory "C:\path\to\project" -ExitCode 0 -Command "manual task"
 ```
 
 If `-RunDirectory` is omitted, `Complete-HookTask.ps1` uses `.hook/current-run.json` under the working directory.
@@ -62,7 +62,7 @@ For changes to these scripts, run at least:
 
 ```powershell
 $ErrorActionPreference = "Stop"
-Get-ChildItem -Path C:\Users\ROG\.codex\skills\local-task-hooks\scripts -File |
+Get-ChildItem -Path "$env:USERPROFILE\.codex\skills\local-task-hooks\scripts" -File |
   Where-Object { $_.Extension -eq ".ps1" } |
   ForEach-Object {
     $tokens = $null

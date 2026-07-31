@@ -19,13 +19,13 @@ It is also registered with Codex lifecycle hooks:
 Global install path:
 
 ```text
-C:\Users\ROG\.codex\hooks\local-task-hooks\
+$env:USERPROFILE\.codex\hooks\local-task-hooks\
 ```
 
 Codex lifecycle registration:
 
 ```text
-C:\Users\ROG\.codex\hooks.json
+$env:USERPROFILE\.codex\hooks.json
 ```
 
 Run any command through the wrapper:
@@ -37,7 +37,7 @@ Run any command through the wrapper:
 From any Codex thread, use the global wrapper:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\ROG\.codex\hooks\local-task-hooks\Invoke-HookTask.ps1 -Name "pytest-smoke" -WorkingDirectory "C:\path\to\project" -Command "pytest -q"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\hooks\local-task-hooks\Invoke-HookTask.ps1" -Name "pytest-smoke" -WorkingDirectory "C:\path\to\project" -Command "pytest -q"
 ```
 
 Run a command in a specific directory:
