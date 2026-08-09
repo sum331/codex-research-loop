@@ -141,6 +141,18 @@ class DeepLoopSubagentTests(unittest.TestCase):
 
         self.assertIn("skill:research-loop", result.stdout)
 
+        advanced = subprocess.run(
+            [sys.executable, str(router_path)],
+            input=json.dumps({"prompt": "use hypothesis-portfolio and math-abstraction before code-builder promotion"}),
+            text=True,
+            capture_output=True,
+            encoding="utf-8",
+            env=env,
+            check=True,
+        )
+
+        self.assertIn("skill:research-loop", advanced.stdout)
+
     def test_normalize_adds_standard_harness_protocol(self):
         with tempfile.TemporaryDirectory() as tmp:
             cwd = Path(tmp)
@@ -174,6 +186,325 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("tool:hypothesis-portfolio", available_ids)
         self.assertIn("tool:intervention-planner", available_ids)
         self.assertIn("tool:mechanism-library", available_ids)
+        self.assertIn("tool:harness-registry", available_ids)
+        self.assertIn("tool:evolutionary-code-builder", available_ids)
+        self.assertIn("tool:math-abstraction-chain", available_ids)
+
+    def test_capability_matrix_exposes_autopilot_and_experiment_runner(self):
+        payload = research_loop.capability_matrix_payload()
+        available_ids = {item["id"] for item in payload["available_capabilities"]}
+        missing_ids = {item["id"] for item in payload["missing_tools"]}
+
+        self.assertIn("tool:autopilot-goal-runner", available_ids)
+        self.assertIn("tool:experiment-runner-plus", available_ids)
+        self.assertNotIn("missing:experiment-runner-plus", missing_ids)
+
+    def test_route_builds_autopilot_trigger_plan_for_one_shot_goal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            research_loop.init_project(cwd)
+            state = research_loop.load_state(cwd)
+            passport = research_loop.load_passport(cwd, state)
+
+            graph = research_loop.build_route_graph(
+                cwd,
+                state,
+                passport,
+                "Complete this research task end-to-end and produce a final report directly without repeated confirmation.",
+            )
+
+        plan = graph["autopilot_trigger_plan"]
+        tool_ids = {item.get("mcp_tool") for item in plan["actions"]}
+        watchdog = plan["watchdog_command"]
+
+        self.assertEqual(plan["mode"], "one_shot_autopilot")
+        self.assertTrue(plan["no_user_confirmation_needed"])
+        self.assertIn("P7", plan["sequence"])
+        self.assertIn("P8", plan["sequence"])
+        self.assertIn("research_claim_evidence_verify", tool_ids)
+        self.assertIn("research_loop_deep_loop", tool_ids)
+        self.assertIn("auto-loop-watchdog", watchdog)
+
+    def test_autopilot_primes_advanced_nodes_and_experiment_runner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    str(cwd),
+                    "autopilot",
+                    "--goal",
+                    "Complete code analysis with mathematical uncertainty and final report without repeated confirmation.",
+                    "--id",
+                    "auto-test",
+                    "--test-command",
+                    "cmd /c echo ok",
+                    "--prime",
+                    "--write",
+                    "--format",
+                    "json",
+                ],
+                text=True,
+                capture_output=True,
+                encoding="utf-8",
+                check=True,
+            )
+
+            payload = json.loads(proc.stdout)
+            root = cwd / ".research-loop"
+
+            self.assertEqual(payload["id"], "auto-test")
+            self.assertEqual(payload["status"], "planned")
+            self.assertTrue((root / "autopilot" / "auto-test-autopilot.json").exists())
+            self.assertTrue((root / "harnesses" / "harness-registry.json").exists())
+            self.assertTrue(list((root / "hypothesis-portfolios").glob("*-portfolio.json")))
+            self.assertTrue(list((root / "math-abstractions").glob("*-math-abstraction.json")))
+            self.assertTrue(list((root / "code-builders").glob("*-code-builder.json")))
+            self.assertTrue(list((root / "experiment-runs").glob("*/*experiment-runner-report.json")))
+            primed_types = {item["type"] for item in payload["primed_records"]}
+            self.assertIn("experiment_runner_plus", primed_types)
+            self.assertIn("math_abstraction", primed_types)
+
+    def test_experiment_runner_executes_and_feeds_deep_loop_expert(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    str(cwd),
+                    "experiment-runner",
+                    "--id",
+                    "exp-test",
+                    "--name",
+                    "smoke execution",
+                    "--subchain",
+                    "P5",
+                    "--command",
+                    "cmd /c echo ok",
+                    "--execute",
+                    "--write",
+                    "--format",
+                    "json",
+                ],
+                text=True,
+                capture_output=True,
+                encoding="utf-8",
+                check=True,
+            )
+            exp_payload = json.loads(proc.stdout)
+            state = research_loop.load_state(cwd)
+            passport = research_loop.load_passport(cwd, state)
+
+            deep_payload = research_loop.build_deep_loop_payload(
+                deep_args(
+                    intent="execute reproducibility command and route into analysis",
+                    current_subchain="P5",
+                    next_subchain=["P6"],
+                    gate_result="auto",
+                    result_summary="Experiment runner captured command provenance and passed.",
+                    artifact=[exp_payload["path"]],
+                ),
+                cwd,
+                state,
+                passport,
+            )
+
+        context = deep_payload["mechanistic_context"]
+        prompt = deep_payload["handoff_package"]["next_work_prompt"]
+        expert_ids = {expert["expert_id"] for expert in deep_payload["research_council"]["experts"]}
+
+        self.assertEqual(context["summary"]["experiment_runs"], 1)
+        self.assertIn("experiment_runner_reproducibility_auditor", expert_ids)
+        self.assertIn("Experiment Runner Context", prompt)
+        self.assertIn("harness-report.json", exp_payload["harness_report_path"])
+
+    def test_mcp_maps_autopilot_and_experiment_runner(self):
+        autopilot = mcp_server.tool_to_cli(
+            "research_goal_autopilot",
+            {
+                "cwd": "D:\\Project",
+                "goal": "complete one-shot report",
+                "id": "auto-1",
+                "test_commands": ["cmd /c echo ok"],
+                "prime": True,
+                "write": True,
+                "format": "json",
+            },
+        )
+        experiment = mcp_server.tool_to_cli(
+            "research_experiment_runner",
+            {
+                "cwd": "D:\\Project",
+                "id": "exp-1",
+                "name": "smoke",
+                "subchain": "P5",
+                "commands": ["cmd /c echo ok"],
+                "harness_ids": ["h1"],
+                "retry": 1,
+                "execute": True,
+                "write": True,
+                "format": "json",
+            },
+        )
+
+        self.assertEqual(autopilot[:3], ["--cwd", "D:\\Project", "autopilot"])
+        self.assertIn("--goal", autopilot)
+        self.assertIn("--prime", autopilot)
+        self.assertIn("--write", autopilot)
+        self.assertEqual(experiment[:3], ["--cwd", "D:\\Project", "experiment-runner"])
+        self.assertIn("--command", experiment)
+        self.assertIn("--harness-id", experiment)
+        self.assertIn("--execute", experiment)
+
+    def test_advanced_context_tools_feed_deep_loop_experts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    str(cwd),
+                    "harness-registry",
+                    "--name",
+                    "analysis validation harness",
+                    "--subchain",
+                    "P6",
+                    "--command",
+                    "python -m pytest tests/test_analysis.py",
+                    "--metric",
+                    "weighted_score",
+                    "--failure-tag",
+                    "analysis",
+                    "--promotion-threshold",
+                    "0.85",
+                    "--write",
+                    "--format",
+                    "json",
+                ],
+                text=True,
+                capture_output=True,
+                encoding="utf-8",
+                check=True,
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    str(cwd),
+                    "hypothesis-portfolio",
+                    "--problem",
+                    "Analysis gate passes despite an unresolved quantitative assumption.",
+                    "--subchain",
+                    "P6",
+                    "--write",
+                    "--format",
+                    "json",
+                ],
+                text=True,
+                capture_output=True,
+                encoding="utf-8",
+                check=True,
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "research_loop.py"),
+                    "--cwd",
+                    str(cwd),
+                    "math-abstraction",
+                    "--problem",
+                    "Show that the reported metric is invariant under a target normalization.",
+                    "--subchain",
+                    "P6",
+                    "--definition",
+                    "Let metric m be computed after normalization n.",
+                    "--assumption",
+                    "The normalization is monotone.",
+                    "--write",
+                    "--format",
+                    "json",
+                ],
+                text=True,
+                capture_output=True,
+                encoding="utf-8",
+                check=True,
+            )
+
+            state = minimal_state("ANALYSIS")
+            passport = minimal_passport()
+            payload = research_loop.build_deep_loop_payload(
+                deep_args(
+                    intent="analyze quantitative result and prepare figure",
+                    current_subchain="P6",
+                    gate_result="fail",
+                    result_summary="The analysis is blocked by a quantitative assumption.",
+                    gate_issue=["Need registered harness and math verification before writing."],
+                    artifact=["outputs/figures/main.png"],
+                    round_index=1,
+                ),
+                cwd,
+                state,
+                passport,
+            )
+
+            context = payload["mechanistic_context"]
+            self.assertEqual(context["summary"]["harnesses"], 1)
+            self.assertEqual(context["summary"]["hypothesis_portfolios"], 1)
+            self.assertEqual(context["summary"]["math_abstractions"], 1)
+            prompt = payload["handoff_package"]["next_work_prompt"]
+            self.assertIn("Registered Harness Surfaces", prompt)
+            self.assertIn("Hypothesis Portfolio Context", prompt)
+            self.assertIn("Math Abstraction Context", prompt)
+            expert_ids = {expert["expert_id"] for expert in payload["research_council"]["experts"]}
+            self.assertIn("harness_evaluator_architect", expert_ids)
+            self.assertIn("hypothesis_tournament_moderator", expert_ids)
+            self.assertIn("mathematical_abstraction_reviewer", expert_ids)
+
+    def test_code_builder_plan_is_scratch_only_and_mcp_mapped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            state = minimal_state("EXECUTION")
+            passport = minimal_passport()
+            args = argparse.Namespace(
+                cwd=str(cwd),
+                id="builder-test",
+                goal="Repair the failing data parser.",
+                stage=None,
+                subchain="P5",
+                harness_id=[],
+                candidate=["minimal parser fix", "adapter compatibility fix"],
+                max_variants=2,
+                format="json",
+                write=False,
+            )
+            research_loop.init_project(cwd, "EXECUTION", init_storage=True)
+            payload = research_loop.build_code_builder_payload(args, cwd, state, passport)
+
+            self.assertFalse(payload["promotion_gate"]["core_files_mutable"])
+            self.assertIn("research-loop-code-builder", payload["scratch_dir"])
+            self.assertEqual(len(payload["variants"]), 2)
+
+            command = mcp_server.tool_to_cli(
+                "research_code_builder",
+                {
+                    "cwd": "C:\\project",
+                    "goal": "Repair parser",
+                    "harness_ids": ["h1"],
+                    "candidates": ["minimal fix"],
+                    "max_variants": 1,
+                    "format": "json",
+                    "write": True,
+                },
+            )
+            self.assertEqual(command[:3], ["--cwd", "C:\\project", "code-builder"])
+            self.assertIn("--harness-id", command)
+            self.assertIn("--write", command)
 
     def test_ophi_cycle_records_mechanistic_layers(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -643,6 +974,28 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertEqual(payload["subchain_agent"]["agent_id"], "p6_analysis_figure_head_agent")
         self.assertEqual(payload["gate_vector"]["artifact_readiness"]["level"], "high")
         self.assertEqual(payload["gate"]["decision"], "escalate_problem_loop")
+        self.assertEqual(payload["continuation_contract"]["target_subchains"], ["P10"])
+
+    def test_p6_failed_high_risk_gate_escalates_to_problem_loop(self):
+        payload = research_loop.build_deep_loop_payload(
+            deep_args(
+                intent="困难问题未解决，应自动开启专家链路",
+                current_subchain="P6",
+                next_subchain=["P7"],
+                gate_result="fail",
+                gate_issue=["analysis is blocked and no root cause is known"],
+                result_summary="analysis failed repeatedly without verified root cause",
+                artifact=[],
+            ),
+            ROOT,
+            minimal_state("ANALYSIS"),
+            minimal_passport(),
+        )
+
+        self.assertEqual(payload["research_council"]["route_recommendation"]["action"], "escalate_problem_loop")
+        self.assertEqual(payload["adversarial_gate"]["premature_convergence_risk"], "high")
+        self.assertEqual(payload["gate"]["decision"], "escalate_problem_loop")
+        self.assertEqual(payload["arbiter"]["decision_source"], "expert_escalation_override")
         self.assertEqual(payload["continuation_contract"]["target_subchains"], ["P10"])
 
     def test_p5_pass_with_run_log_routes_next_without_expert_escalation(self):

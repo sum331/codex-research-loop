@@ -7,6 +7,9 @@ It provides:
 
 - Project-local research state under `.research-loop/`.
 - Natural-language prompt normalization and multi-path task routing.
+- One-shot `autopilot` that turns a rough goal into a P1-P10 execution chain,
+  primes control-plane records, and can start watchdog-supervised unattended
+  execution without repeated confirmation.
 - Adaptive research storage policies for existing and new projects.
 - Content ingest for articles, local files, and standardized data packages.
 - Source lookup, Zotero/BibTeX/CSL-JSON export, and llm-wiki handoff support.
@@ -21,6 +24,9 @@ It provides:
 - OPHIS-style mechanistic research memory: observations, phenomena,
   falsifiable hypotheses, interventions, effect gates, mechanism candidates,
   and negative results.
+- Advanced research nodes for stronger gates: reusable harness registries,
+  ranked hypothesis portfolios, scratch-only evaluator-backed code-builder
+  plans, math abstraction chains, and monitored experiment-runner reports.
 - Isolated problem-loop diagnosis with generated expert panels and gated
   promotion before core project edits.
 - Watchdog-supervised unattended validation/test/repair cycles connected to
@@ -99,7 +105,37 @@ configuration still complete.
 
 ```powershell
 python scripts/research_loop.py --cwd "D:\Loop\scratch\research-loop-smoke" auto-loop-watchdog --goal "smoke test" --skip-validate --skip-deep-loop --test-command "cmd /c exit /b 0" --format json
+python scripts/research_loop.py --cwd "D:\Loop\scratch\autopilot-smoke" autopilot --goal "Complete this research task end-to-end and produce the final report" --prime --write --format json
 ```
+
+## One-Shot Autopilot
+
+Use `autopilot` when the user gives a broad or incomplete goal and expects a
+usable result instead of repeated clarification. It normalizes the request,
+builds a routed P1-P10 chain, emits concrete trigger actions, and can prime
+default harnesses, hypothesis portfolios, code-builder plans, math abstractions,
+and experiment-runner reports before unattended execution starts.
+
+```powershell
+python scripts/research_loop.py --cwd "D:\Project" autopilot `
+  --goal "Complete this research question and produce a reliable final report" `
+  --prime `
+  --write `
+  --format json
+
+python scripts/research_loop.py --cwd "D:\Project" autopilot `
+  --goal "Repair the analysis code, validate the math, and write the final report" `
+  --test-command "python -m pytest -q" `
+  --prime `
+  --start-watchdog `
+  --external-supervisor none `
+  --format json
+```
+
+The generated plan records a `watchdog_command`, a chain sequence, and
+auto-start actions. Human confirmation is reserved for credentials, restricted
+data, payment, explicit approval boundaries, or irreversible external
+publication.
 
 ## OPHIS Mechanistic Layer
 
@@ -155,6 +191,59 @@ review, and future routing; they do not mutate core project files directly.
   warnings so a later subchain does not repeat a failed intervention.
 - Research Council adds `mechanism_memory_auditor` whenever mechanism memory is
   relevant, and Adversarial Gate adds killer tests for pending effect gates.
+
+## Advanced Research Nodes
+
+Use these commands when a project needs deeper analysis, better divergence,
+more stable code construction, or mathematical abstraction before a gate can
+pass:
+
+```powershell
+python scripts/research_loop.py --cwd "D:\Project" harness-registry `
+  --name "analysis harness" `
+  --subchain P6 `
+  --command "python -m pytest tests/test_analysis.py" `
+  --metric weighted_score `
+  --failure-tag analysis `
+  --promotion-threshold 0.85 `
+  --write
+
+python scripts/research_loop.py --cwd "D:\Project" hypothesis-portfolio `
+  --problem "analysis passes smoke tests but fails robustness review" `
+  --subchain P6 `
+  --write
+
+python scripts/research_loop.py --cwd "D:\Project" code-builder `
+  --goal "repair the failing parser" `
+  --subchain P5 `
+  --harness-id harness-id `
+  --candidate "minimal regression-tested patch" `
+  --write
+
+python scripts/research_loop.py --cwd "D:\Project" math-abstraction `
+  --problem "prove the reported metric is invariant under target normalization" `
+  --subchain P6 `
+  --definition "metric m is computed after normalization n" `
+  --assumption "n is monotone" `
+  --write
+
+python scripts/research_loop.py --cwd "D:\Project" experiment-runner `
+  --name "analysis smoke" `
+  --subchain P6 `
+  --command "python -m pytest tests/test_analysis.py -q" `
+  --retry 1 `
+  --execute `
+  --write `
+  --format json
+```
+
+Records are stored under `.research-loop/harnesses/`,
+`.research-loop/hypothesis-portfolios/`, `.research-loop/code-builders/`, and
+`.research-loop/math-abstractions/`; experiment reports are stored under
+`.research-loop/experiment-runs/`. `deep-loop` reads them automatically and adds
+corresponding dynamic experts, gate-vector signals, adversarial killer tests,
+and continuation prompt sections. These nodes are control-plane records: they
+do not mutate core project files.
 
 ## Research Council And Adversarial Gate
 

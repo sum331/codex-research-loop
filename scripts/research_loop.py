@@ -18,6 +18,7 @@ import io
 import json
 import mimetypes
 import os
+import platform
 import re
 import signal
 import shutil
@@ -34,7 +35,7 @@ from typing import Any
 
 
 LOOP_DIR = ".research-loop"
-SCHEMA_VERSION = "0.9.6"
+SCHEMA_VERSION = "0.9.8"
 PAYLOAD_LIMIT = 24000
 INVENTORY_LIMIT = int(os.environ.get("RESEARCH_LOOP_INVENTORY_LIMIT", "1200"))
 INVENTORY_SECONDS = float(os.environ.get("RESEARCH_LOOP_INVENTORY_SECONDS", "2.0"))
@@ -603,6 +604,12 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "name": "auto-loop-runner",
         "use_for": "Run validation/test/repair rounds unattended, record failures, and route failed gates into the next loop round.",
     },
+    "tool:autopilot-goal-runner": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "autopilot-goal-runner",
+        "use_for": "Accept one rough natural-language goal, normalize it, build a complete P1-P10 execution sequence, prime trigger nodes, and hand off to auto-loop-watchdog without repeated user confirmation.",
+    },
     "tool:deep-loop-router": {
         "kind": "built-in-tool",
         "status": "available",
@@ -657,6 +664,30 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "name": "claim-evidence-verifier",
         "use_for": "Deterministic claim-to-evidence structure checks over claim ids, evidence ids, source, locator, status, and verification verdicts.",
     },
+    "tool:harness-registry": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "harness-registry",
+        "use_for": "Persist reusable validation surfaces: commands, artifacts, rubrics, metrics, failure tags, resource ceilings, and promotion thresholds for deep-loop gates.",
+    },
+    "tool:evolutionary-code-builder": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "evolutionary-code-builder",
+        "use_for": "Plan evaluator-backed code variants in scratch space, bind them to registered harnesses, and promote only a champion that passes gate evidence.",
+    },
+    "tool:math-abstraction-chain": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "math-abstraction-chain",
+        "use_for": "Turn natural-language mathematical or quantitative blockers into definitions, assumptions, subgoals, lemma graphs, and verifier-backed proof or computation plans.",
+    },
+    "tool:experiment-runner-plus": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "experiment-runner-plus",
+        "use_for": "Run or plan local experiments with environment fingerprints, monitored retries, resource limits, artifact checks, harness-compatible reports, and deep-loop-ready failure tags.",
+    },
     "missing:repository-publisher": {
         "kind": "missing-tool",
         "status": "missing",
@@ -669,13 +700,6 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "status": "missing",
         "name": "research-kg-builder",
         "use_for": "Project knowledge graph over papers, claims, methods, datasets, runs, figures, and decisions.",
-        "priority": "P1",
-    },
-    "missing:experiment-runner-plus": {
-        "kind": "missing-tool",
-        "status": "missing",
-        "name": "experiment-runner-plus",
-        "use_for": "Environment hashes, resource logging, retries, batch jobs, and local/remote run normalization.",
         "priority": "P1",
     },
     "missing:ethics-compliance-gate": {
@@ -703,7 +727,7 @@ SUBCHAIN_RULES: list[dict[str, Any]] = [
         "required_inputs": ["project direction or broad topic"],
         "outputs": ["research question brief", "scope boundaries", "open questions"],
         "gates": ["active research question exists before later-stage routing"],
-        "capability_ids": ["skill:research-loop", "tool:prompt-normalizer", "tool:storage-policy", "skill:academic-research-suite", "skill:nature-academic-search"],
+        "capability_ids": ["skill:research-loop", "tool:autopilot-goal-runner", "tool:prompt-normalizer", "tool:storage-policy", "skill:academic-research-suite", "skill:nature-academic-search"],
         "missing_capability_ids": [],
         "default_depth": "L4",
         "feedback_on_fail": ["P1"],
@@ -729,7 +753,7 @@ SUBCHAIN_RULES: list[dict[str, Any]] = [
         "required_inputs": ["claims", "evidence records", "counterevidence if available"],
         "outputs": ["claim map", "novelty audit", "claim evidence links"],
         "gates": ["claims have evidence ids", "unsupported claims blocked or deferred"],
-        "capability_ids": ["tool:claim-evidence-verifier", "skill:academic-research-suite", "skill:nature-citation", "skill:nature-reviewer"],
+        "capability_ids": ["tool:claim-evidence-verifier", "tool:hypothesis-portfolio", "skill:academic-research-suite", "skill:nature-citation", "skill:nature-reviewer"],
         "missing_capability_ids": [],
         "default_depth": "L5",
         "feedback_on_fail": ["P2", "P3", "P7"],
@@ -742,7 +766,7 @@ SUBCHAIN_RULES: list[dict[str, Any]] = [
         "required_inputs": ["research question", "method candidates", "data constraints"],
         "outputs": ["protocol", "experiment plan", "statistics plan", "data management plan"],
         "gates": ["method reproducibility checked", "data sensitivity handled", "compliance flags resolved"],
-        "capability_ids": ["skill:academic-research-suite", "skill:nature-data", "skill:prototype"],
+        "capability_ids": ["tool:hypothesis-portfolio", "tool:math-abstraction-chain", "skill:academic-research-suite", "skill:nature-data", "skill:prototype"],
         "missing_capability_ids": ["missing:ethics-compliance-gate"],
         "default_depth": "L5",
         "feedback_on_fail": ["P1", "P4"],
@@ -755,8 +779,8 @@ SUBCHAIN_RULES: list[dict[str, Any]] = [
         "required_inputs": ["code, script, dataset, command, or notebook"],
         "outputs": ["run logs", "failure logs", "datasets", "code artifacts", "provenance records"],
         "gates": ["commands wrapped", "failures recorded", "environment or run context captured"],
-        "capability_ids": ["skill:research-loop", "tool:storage-policy", "tool:content-ingest", "tool:auto-loop-runner", "skill:diagnose", "skill:tdd", "plugin:github", "plugin:hugging-face"],
-        "missing_capability_ids": ["missing:experiment-runner-plus"],
+        "capability_ids": ["skill:research-loop", "tool:storage-policy", "tool:content-ingest", "tool:harness-registry", "tool:experiment-runner-plus", "tool:evolutionary-code-builder", "tool:auto-loop-runner", "skill:diagnose", "skill:tdd", "plugin:github", "plugin:hugging-face"],
+        "missing_capability_ids": [],
         "default_depth": "L3",
         "feedback_on_fail": ["P5", "P4"],
     },
@@ -768,7 +792,7 @@ SUBCHAIN_RULES: list[dict[str, Any]] = [
         "required_inputs": ["results, data, tables, run logs, or analysis scripts"],
         "outputs": ["analysis report", "tables", "figures", "figure legends"],
         "gates": ["statistics and uncertainty checked", "figures trace to data/results"],
-        "capability_ids": ["skill:academic-research-suite", "skill:nature-figure", "skill:spreadsheets", "skill:pdf"],
+        "capability_ids": ["tool:harness-registry", "tool:experiment-runner-plus", "tool:math-abstraction-chain", "skill:academic-research-suite", "skill:nature-figure", "skill:spreadsheets", "skill:pdf"],
         "missing_capability_ids": [],
         "default_depth": "L4",
         "feedback_on_fail": ["P5", "P6", "P3"],
@@ -820,7 +844,7 @@ SUBCHAIN_RULES: list[dict[str, Any]] = [
         "required_inputs": ["problem statement, current project state, available logs, and optional test commands"],
         "outputs": ["problem context snapshot", "expert panel", "isolated lab artifacts", "test logs", "adjustment plan", "promotion gate"],
         "gates": ["lab isolation enforced", "expert threshold met", "tests pass before promotion", "core edits require promotion"],
-        "capability_ids": ["tool:problem-loop", "tool:storage-policy", "tool:auto-loop-runner", "skill:diagnose", "skill:tdd", "skill:research-loop"],
+        "capability_ids": ["tool:problem-loop", "tool:harness-registry", "tool:hypothesis-portfolio", "tool:experiment-runner-plus", "tool:evolutionary-code-builder", "tool:math-abstraction-chain", "tool:storage-policy", "tool:auto-loop-runner", "skill:diagnose", "skill:tdd", "skill:research-loop"],
         "missing_capability_ids": [],
         "default_depth": "L6",
         "feedback_on_fail": ["P10", "P5", "P8"],
@@ -861,7 +885,7 @@ TASK_KEYWORDS: dict[str, list[str]] = {
     "design_compliance": ["method", "protocol", "experiment design", "statistics plan", "ethics", "irb", "compliance", "\u65b9\u6cd5", "\u5b9e\u9a8c\u8bbe\u8ba1", "\u5408\u89c4"],
     "execution": ["run", "execute", "debug", "test", "train", "simulation", "notebook", "code", "\u8fd0\u884c", "\u4ee3\u7801", "\u8c03\u8bd5"],
     "analysis_visualization": ["analysis", "statistics", "figure", "plot", "table", "visual", "\u5206\u6790", "\u7edf\u8ba1", "\u56fe"],
-    "writing_formatting": ["write", "draft", "manuscript", "paper", "docx", "latex", "format", "\u5199", "\u8bba\u6587", "\u521d\u7a3f", "\u6392\u7248"],
+    "writing_formatting": ["write", "draft", "manuscript", "paper", "report", "result", "answer", "docx", "latex", "format", "\u5199", "\u8bba\u6587", "\u62a5\u544a", "\u7ed3\u679c", "\u7b54\u6848", "\u521d\u7a3f", "\u6392\u7248"],
     "review_revision": ["review", "reviewer", "comment", "response", "rebuttal", "revise", "revision", "\u5ba1\u7a3f", "\u4fee\u8ba2", "\u8fd4\u4fee"],
     "submission_release": ["submit", "submission", "publish", "release", "zenodo", "osf", "slides", "ppt", "patent", "\u6295\u7a3f", "\u53d1\u5e03", "\u4e13\u5229"],
 }
@@ -905,6 +929,103 @@ RESEARCH_EXPERIMENT_KEYWORDS = [
     "\u6d88\u878d",
     "\u968f\u673a\u79cd\u5b50",
     "\u53ef\u590d\u73b0",
+]
+
+ONE_SHOT_GOAL_KEYWORDS = [
+    "complete",
+    "finish",
+    "end-to-end",
+    "full workflow",
+    "from scratch",
+    "one shot",
+    "unattended",
+    "autopilot",
+    "deliver result",
+    "final result",
+    "full report",
+    "solve this",
+    "\u5b8c\u6574",
+    "\u5168\u6d41\u7a0b",
+    "\u65e0\u4eba\u76d1\u7ba1",
+    "\u4e0d\u9700\u8981\u53cd\u590d",
+    "\u76f4\u63a5\u7ed9\u51fa\u7ed3\u679c",
+    "\u5b8c\u6210\u8bfe\u9898",
+    "\u5b8c\u6210\u9879\u76ee",
+]
+
+CODE_BUILDING_KEYWORDS = [
+    "code",
+    "implementation",
+    "build",
+    "repair",
+    "patch",
+    "test",
+    "pytest",
+    "pipeline",
+    "script",
+    "notebook",
+    "\u4ee3\u7801",
+    "\u6784\u5efa",
+    "\u4fee\u590d",
+    "\u6d4b\u8bd5",
+    "\u811a\u672c",
+]
+
+MATH_REASONING_KEYWORDS = [
+    "math",
+    "mathematical",
+    "proof",
+    "prove",
+    "derive",
+    "equation",
+    "formula",
+    "lemma",
+    "theorem",
+    "invariant",
+    "optimization",
+    "statistical",
+    "uncertainty",
+    "\u6570\u5b66",
+    "\u8bc1\u660e",
+    "\u63a8\u5bfc",
+    "\u516c\u5f0f",
+    "\u7edf\u8ba1",
+    "\u4e0d\u786e\u5b9a\u6027",
+]
+
+DIVERGENT_REASONING_KEYWORDS = [
+    "hypothesis",
+    "alternative",
+    "counterfactual",
+    "root cause",
+    "mechanism",
+    "why",
+    "novelty",
+    "\u5047\u8bbe",
+    "\u53d1\u6563",
+    "\u53cd\u4f8b",
+    "\u672c\u8d28",
+    "\u673a\u5236",
+    "\u6839\u56e0",
+    "\u521b\u65b0",
+]
+
+EXPERT_ESCALATION_KEYWORDS = [
+    "hard",
+    "difficult",
+    "blocked",
+    "stuck",
+    "unclear",
+    "review",
+    "expert",
+    "gate",
+    "adversarial",
+    "\u56f0\u96be",
+    "\u5361\u4f4f",
+    "\u5ba1\u67e5",
+    "\u4e13\u5bb6",
+    "\u9600\u95e8",
+    "\u5bf9\u6297",
 ]
 
 EXECUTION_PROFILE_DEFS: dict[str, dict[str, Any]] = {
@@ -1106,6 +1227,12 @@ SHORT_MUTATING_COMMANDS = {
     "intervention",
     "mechanism",
     "ophi-cycle",
+    "harness-registry",
+    "hypothesis-portfolio",
+    "code-builder",
+    "math-abstraction",
+    "experiment-runner",
+    "autopilot",
     "checkpoint",
     "handoff",
 }
@@ -1341,6 +1468,38 @@ def effect_gates_root(cwd: Path) -> Path:
 
 def mechanisms_root(cwd: Path) -> Path:
     return loop_root(cwd) / "mechanisms"
+
+
+def harnesses_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "harnesses"
+
+
+def harness_registry_path(cwd: Path) -> Path:
+    return harnesses_root(cwd) / "harness-registry.json"
+
+
+def hypothesis_portfolios_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "hypothesis-portfolios"
+
+
+def hypothesis_portfolio_ledger_path(cwd: Path) -> Path:
+    return hypothesis_portfolios_root(cwd) / "portfolio-ledger.jsonl"
+
+
+def code_builders_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "code-builders"
+
+
+def math_abstractions_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "math-abstractions"
+
+
+def experiment_runs_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "experiment-runs"
+
+
+def autopilot_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "autopilot"
 
 
 def observation_ledger_path(cwd: Path) -> Path:
@@ -1990,6 +2149,12 @@ def init_project(cwd: Path, stage: str | None = None, storage_style: str | None 
         "interventions",
         "effect-gates",
         "mechanisms",
+        "harnesses",
+        "hypothesis-portfolios",
+        "code-builders",
+        "math-abstractions",
+        "experiment-runs",
+        "autopilot",
         "watchdog",
     ]:
         ensure_dir(root / child)
@@ -3151,6 +3316,199 @@ def graph_edges(subchains: list[dict[str, Any]], blockers: list[dict[str, str]])
     return edges
 
 
+def text_has_any(text: str, tokens: list[str]) -> bool:
+    return any(token.lower() in text for token in tokens)
+
+
+def one_shot_goal_requested(intent: str | None, task_type: str, passport: dict[str, Any]) -> bool:
+    text = task_signal_text(intent, passport)
+    targets = target_values(passport)
+    if text_has_any(text, ONE_SHOT_GOAL_KEYWORDS):
+        return True
+    if task_type in {"writing_formatting", "submission_release"} and (targets & {"paper", "manuscript", "report", "docx", "pdf"} or text_has_any(text, ["report", "result", "answer"])):
+        return True
+    return False
+
+
+def autopilot_chain_sequence(
+    task_type: str,
+    state: dict[str, Any],
+    passport: dict[str, Any],
+    subchains: list[dict[str, Any]],
+    intent: str | None = None,
+) -> list[str]:
+    selected_ids = [str(item.get("id")) for item in subchains if item.get("id")]
+    text = task_signal_text(intent, passport)
+    targets = target_values(passport)
+    complete = one_shot_goal_requested(intent, task_type, passport)
+
+    if task_type == "problem_resolution":
+        base = ["P10", "P5", "P6", "P8"]
+    elif task_type == "content_ingest":
+        base = ["P2", "P5", "P3", "P8"] if has_data_ingest_signal(text) else ["P2", "P3", "P7", "P8"]
+    elif task_type == "literature":
+        base = ["P2", "P3", "P7", "P8"]
+    elif task_type == "claim_synthesis":
+        base = ["P3", "P2", "P7", "P8"]
+    elif task_type == "design_compliance":
+        base = ["P4", "P5", "P6", "P3", "P8"]
+    elif task_type == "execution":
+        base = ["P5", "P6", "P3", "P7", "P8"]
+    elif task_type == "analysis_visualization":
+        base = ["P6", "P3", "P7", "P8"]
+    elif task_type == "writing_formatting":
+        base = ["P2", "P3", "P7", "P8"]
+    elif task_type == "review_revision":
+        base = ["P8", "P3", "P7", "P9"]
+    elif task_type == "submission_release":
+        base = ["P8", "P9"]
+    else:
+        base = ["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"]
+
+    if complete:
+        if task_type in {"intake", "scoping"}:
+            base = ["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"]
+        elif targets & {"paper", "manuscript", "report", "docx", "pdf"} or text_has_any(text, ["report", "paper", "manuscript", "\u62a5\u544a", "\u8bba\u6587"]):
+            for item in ["P2", "P3", "P7", "P8"]:
+                if item not in base:
+                    base.append(item)
+        if targets & {"slides", "ppt", "patent"} or text_has_any(text, ["submit", "publish", "release", "slides", "ppt", "patent"]):
+            append_unique(base, "P9")
+
+    if text_has_any(text, CODE_BUILDING_KEYWORDS) or material_kinds(passport) & {"code", "script", "notebook", "dataset", "data"}:
+        for item in ["P5", "P6"]:
+            append_unique(base, item)
+    if text_has_any(text, MATH_REASONING_KEYWORDS):
+        for item in ["P4", "P6"]:
+            append_unique(base, item)
+    if text_has_any(text, DIVERGENT_REASONING_KEYWORDS):
+        append_unique(base, "P3")
+    if text_has_any(text, EXPERT_ESCALATION_KEYWORDS):
+        append_unique(base, "P10")
+    for item in selected_ids:
+        append_unique(base, item)
+    if not base:
+        base = selected_ids or ["P1"]
+    return [item for item in base if item in DEEP_LOOP_SUBCHAIN_BY_ID or any(rule.get("id") == item for rule in SUBCHAIN_RULES)]
+
+
+def command_args(cwd: Path, *parts: Any) -> list[str]:
+    return [sys.executable, str(Path(__file__).resolve()), "--cwd", psafe(cwd), *[str(part) for part in parts if part is not None]]
+
+
+def trigger_action(
+    *,
+    node_id: str,
+    subchain: str,
+    action: str,
+    reason: str,
+    mcp_tool: str | None = None,
+    command: list[str] | None = None,
+    auto_start: bool = True,
+    writes_control_plane: bool = False,
+    requires_human: bool = False,
+) -> dict[str, Any]:
+    return {
+        "id": node_id,
+        "subchain": subchain,
+        "action": action,
+        "reason": reason,
+        "mcp_tool": mcp_tool,
+        "command": command,
+        "auto_start": bool(auto_start),
+        "writes_control_plane": bool(writes_control_plane),
+        "requires_human": bool(requires_human),
+    }
+
+
+def build_chain_trigger_plan(
+    cwd: Path,
+    state: dict[str, Any],
+    passport: dict[str, Any],
+    *,
+    intent: str | None,
+    task_type: str,
+    depth: str,
+    subchains: list[dict[str, Any]],
+    test_commands: list[str] | None = None,
+) -> dict[str, Any]:
+    text = task_signal_text(intent, passport)
+    sequence = autopilot_chain_sequence(task_type, state, passport, subchains, intent)
+    test_commands = list(test_commands or [])
+    actions: list[dict[str, Any]] = []
+    needs_math = text_has_any(text, MATH_REASONING_KEYWORDS) or task_type in {"design_compliance", "analysis_visualization"}
+    needs_code = text_has_any(text, CODE_BUILDING_KEYWORDS) or task_type == "execution"
+    needs_divergence = text_has_any(text, DIVERGENT_REASONING_KEYWORDS) or depth in {"L5", "L6"} or task_type in {"claim_synthesis", "review_revision", "problem_resolution"}
+    high_autonomy = one_shot_goal_requested(intent, task_type, passport)
+    for index, subchain_id in enumerate(sequence, start=1):
+        prefix = f"auto-{index:02d}-{subchain_id.lower()}"
+        if subchain_id == "P1":
+            actions.append(trigger_action(node_id=f"{prefix}-normalize", subchain=subchain_id, action="normalize rough goal and fill missing project slots", reason="P1 must convert a natural-language goal into a project-grounded working prompt.", mcp_tool="research_loop_normalize", command=command_args(cwd, "normalize", "--input", intent or "continue current project", "--format", "json", "--write"), writes_control_plane=True))
+            actions.append(trigger_action(node_id=f"{prefix}-storage", subchain=subchain_id, action="materialize storage policy", reason="A self-started project needs stable outer storage before ingest, experiments, or writing.", mcp_tool="research_storage_policy", command=command_args(cwd, "storage", "--style", "adaptive", "--init-dirs", "--write"), writes_control_plane=True))
+        elif subchain_id == "P2":
+            actions.append(trigger_action(node_id=f"{prefix}-source-hub", subchain=subchain_id, action="discover or ingest sources", reason="Literature/evidence work should start from source metadata and explicit material records.", mcp_tool="research_source_hub"))
+            actions.append(trigger_action(node_id=f"{prefix}-zotero", subchain=subchain_id, action="export Zotero/wiki bridge plan after source records exist", reason="Recorded literature should become reusable citation and knowledge-base material.", mcp_tool="research_zotero_bridge"))
+        elif subchain_id == "P3":
+            if needs_divergence:
+                actions.append(trigger_action(node_id=f"{prefix}-portfolio", subchain=subchain_id, action="build hypothesis portfolio", reason="Claim and contribution work should compare rival explanations before converging.", mcp_tool="research_hypothesis_portfolio", command=command_args(cwd, "hypothesis-portfolio", "--problem", intent or "current claim/contribution question", "--subchain", subchain_id, "--write", "--format", "json"), writes_control_plane=True))
+            actions.append(trigger_action(node_id=f"{prefix}-claim-evidence", subchain=subchain_id, action="run claim-evidence structure gate", reason="Claims must be connected to evidence before writing or review.", mcp_tool="research_claim_evidence_verify", command=command_args(cwd, "claim-evidence", "--format", "json", "--write"), writes_control_plane=True))
+        elif subchain_id == "P4":
+            actions.append(trigger_action(node_id=f"{prefix}-harness", subchain=subchain_id, action="register method/design validation harness", reason="Methods need explicit metrics, assumptions, and failure criteria before execution.", mcp_tool="research_harness_registry", command=command_args(cwd, "harness-registry", "--name", "method design gate", "--subchain", subchain_id, "--metric", "method_validity", "--failure-tag", "method", "--promotion-threshold", "0.85", "--write", "--format", "json"), writes_control_plane=True))
+            if needs_math:
+                actions.append(trigger_action(node_id=f"{prefix}-math", subchain=subchain_id, action="create math abstraction for assumptions and metrics", reason="Quantitative method claims need definitions, assumptions, subgoals, and verifier surfaces.", mcp_tool="research_math_abstraction", command=command_args(cwd, "math-abstraction", "--problem", intent or "current quantitative method question", "--subchain", subchain_id, "--write", "--format", "json"), writes_control_plane=True))
+        elif subchain_id == "P5":
+            actions.append(trigger_action(node_id=f"{prefix}-harness", subchain=subchain_id, action="register execution harness", reason="Code/data execution should be judged by commands, artifacts, metrics, and failure tags.", mcp_tool="research_harness_registry", command=command_args(cwd, "harness-registry", "--name", "execution gate", "--subchain", subchain_id, "--metric", "pass_rate", "--failure-tag", "execution", "--promotion-threshold", "0.85", "--write", "--format", "json"), writes_control_plane=True))
+            actions.append(trigger_action(node_id=f"{prefix}-experiment", subchain=subchain_id, action="plan or run experiment-runner-plus", reason="P5 should capture environment fingerprints, retries, resource bounds, logs, and harness-compatible reports.", mcp_tool="research_experiment_runner", command=command_args(cwd, "experiment-runner", "--name", "execution validation", "--subchain", subchain_id, "--format", "json", "--write"), writes_control_plane=True))
+            if needs_code:
+                actions.append(trigger_action(node_id=f"{prefix}-code-builder", subchain=subchain_id, action="create scratch-only code-builder variants", reason="Implementation work should happen as evaluator-backed scratch variants before core promotion.", mcp_tool="research_code_builder", command=command_args(cwd, "code-builder", "--goal", intent or "current implementation goal", "--subchain", subchain_id, "--write", "--format", "json"), writes_control_plane=True))
+        elif subchain_id == "P6":
+            actions.append(trigger_action(node_id=f"{prefix}-analysis-harness", subchain=subchain_id, action="register analysis/figure/statistics harness", reason="Analysis outputs need metric, uncertainty, figure/table, and artifact-readback gates.", mcp_tool="research_harness_registry", command=command_args(cwd, "harness-registry", "--name", "analysis gate", "--subchain", subchain_id, "--metric", "analysis_validity", "--failure-tag", "analysis", "--promotion-threshold", "0.9", "--write", "--format", "json"), writes_control_plane=True))
+            actions.append(trigger_action(node_id=f"{prefix}-experiment", subchain=subchain_id, action="plan experiment-runner-plus for analysis recomputation", reason="P6 should recompute or inspect metrics/figures through reproducible commands where possible.", mcp_tool="research_experiment_runner", command=command_args(cwd, "experiment-runner", "--name", "analysis validation", "--subchain", subchain_id, "--format", "json", "--write"), writes_control_plane=True))
+            if needs_math:
+                actions.append(trigger_action(node_id=f"{prefix}-math", subchain=subchain_id, action="create math abstraction for quantitative interpretation", reason="Statistics and quantitative claims need explicit assumptions and verifier plans.", mcp_tool="research_math_abstraction", command=command_args(cwd, "math-abstraction", "--problem", intent or "current analysis question", "--subchain", subchain_id, "--write", "--format", "json"), writes_control_plane=True))
+        elif subchain_id == "P7":
+            actions.append(trigger_action(node_id=f"{prefix}-claim-evidence", subchain=subchain_id, action="block unsupported claims before drafting", reason="Writing should consume verified claims, not create unsupported claims late.", mcp_tool="research_claim_evidence_verify", command=command_args(cwd, "claim-evidence", "--format", "json", "--write"), writes_control_plane=True))
+            actions.append(trigger_action(node_id=f"{prefix}-writer", subchain=subchain_id, action="route to writing/citation/document skills", reason="Deliverable writing should follow evidence gates and target format constraints.", mcp_tool=None))
+        elif subchain_id == "P8":
+            actions.append(trigger_action(node_id=f"{prefix}-deep-review", subchain=subchain_id, action="run research council and adversarial gate", reason="Review/revision must actively attack unsupported claims, weak methods, and premature convergence.", mcp_tool="research_loop_deep_loop", command=command_args(cwd, "deep-loop", "--intent", intent or "review current project", "--current-subchain", subchain_id, "--gate-result", "auto", "--write", "--format", "json"), writes_control_plane=True))
+        elif subchain_id == "P9":
+            actions.append(trigger_action(node_id=f"{prefix}-release", subchain=subchain_id, action="prepare submission/release/reuse package", reason="Final outputs need provenance, no absolute-path residue, and data/code availability checks.", mcp_tool=None))
+        elif subchain_id == "P10":
+            actions.append(trigger_action(node_id=f"{prefix}-problem", subchain=subchain_id, action="start isolated problem-loop", reason="Difficult, blocked, repeated, or high-risk work should enter isolated expert diagnosis before core mutation.", mcp_tool="research_problem_loop", command=command_args(cwd, "problem-loop", "--problem", intent or "current project blocker", "--write", "--format", "json"), writes_control_plane=True))
+            if needs_divergence:
+                actions.append(trigger_action(node_id=f"{prefix}-portfolio", subchain=subchain_id, action="build blocker hypothesis portfolio", reason="P10 needs rival root-cause hypotheses before adjustment planning.", mcp_tool="research_hypothesis_portfolio", command=command_args(cwd, "hypothesis-portfolio", "--problem", intent or "current blocker", "--subchain", subchain_id, "--write", "--format", "json"), writes_control_plane=True))
+    watchdog_command = command_args(
+        cwd,
+        "auto-loop-watchdog",
+        "--goal",
+        intent or "complete the current research objective",
+        "--current-subchain",
+        sequence[0] if sequence else "P1",
+        "--route-depth-budget",
+        max(3, len(sequence) + 2),
+        "--max-rounds",
+        8 if high_autonomy else 5,
+        "--max-resumes",
+        8 if high_autonomy else 3,
+        "--resume-extra-rounds",
+        6 if high_autonomy else 4,
+        "--resume-extra-route-depth",
+        max(3, len(sequence)),
+    )
+    for command in test_commands:
+        watchdog_command.extend(["--test-command", command])
+    return {
+        "mode": "one_shot_autopilot" if high_autonomy else "routed_autopilot",
+        "sequence": sequence,
+        "first_subchain": sequence[0] if sequence else None,
+        "actions": actions,
+        "watchdog_command": watchdog_command,
+        "auto_route_next": True,
+        "no_user_confirmation_needed": not deep_loop_human_pause_needed(text, passport.get("profile") or {}),
+        "human_confirmation_policy": "Only pause for credentials, privacy/restricted data, payment, explicit human approval, or irreversible external publication.",
+    }
+
+
 def capability_map_for_subchains(subchains: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: set[str] = set()
     rows: list[dict[str, Any]] = []
@@ -3604,6 +3962,15 @@ def build_route_graph(cwd: Path, state: dict[str, Any], passport: dict[str, Any]
     subchains = selected_subchains(task_type, state, passport, blockers, route_intent)
     for chain in subchains:
         chain["depth"] = merge_depth(chain.get("depth", "L0"), depth if DEPTH_ORDER.get(depth, 0) >= 5 and chain["id"] in {"P3", "P7", "P8", "P9"} else chain.get("depth", "L0"))
+    trigger_plan = build_chain_trigger_plan(
+        cwd,
+        state,
+        passport,
+        intent=route_intent,
+        task_type=task_type,
+        depth=depth,
+        subchains=subchains,
+    )
     return {
         "timestamp": utc_now(),
         "project_root": psafe(cwd),
@@ -3622,6 +3989,7 @@ def build_route_graph(cwd: Path, state: dict[str, Any], passport: dict[str, Any]
         "warnings": warnings,
         "shared_nodes": SHARED_ROUTE_NODES,
         "subchains": subchains,
+        "autopilot_trigger_plan": trigger_plan,
         "edges": graph_edges(subchains, blockers),
         "recommendations": route_recommendations(cwd, state, passport, route_intent),
         "capability_map": capability_map_for_subchains(subchains),
@@ -3920,6 +4288,20 @@ def route_markdown(cwd: Path, state: dict[str, Any], passport: dict[str, Any], i
         lines.append(f"  - Inputs: {', '.join(chain.get('required_inputs') or [])}")
         lines.append(f"  - Outputs: {', '.join(chain.get('outputs') or [])}")
         lines.append(f"  - Gates: {', '.join(chain.get('gates') or [])}")
+
+    autopilot = graph.get("autopilot_trigger_plan") or {}
+    lines.extend(["", "## Autopilot Trigger Plan", ""])
+    lines.append(f"- Mode: `{autopilot.get('mode') or 'routed_autopilot'}`")
+    lines.append(f"- Sequence: {' -> '.join(autopilot.get('sequence') or []) or '(not set)'}")
+    lines.append(f"- No user confirmation needed: `{bool(autopilot.get('no_user_confirmation_needed'))}`")
+    lines.append(f"- Human confirmation policy: {autopilot.get('human_confirmation_policy')}")
+    if autopilot.get("watchdog_command"):
+        lines.append("- Watchdog command:")
+        lines.append(f"  - `{json.dumps(autopilot.get('watchdog_command'), ensure_ascii=True)}`")
+    if autopilot.get("actions"):
+        lines.append("- Auto-start trigger nodes:")
+        for item in autopilot.get("actions")[:20]:
+            lines.append(f"  - `{item.get('subchain')}` {item.get('action')} via `{item.get('mcp_tool') or 'domain-skill'}`: {item.get('reason')}")
 
     lines.extend(["", "## Gate Status", ""])
     if blockers:
@@ -4467,6 +4849,11 @@ def build_gate_vector(
     rejected_mechanisms = list(mechanism_context.get("rejected_mechanisms") or [])
     negative_results = list(mechanism_context.get("negative_results") or [])
     candidate_mechanisms = list(mechanism_context.get("candidate_mechanisms") or [])
+    registered_harnesses = list(mechanism_context.get("harnesses") or [])
+    hypothesis_portfolios = list(mechanism_context.get("hypothesis_portfolios") or [])
+    code_builder_reports = list(mechanism_context.get("code_builders") or [])
+    math_abstractions = list(mechanism_context.get("math_abstractions") or [])
+    experiment_runs = list(mechanism_context.get("experiment_runs") or [])
     issue_text = "\n".join(
         manual_issues
         + [str(item.get("text") or "") for item in blockers]
@@ -4514,6 +4901,12 @@ def build_gate_vector(
         method_signals.append("This subchain depends on valid method, metric, or statistical design.")
     if any(token in issue_text for token in method_tokens):
         method_signals.append("Method, metric, statistics, or compliance signal appears in gate text.")
+    if registered_harnesses and current_id in {"P4", "P5", "P6", "P10"}:
+        method_signals.append("Registered harness surfaces exist and should be used to validate this method/execution gate.")
+    if experiment_runs and current_id in {"P5", "P6", "P10"}:
+        method_signals.append("Experiment-runner-plus records exist and should be tied to method, metric, retry, and environment assumptions.")
+    if math_abstractions and current_id in {"P4", "P6", "P10"}:
+        method_signals.append("A math abstraction chain exists; method assumptions should map to definitions, subgoals, and verifiers.")
     method_level = "high" if gate_result == "block" and method_signals else ("medium" if method_signals else "low")
 
     analysis_signals: list[str] = []
@@ -4521,6 +4914,10 @@ def build_gate_vector(
         analysis_signals.append("This subchain must validate analysis, figures, interpretation, or review integrity.")
     if any(token in issue_text for token in analysis_tokens):
         analysis_signals.append("Analysis, figure, or result signal appears in gate text.")
+    if math_abstractions and current_id in {"P6", "P8"}:
+        analysis_signals.append("Quantitative or mathematical abstraction context should be checked before interpreting results.")
+    if experiment_runs and current_id in {"P6", "P8"}:
+        analysis_signals.append("Experiment-runner-plus reports should be inspected before interpreting analysis or review results.")
     analysis_level = "high" if current_id == "P6" and artifact_missing and summary_missing else ("medium" if analysis_signals else "low")
 
     novelty_signals: list[str] = []
@@ -4528,6 +4925,8 @@ def build_gate_vector(
         novelty_signals.append("This subchain should check contribution, alternative explanations, or review novelty.")
     if any(token in issue_text for token in ["novelty", "contribution", "alternative", "创新", "贡献", "反例"]):
         novelty_signals.append("Novelty or alternative-explanation signal appears in gate text.")
+    if hypothesis_portfolios:
+        novelty_signals.append("A hypothesis portfolio exists; the next review should compare alternatives instead of converging on one plan.")
     novelty_level = "medium" if novelty_signals else "low"
 
     uncertainty_signals: list[str] = []
@@ -4539,6 +4938,10 @@ def build_gate_vector(
         uncertainty_signals.append("OPHIS pending effect gate requires validation before route transition.")
     if candidate_mechanisms:
         uncertainty_signals.append("Candidate mechanism memory still needs validation or scoping.")
+    if hypothesis_portfolios and (summary_missing or gate_result in {"fail", "block"}):
+        uncertainty_signals.append("Hypothesis portfolio alternatives remain unresolved for this gate.")
+    if math_abstractions and gate_result in {"fail", "block", "auto"} and current_id in {"P4", "P6", "P10"}:
+        uncertainty_signals.append("Mathematical abstraction or verifier chain is available and should be consulted for this quantitative blocker.")
     uncertainty_level = "high" if uncertainty_signals and (summary_missing or gate_result in {"fail", "block"}) else ("medium" if uncertainty_signals else "low")
 
     failure_signals: list[str] = []
@@ -4552,6 +4955,10 @@ def build_gate_vector(
         failure_signals.append("OPHIS pending effect gate has not yet been validated.")
     if rejected_mechanisms or negative_results:
         failure_signals.append("Rejected or negative mechanism memory warns against repeating a failed intervention.")
+    if code_builder_reports and current_id in {"P5", "P10"}:
+        failure_signals.append("Evolutionary code-builder plans require scratch candidate evaluation before core-file promotion.")
+    if experiment_runs and any(str((item.get("summary") or {}).get("failures_by_tag") or "") not in {"", "{}"} or item.get("status") == "failed" for item in experiment_runs):
+        failure_signals.append("Experiment-runner-plus reports contain failure tags or failed status.")
     failure_level = "high" if gate_result in {"fail", "block"} else ("medium" if failure_signals else "low")
 
     handoff_signals: list[str] = []
@@ -4814,6 +5221,122 @@ def recent_jsonl_records(path: Path, limit: int = 8) -> list[dict[str, Any]]:
     return records[-limit:]
 
 
+def recent_json_records(root: Path, limit: int = 5, pattern: str = "*.json") -> list[dict[str, Any]]:
+    if not root.exists():
+        return []
+    records: list[dict[str, Any]] = []
+    try:
+        paths = sorted(root.glob(pattern), key=lambda item: item.stat().st_mtime)
+    except Exception:
+        return []
+    for path in paths[-limit:]:
+        data = read_json(path, None)
+        if isinstance(data, dict):
+            data.setdefault("path", psafe(path))
+            records.append(data)
+    return records
+
+
+def default_harness_registry(cwd: Path) -> dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "project_root": psafe(cwd),
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+        "harnesses": {},
+    }
+
+
+def load_harness_registry(cwd: Path) -> dict[str, Any]:
+    registry = read_json(harness_registry_path(cwd), None)
+    if not isinstance(registry, dict):
+        registry = default_harness_registry(cwd)
+    registry.setdefault("schema_version", SCHEMA_VERSION)
+    registry["schema_version"] = SCHEMA_VERSION
+    registry["project_root"] = psafe(cwd)
+    registry.setdefault("created_at", utc_now())
+    registry["updated_at"] = utc_now()
+    if not isinstance(registry.get("harnesses"), dict):
+        registry["harnesses"] = {}
+    return registry
+
+
+def save_harness_registry(cwd: Path, registry: dict[str, Any]) -> None:
+    registry["updated_at"] = utc_now()
+    write_json(harness_registry_path(cwd), registry)
+
+
+def registry_harnesses(registry: dict[str, Any]) -> list[dict[str, Any]]:
+    harnesses = registry.get("harnesses") if isinstance(registry.get("harnesses"), dict) else {}
+    return [dict(value) for value in harnesses.values() if isinstance(value, dict)]
+
+
+def record_scope_matches(record: dict[str, Any], subchain_id: str, stage: str | None = None) -> bool:
+    record_subchain = str(record.get("subchain") or record.get("owner_subchain") or "")
+    record_stage = str(record.get("stage") or "")
+    if record_subchain and record_subchain == subchain_id:
+        return True
+    if record_stage and stage and record_stage == stage:
+        return True
+    return not record_subchain and not record_stage
+
+
+def slim_advanced_record(record: dict[str, Any], limit: int = 420) -> dict[str, Any]:
+    keep = [
+        "id",
+        "type",
+        "status",
+        "stage",
+        "subchain",
+        "name",
+        "goal",
+        "problem",
+        "summary",
+        "path",
+        "commands",
+        "artifacts",
+        "rubrics",
+        "metrics",
+        "failure_tags",
+        "promotion_threshold",
+        "top_candidate",
+        "candidate_count",
+        "harness_ids",
+        "scratch_dir",
+        "targets",
+        "verifier_plan",
+        "run_directory",
+        "harness_report_path",
+        "summary",
+        "environment",
+    ]
+    item = {key: record.get(key) for key in keep if key in record and record.get(key) is not None}
+    for key, value in list(item.items()):
+        if isinstance(value, str) and len(value) > limit:
+            item[key] = value[:limit] + "... truncated ..."
+        elif isinstance(value, list) and len(value) > 6:
+            item[key] = value[:6]
+        elif isinstance(value, dict) and len(value) > 8:
+            item[key] = {k: value[k] for k in list(value)[:8]}
+    return item
+
+
+def advanced_context_records(cwd: Path, subchain_id: str, stage: str | None = None, limit: int = 5) -> dict[str, Any]:
+    registry = load_harness_registry(cwd)
+    harnesses = [item for item in registry_harnesses(registry) if record_scope_matches(item, subchain_id, stage)]
+    portfolios = [item for item in recent_json_records(hypothesis_portfolios_root(cwd), limit, "*-portfolio.json") if record_scope_matches(item, subchain_id, stage)]
+    code_reports = [item for item in recent_json_records(code_builders_root(cwd), limit, "*-code-builder.json") if record_scope_matches(item, subchain_id, stage)]
+    math_reports = [item for item in recent_json_records(math_abstractions_root(cwd), limit, "*-math-abstraction.json") if record_scope_matches(item, subchain_id, stage)]
+    experiment_reports = [item for item in recent_json_records(experiment_runs_root(cwd), limit, "*/*experiment-runner-report.json") if record_scope_matches(item, subchain_id, stage)]
+    return {
+        "harnesses": [slim_advanced_record(item) for item in harnesses[-limit:]],
+        "hypothesis_portfolios": [slim_advanced_record(item) for item in portfolios[-limit:]],
+        "code_builders": [slim_advanced_record(item) for item in code_reports[-limit:]],
+        "math_abstractions": [slim_advanced_record(item) for item in math_reports[-limit:]],
+        "experiment_runs": [slim_advanced_record(item) for item in experiment_reports[-limit:]],
+    }
+
+
 def record_matches_subchain(record: dict[str, Any], subchain_id: str, stage: str | None = None) -> bool:
     fields = [
         record.get("subchain"),
@@ -4897,6 +5420,12 @@ def build_mechanistic_context(cwd: Path, current_subchain: dict[str, Any], state
     supported_mechanisms = [item for item in relevant_mechanisms if str(item.get("status") or "").lower() == "supported"]
     rejected_mechanisms = [item for item in relevant_mechanisms if str(item.get("status") or "").lower() in {"rejected", "needs_replication"}]
     candidate_mechanisms = [item for item in relevant_mechanisms if str(item.get("status") or "").lower() == "candidate"]
+    advanced = advanced_context_records(cwd, subchain_id, stage, limit=limit)
+    harnesses = list(advanced.get("harnesses") or [])
+    hypothesis_portfolios = list(advanced.get("hypothesis_portfolios") or [])
+    code_builders = list(advanced.get("code_builders") or [])
+    math_abstractions = list(advanced.get("math_abstractions") or [])
+    experiment_runs = list(advanced.get("experiment_runs") or [])
     signals: list[str] = []
     if pending_effect_gates:
         signals.append(f"{len(pending_effect_gates)} OPHIS pending effect gate(s) require validation before route transition.")
@@ -4906,6 +5435,16 @@ def build_mechanistic_context(cwd: Path, current_subchain: dict[str, Any], state
         signals.append(f"{len(rejected_mechanisms) + len(relevant_negative_results)} rejected or negative mechanism record(s) warn against repeating failed interventions.")
     if candidate_mechanisms:
         signals.append(f"{len(candidate_mechanisms)} candidate mechanism(s) need validation or scoping.")
+    if harnesses:
+        signals.append(f"{len(harnesses)} registered harness surface(s) are available; gate decisions should use their metrics, tags, and promotion thresholds.")
+    if hypothesis_portfolios:
+        signals.append(f"{len(hypothesis_portfolios)} hypothesis portfolio record(s) are available; retry/review should compare alternatives before converging.")
+    if code_builders:
+        signals.append(f"{len(code_builders)} evolutionary code-builder plan(s) exist; core code should not change until a scratch candidate passes registered harnesses.")
+    if math_abstractions:
+        signals.append(f"{len(math_abstractions)} math abstraction record(s) are available; quantitative claims should follow the definition-subgoal-verifier chain.")
+    if experiment_runs:
+        signals.append(f"{len(experiment_runs)} experiment-runner-plus report(s) are available; gate decisions should use their environment, retry, artifact readback, and failure-tag evidence.")
 
     required_reads = [
         ".research-loop/observations/observation-ledger.jsonl",
@@ -4915,6 +5454,11 @@ def build_mechanistic_context(cwd: Path, current_subchain: dict[str, Any], state
         ".research-loop/effect-gates/effect-gate-ledger.jsonl",
         ".research-loop/mechanisms/mechanism-library.jsonl",
         ".research-loop/mechanisms/negative-results.jsonl",
+        ".research-loop/harnesses/harness-registry.json",
+        ".research-loop/hypothesis-portfolios/portfolio-ledger.jsonl",
+        "latest .research-loop/code-builders/*-code-builder.json when present",
+        "latest .research-loop/math-abstractions/*-math-abstraction.json when present",
+        "latest .research-loop/experiment-runs/*/experiment-runner-report.json when present",
     ]
     return {
         "enabled": True,
@@ -4931,6 +5475,11 @@ def build_mechanistic_context(cwd: Path, current_subchain: dict[str, Any], state
             "supported_mechanisms": len(supported_mechanisms),
             "rejected_mechanisms": len(rejected_mechanisms),
             "negative_results": len(relevant_negative_results),
+            "harnesses": len(harnesses),
+            "hypothesis_portfolios": len(hypothesis_portfolios),
+            "code_builders": len(code_builders),
+            "math_abstractions": len(math_abstractions),
+            "experiment_runs": len(experiment_runs),
         },
         "signals": signals,
         "observations": [slim_mechanistic_record(item) for item in relevant_observations[-limit:]],
@@ -4942,6 +5491,11 @@ def build_mechanistic_context(cwd: Path, current_subchain: dict[str, Any], state
         "supported_mechanisms": [slim_mechanistic_record(item) for item in supported_mechanisms[-limit:]],
         "rejected_mechanisms": [slim_mechanistic_record(item) for item in rejected_mechanisms[-limit:]],
         "negative_results": [slim_mechanistic_record(item) for item in relevant_negative_results[-limit:]],
+        "harnesses": harnesses,
+        "hypothesis_portfolios": hypothesis_portfolios,
+        "code_builders": code_builders,
+        "math_abstractions": math_abstractions,
+        "experiment_runs": experiment_runs,
         "required_reads": required_reads,
     }
 
@@ -5012,6 +5566,106 @@ def dynamic_research_experts(
         }
         if spec["expert_id"] not in seen:
             experts.append(expert_card_from_spec(spec, project_domain=project_domain, current_subchain=current_subchain, gate_vector=gate_vector, source="dynamic:runtime-signal"))
+    if mechanism_context.get("experiment_runs") or any(token in text for token in ["experiment-runner", "experiment runner", "environment", "retry", "resource ceiling"]):
+        spec = {
+            "expert_id": "experiment_runner_reproducibility_auditor",
+            "role": "Experiment Runner Reproducibility Auditor",
+            "domain_scope": "Environment fingerprints, monitored experiment runs, retries, resource ceilings, artifact readback, and harness-compatible reports.",
+            "required_reads": ["latest .research-loop/experiment-runs/*/experiment-runner-report.json", "harness-report.json", "stdout/stderr logs"],
+            "diagnostic_frame": [
+                "Separate command failure, environment drift, missing artifact, and genuine scientific failure.",
+                "Check whether retries and resource ceilings are recorded before interpreting the result.",
+                "Require harness-compatible summary fields before deep-loop promotion.",
+            ],
+            "red_flags": [
+                "A result is interpreted without environment or command provenance.",
+                "Retries are hidden or not tied to failure signatures.",
+                "Expected artifacts are not read back after the experiment.",
+            ],
+            "output_contract": {"reproducibility_gap": "Missing environment, retry, artifact, or report evidence.", "minimum_rerun": "Smallest command or shard to rerun.", "route": "P5, P6, or P10."},
+        }
+        if spec["expert_id"] not in seen:
+            experts.append(expert_card_from_spec(spec, project_domain=project_domain, current_subchain=current_subchain, gate_vector=gate_vector, source="dynamic:experiment-runner"))
+    if mechanism_context.get("harnesses") or "harness" in text:
+        spec = {
+            "expert_id": "harness_evaluator_architect",
+            "role": "Harness Evaluator Architect",
+            "domain_scope": "Validation surface design, pass/fail rubrics, weighted metrics, failure tags, and promotion thresholds.",
+            "required_reads": [".research-loop/harnesses/harness-registry.json", "structured harness reports", "run logs"],
+            "diagnostic_frame": [
+                "Check whether each claimed pass has a registered validation surface.",
+                "Map failure tags to retry, P10, or human pause routes.",
+                "Name the smallest evaluator that would falsify the current plan.",
+            ],
+            "red_flags": [
+                "The route advances without a registered or explicit harness.",
+                "A score is used without a rubric or promotion threshold.",
+                "Failed tags are recorded but not routed into the next plan.",
+            ],
+            "output_contract": {"harness_gap": "Missing or weak evaluator.", "minimum_gate": "Command, artifact readback, or rubric needed.", "route": "P5, P6, P8, or P10."},
+        }
+        if spec["expert_id"] not in seen:
+            experts.append(expert_card_from_spec(spec, project_domain=project_domain, current_subchain=current_subchain, gate_vector=gate_vector, source="dynamic:harness-context"))
+    if mechanism_context.get("hypothesis_portfolios") or any(token in text for token in ["hypothesis portfolio", "alternative", "rival", "counterclaim"]):
+        spec = {
+            "expert_id": "hypothesis_tournament_moderator",
+            "role": "Hypothesis Tournament Moderator",
+            "domain_scope": "Divergent hypothesis generation, critique, pairwise comparison, evolution, and falsifiability.",
+            "required_reads": [".research-loop/hypothesis-portfolios/portfolio-ledger.jsonl", "latest *-portfolio.json", "claim map"],
+            "diagnostic_frame": [
+                "Check whether at least three plausible alternatives were considered.",
+                "Rank hypotheses by novelty, plausibility, falsifiability, and evidence demand.",
+                "Choose the next validation that best separates rival explanations.",
+            ],
+            "red_flags": [
+                "The first plausible explanation is treated as sufficient.",
+                "Hypotheses have no falsifiers or distinct predictions.",
+                "The selected plan cannot be distinguished from a rival explanation.",
+            ],
+            "output_contract": {"top_hypotheses": "Ranked alternatives.", "discriminating_test": "Next evidence or experiment to separate them.", "route": "P2, P3, P4, P6, or P10."},
+        }
+        if spec["expert_id"] not in seen:
+            experts.append(expert_card_from_spec(spec, project_domain=project_domain, current_subchain=current_subchain, gate_vector=gate_vector, source="dynamic:hypothesis-portfolio"))
+    if mechanism_context.get("code_builders") or any(token in text for token in ["code-builder", "variant", "champion", "scratch"]):
+        spec = {
+            "expert_id": "evolutionary_code_builder_reviewer",
+            "role": "Evolutionary Code Builder Reviewer",
+            "domain_scope": "Scratch variants, evaluator-backed code search, champion selection, and promotion safety.",
+            "required_reads": ["latest .research-loop/code-builders/*-code-builder.json", ".research-loop/harnesses/harness-registry.json", "run logs"],
+            "diagnostic_frame": [
+                "Verify variants are isolated from core files.",
+                "Check whether champion selection is tied to registered harness metrics.",
+                "Require a promotion gate before core edits.",
+            ],
+            "red_flags": [
+                "Core code changes before a passing scratch candidate exists.",
+                "Variant scoring is subjective or missing.",
+                "The champion cannot be reproduced by a recorded command.",
+            ],
+            "output_contract": {"candidate_gap": "Missing variant or evaluator evidence.", "champion_gate": "Promotion criteria.", "route": "P5 or P10."},
+        }
+        if spec["expert_id"] not in seen:
+            experts.append(expert_card_from_spec(spec, project_domain=project_domain, current_subchain=current_subchain, gate_vector=gate_vector, source="dynamic:code-builder"))
+    if mechanism_context.get("math_abstractions") or any(token in text for token in ["math", "proof", "lemma", "theorem", "formal", "symbolic", "constraint"]):
+        spec = {
+            "expert_id": "mathematical_abstraction_reviewer",
+            "role": "Mathematical Abstraction Reviewer",
+            "domain_scope": "Definitions, assumptions, subgoal decomposition, lemma dependencies, symbolic checks, and proof/verifier plans.",
+            "required_reads": ["latest .research-loop/math-abstractions/*-math-abstraction.json", "method plan", "analysis report"],
+            "diagnostic_frame": [
+                "Restate the problem in explicit mathematical objects.",
+                "Check assumption sufficiency and hidden constraints.",
+                "Select the cheapest verifier: algebra, constraint solving, property test, or formal proof.",
+            ],
+            "red_flags": [
+                "A quantitative claim lacks definitions or assumptions.",
+                "A proof-like argument has no subgoal boundary.",
+                "Numerical evidence is used where a symbolic counterexample is available.",
+            ],
+            "output_contract": {"abstraction_gap": "Missing definition, assumption, or lemma.", "verifier": "Concrete check to run or record.", "route": "P4, P6, or P10."},
+        }
+        if spec["expert_id"] not in seen:
+            experts.append(expert_card_from_spec(spec, project_domain=project_domain, current_subchain=current_subchain, gate_vector=gate_vector, source="dynamic:math-abstraction"))
     if (
         mechanism_context.get("signals")
         or mechanism_context.get("pending_effect_gates")
@@ -5062,7 +5716,7 @@ def research_council_route_recommendation(
 ) -> dict[str, Any]:
     current_id = str(current_subchain.get("id"))
     mechanism_context = mechanistic_context or {}
-    text = combined_signal_text(manual_issues, result_summary, gate_vector, mechanism_context)
+    text = combined_signal_text(manual_issues, result_summary, mechanism_context.get("signals") or [])
     target_ids = [str(item.get("id")) for item in next_subchains]
     reason = "delivery_gap_route"
     action = "route_next" if target_ids else "pause_for_human"
@@ -5208,6 +5862,16 @@ def adversarial_killer_tests(
     tests: list[str] = []
     if mechanism_context.get("pending_effect_gates"):
         tests.append("Validate each pending OPHIS effect gate and record the outcome before any route transition.")
+    if mechanism_context.get("harnesses"):
+        tests.append("Match the current gate decision against every relevant registered harness threshold, metric, and failure tag.")
+    if mechanism_context.get("hypothesis_portfolios"):
+        tests.append("Run a hypothesis tournament pass: compare the selected explanation against at least two recorded rival hypotheses and name the discriminating evidence.")
+    if mechanism_context.get("code_builders"):
+        tests.append("Verify that code changes remain in scratch until a candidate passes the registered harnesses and a promotion gate is recorded.")
+    if mechanism_context.get("math_abstractions"):
+        tests.append("Check the mathematical abstraction ladder: definitions, assumptions, subgoals, verifier plan, and proof or counterexample boundary.")
+    if mechanism_context.get("experiment_runs"):
+        tests.append("Inspect experiment-runner-plus reports for environment drift, retry history, missing artifacts, and harness-compatible failure tags before promotion.")
     if risk_rank(gate_level(gate_vector, "evidence_integrity")) >= 1:
         tests.append("Run claim-evidence verification and inspect every unsupported or partial claim before advancing.")
     if risk_rank(gate_level(gate_vector, "artifact_readiness")) >= 1:
@@ -5342,7 +6006,7 @@ def arbiter_semantic_reason(
     mechanistic_context: dict[str, Any] | None = None,
 ) -> str:
     mechanism_context = mechanistic_context or {}
-    text = combined_signal_text(manual_issues, result_summary, gate_vector, mechanism_context)
+    text = combined_signal_text(manual_issues, result_summary, mechanism_context.get("signals") or [])
     current_id = str(current_subchain.get("id"))
     if gate_level(gate_vector, "human_blocker") == "high":
         return "systemic_blocker"
@@ -5371,6 +6035,70 @@ def merge_route_targets(*recommendations: dict[str, Any]) -> list[str]:
     return targets
 
 
+def arbiter_problem_escalation_reasons(
+    *,
+    base_gate: dict[str, Any],
+    current_subchain: dict[str, Any],
+    gate_vector: dict[str, Any],
+    council_rec: dict[str, Any],
+    adversarial_rec: dict[str, Any],
+    recommended_targets: list[str],
+    fatal_count: int,
+    premature_risk: str,
+    manual_issues: list[str],
+    result_summary: str | None,
+    mechanistic_context: dict[str, Any] | None = None,
+) -> list[str]:
+    current_id = str(current_subchain.get("id"))
+    if current_id == "P10" or gate_level(gate_vector, "human_blocker") == "high":
+        return []
+
+    text = combined_signal_text(manual_issues, result_summary, (mechanistic_context or {}).get("signals") or [])
+    review_requested_escalation = str(council_rec.get("action") or "") == "escalate_problem_loop" or str(adversarial_rec.get("action") or "") == "escalate_problem_loop"
+    p10_targeted = "P10" in recommended_targets
+    late_or_execution_stage = current_id in {"P5", "P6", "P7", "P8", "P9"}
+    diagnostic_high = gate_vector_has_high(
+        gate_vector,
+        {"evidence_integrity", "artifact_readiness", "method_validity", "analysis_validity", "uncertainty_level"},
+    )
+    adversarial_high = fatal_count > 0 or premature_risk == "high"
+    failure_high = gate_level(gate_vector, "failure_mode_risk") == "high"
+    unresolved_signal = any(
+        token in text
+        for token in [
+            "blocked",
+            "stalled",
+            "unresolved",
+            "repeated",
+            "again",
+            "no root cause",
+            "unknown root",
+            "no root cause is known",
+            "root cause unknown",
+            "未解决",
+            "卡住",
+            "阻塞",
+            "无法定位",
+            "无根因",
+            "根因不明",
+        ]
+    )
+    try:
+        round_index = int(base_gate.get("round_index") or 1)
+    except (TypeError, ValueError):
+        round_index = 1
+    repeated_failure = round_index >= 2 or unresolved_signal
+
+    reasons: list[str] = []
+    if review_requested_escalation and (diagnostic_high or adversarial_high or unresolved_signal):
+        reasons.append("Research Council or Adversarial Gate requested P10 for a high-risk or unresolved failure.")
+    elif p10_targeted and late_or_execution_stage and diagnostic_high and adversarial_high:
+        reasons.append("P10 was named by review targets and the current execution/late-stage gate has high diagnostic risk.")
+    elif late_or_execution_stage and failure_high and repeated_failure and (diagnostic_high or adversarial_high or unresolved_signal):
+        reasons.append("Repeated or root-cause-unknown failure in an execution/late-stage subchain requires isolated P10 diagnosis.")
+    return reasons
+
+
 def arbiter_decision(
     *,
     base_gate: dict[str, Any],
@@ -5393,6 +6121,19 @@ def arbiter_decision(
     premature_risk = str(adversarial.get("premature_convergence_risk") or "low")
     reasons = list(gate.get("reasons") or [])
     decision_source = "hard_gate"
+    escalation_override_reasons = arbiter_problem_escalation_reasons(
+        base_gate=base_gate,
+        current_subchain=current_subchain,
+        gate_vector=gate_vector,
+        council_rec=council_rec,
+        adversarial_rec=adversarial_rec,
+        recommended_targets=recommended_targets,
+        fatal_count=fatal_count,
+        premature_risk=premature_risk,
+        manual_issues=manual_issues,
+        result_summary=result_summary,
+        mechanistic_context=mechanism_context,
+    )
     if gate_level(gate_vector, "human_blocker") == "high" or semantic == "systemic_blocker":
         gate["decision"] = "pause_for_human"
         gate["review_mode"] = "human_checkpoint"
@@ -5403,6 +6144,12 @@ def arbiter_decision(
         gate["review_mode"] = "review_for_retry"
         append_unique(reasons, "Arbiter converted route_next to retry_same_route because OPHIS effect-gate validation is still pending.")
         decision_source = "mechanism_validation_retry"
+    elif gate.get("decision") in {"route_next", "retry_same_route"} and escalation_override_reasons:
+        gate["decision"] = "escalate_problem_loop"
+        gate["review_mode"] = "review_for_problem_escalation"
+        for reason in escalation_override_reasons:
+            append_unique(reasons, f"Arbiter escalated to P10: {reason}")
+        decision_source = "expert_escalation_override"
     elif gate.get("decision") == "route_next" and (fatal_count or premature_risk == "high"):
         if semantic in {"evidence_gap_route", "method_gap_route", "analysis_gap_route", "delivery_gap_route"} and current_id != "P10":
             gate["decision"] = "escalate_problem_loop"
@@ -5424,6 +6171,13 @@ def arbiter_decision(
     gate["reasons"] = reasons
     gate["arbiter_semantic_reason"] = semantic
     gate["arbiter_decision_source"] = decision_source
+    final_decision = str(gate.get("decision") or "")
+    if final_decision == "escalate_problem_loop":
+        final_targets = ["P10"]
+    elif final_decision == "retry_same_route":
+        final_targets = [current_id]
+    else:
+        final_targets = recommended_targets
     arbiter = {
         "semantic_reason": semantic,
         "decision": gate.get("decision"),
@@ -5433,7 +6187,7 @@ def arbiter_decision(
         "fatal_objection_count": fatal_count,
         "route_recommendation": {
             "action": gate.get("decision"),
-            "target_subchains": recommended_targets or (["P10"] if gate.get("decision") == "escalate_problem_loop" else [current_id] if gate.get("decision") == "retry_same_route" else []),
+            "target_subchains": final_targets,
             "semantic_reason": semantic,
             "rationale": "Arbiter combined hard gate constraints, research council recommendation, and adversarial objections.",
         },
@@ -5444,11 +6198,11 @@ def arbiter_decision(
 
 def expert_escalation_reasons(current_subchain: dict[str, Any], depth: str, gate_vector: dict[str, Any]) -> list[str]:
     current_id = str(current_subchain.get("id"))
-    critical = {"objective_gap", "evidence_integrity", "method_validity", "analysis_validity", "uncertainty_level", "failure_mode_risk"}
+    critical = {"evidence_integrity", "artifact_readiness", "method_validity", "analysis_validity", "uncertainty_level"}
     reasons: list[str] = []
     if current_id in {"P6", "P7", "P8", "P9"} and gate_vector_has_high(gate_vector, critical):
         reasons.append(f"{current_id} has high-risk gate-vector dimensions that need P10 expert review before continuing.")
-    if depth in {"L5", "L6"} and gate_vector_has_high(gate_vector, {"novelty_risk", "failure_mode_risk", "uncertainty_level"}):
+    if depth in {"L5", "L6"} and gate_vector_has_high(gate_vector, {"uncertainty_level"}):
         reasons.append(f"Depth {depth} task has high uncertainty, novelty, or failure-mode risk.")
     return reasons
 
@@ -5703,6 +6457,11 @@ def mechanistic_prompt_block(mechanistic_context: dict[str, Any] | None) -> str:
     pending = [item for item in context.get("pending_effect_gates") or [] if isinstance(item, dict)]
     rejected = [item for item in context.get("rejected_mechanisms") or [] if isinstance(item, dict)]
     negative = [item for item in context.get("negative_results") or [] if isinstance(item, dict)]
+    harnesses = [item for item in context.get("harnesses") or [] if isinstance(item, dict)]
+    portfolios = [item for item in context.get("hypothesis_portfolios") or [] if isinstance(item, dict)]
+    code_builders = [item for item in context.get("code_builders") or [] if isinstance(item, dict)]
+    math_abstractions = [item for item in context.get("math_abstractions") or [] if isinstance(item, dict)]
+    experiment_runs = [item for item in context.get("experiment_runs") or [] if isinstance(item, dict)]
     if supported:
         lines.extend(["## Mechanism Memory To Reuse", ""])
         lines.extend(mechanistic_record_line(item) for item in supported[:5])
@@ -5716,6 +6475,39 @@ def mechanistic_prompt_block(mechanistic_context: dict[str, Any] | None) -> str:
     if rejected or negative:
         lines.extend(["## Mechanism Memory To Avoid", ""])
         lines.extend(mechanistic_record_line(item) for item in (rejected + negative)[:5])
+        lines.append("")
+    if harnesses:
+        lines.extend(["## Registered Harness Surfaces", ""])
+        for item in harnesses[:5]:
+            name = item.get("name") or item.get("id") or "harness"
+            metrics = ", ".join(str(value) for value in item.get("metrics") or [])
+            threshold = item.get("promotion_threshold")
+            lines.append(f"- `{item.get('id')}` {name}; metrics={metrics or '(not set)'}; threshold={threshold if threshold is not None else '(not set)'}")
+        lines.append("")
+    if portfolios:
+        lines.extend(["## Hypothesis Portfolio Context", ""])
+        for item in portfolios[:5]:
+            lines.append(f"- `{item.get('id')}` candidates={item.get('candidate_count')}; top={item.get('top_candidate') or '(not ranked)'}")
+        lines.append("Compare alternatives before converging on a route or conclusion.")
+        lines.append("")
+    if code_builders:
+        lines.extend(["## Evolutionary Code Builder Context", ""])
+        for item in code_builders[:5]:
+            lines.append(f"- `{item.get('id')}` goal={item.get('goal')}; scratch={item.get('scratch_dir')}; harnesses={', '.join(str(value) for value in item.get('harness_ids') or [])}")
+        lines.append("Keep variants in scratch until a champion passes the promotion gate.")
+        lines.append("")
+    if math_abstractions:
+        lines.extend(["## Math Abstraction Context", ""])
+        for item in math_abstractions[:5]:
+            lines.append(f"- `{item.get('id')}` targets={', '.join(str(value) for value in item.get('targets') or [])}; path={item.get('path') or '(not set)'}")
+        lines.append("Use definitions, assumptions, subgoals, and verifier checks before quantitative claims advance.")
+        lines.append("")
+    if experiment_runs:
+        lines.extend(["## Experiment Runner Context", ""])
+        for item in experiment_runs[:5]:
+            summary = item.get("summary") if isinstance(item.get("summary"), dict) else {}
+            lines.append(f"- `{item.get('id')}` status={item.get('status')}; score={summary.get('weighted_score')}; harness={item.get('harness_report_path') or '(not set)'}")
+        lines.append("Inspect environment fingerprints, retry history, logs, and artifact readback before interpreting results.")
         lines.append("")
     return "\n".join(lines).strip()
 
@@ -6833,6 +7625,1072 @@ def command_ophi_cycle(args: argparse.Namespace) -> int:
     else:
         print("\n".join(ophi_cycle_markdown(payload)).rstrip() + "\n")
     return 0
+
+
+def normalize_fraction(value: float | int | str | None, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if number > 1:
+        number = number / 100.0
+    return max(0.0, min(1.0, number))
+
+
+def build_harness_record(args: argparse.Namespace, cwd: Path, state: dict[str, Any], existing: dict[str, Any] | None = None) -> dict[str, Any]:
+    commands = list(getattr(args, "command", None) or [])
+    artifacts = list(getattr(args, "artifact", None) or [])
+    rubrics = list(getattr(args, "rubric", None) or [])
+    metrics = list(getattr(args, "metric", None) or [])
+    failure_tags = list(getattr(args, "failure_tag", None) or [])
+    name = getattr(args, "name", None) or getattr(args, "id", None) or (commands[0] if commands else "research-loop harness")
+    harness_id = getattr(args, "id", None) or record_id("harness", name + "\n".join(commands + metrics + failure_tags))
+    base = dict(existing or {})
+    base.update(
+        {
+            "id": harness_id,
+            "type": "harness",
+            "name": name,
+            "updated_at": utc_now(),
+            "stage": state.get("current_stage", "INTAKE"),
+            "subchain": getattr(args, "subchain", None),
+            "status": getattr(args, "status", None) or base.get("status") or "active",
+            "commands": commands or base.get("commands") or [],
+            "artifacts": artifacts or base.get("artifacts") or [],
+            "rubrics": rubrics or base.get("rubrics") or [],
+            "metrics": metrics or base.get("metrics") or ["pass_rate", "weighted_score", "failure_tags"],
+            "failure_tags": failure_tags or base.get("failure_tags") or [],
+            "timeout_seconds": getattr(args, "timeout_seconds", None) if getattr(args, "timeout_seconds", None) is not None else base.get("timeout_seconds"),
+            "resource_ceiling": list(getattr(args, "resource_ceiling", None) or base.get("resource_ceiling") or []),
+            "promotion_threshold": normalize_fraction(getattr(args, "promotion_threshold", None), float(base.get("promotion_threshold") or 0.8)),
+            "evaluator_contract": {
+                "summary_fields": ["pass_rate", "weighted_score", "failures_by_tag", "failed_cases", "reports"],
+                "gate_use": "deep-loop should treat failed tags, low weighted_score, or missing artifacts as retry/P10 evidence.",
+                "readback_required": True,
+            },
+        }
+    )
+    base.setdefault("created_at", utc_now())
+    return base
+
+
+def harness_registry_payload(args: argparse.Namespace, cwd: Path, state: dict[str, Any]) -> dict[str, Any]:
+    registry = load_harness_registry(cwd)
+    selected = None
+    if getattr(args, "id", None):
+        selected = registry.get("harnesses", {}).get(str(args.id))
+    should_preview = any(
+        getattr(args, key, None)
+        for key in ["name", "command", "artifact", "rubric", "metric", "failure_tag", "timeout_seconds", "resource_ceiling", "promotion_threshold", "subchain", "status"]
+    )
+    record = build_harness_record(args, cwd, state, selected) if should_preview or getattr(args, "write", False) else None
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "timestamp": utc_now(),
+        "project_root": psafe(cwd),
+        "registry_path": psafe(harness_registry_path(cwd)),
+        "harness_count": len(registry_harnesses(registry)),
+        "harnesses": registry_harnesses(registry),
+        "record": record,
+        "write_requested": bool(getattr(args, "write", False)),
+    }
+
+
+def harness_registry_markdown(payload: dict[str, Any]) -> list[str]:
+    lines = [
+        "# Harness Registry",
+        "",
+        f"- Generated at UTC: {payload['timestamp']}",
+        f"- Registry: `{payload['registry_path']}`",
+        f"- Harnesses: {payload['harness_count']}",
+        "",
+    ]
+    record = payload.get("record")
+    if isinstance(record, dict):
+        lines.extend(["## Candidate / Updated Harness", ""])
+        lines.append(f"- `{record.get('id')}` {record.get('name')}")
+        lines.append(f"- Subchain: `{record.get('subchain') or '(not set)'}`")
+        lines.append(f"- Metrics: {', '.join(str(item) for item in record.get('metrics') or [])}")
+        lines.append(f"- Threshold: `{record.get('promotion_threshold')}`")
+        if record.get("commands"):
+            lines.append("- Commands:")
+            lines.extend(f"  - `{item}`" for item in record.get("commands") or [])
+    lines.extend(["", "## Registered Harnesses", ""])
+    harnesses = payload.get("harnesses") or []
+    if not harnesses:
+        lines.append("- No harnesses registered yet.")
+    for item in harnesses:
+        lines.append(f"- `{item.get('id')}` {item.get('name')} [{item.get('status')}] subchain=`{item.get('subchain') or '(any)'}` threshold=`{item.get('promotion_threshold')}`")
+    return lines
+
+
+def command_harness_registry(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd, args.stage)
+    state = load_state(cwd)
+    payload = harness_registry_payload(args, cwd, state)
+    if args.write:
+        registry = load_harness_registry(cwd)
+        record = payload.get("record")
+        if not isinstance(record, dict):
+            raise ValueError("Provide --name, --command, --metric, --rubric, --failure-tag, or --id when writing a harness.")
+        registry.setdefault("harnesses", {})[str(record["id"])] = record
+        save_harness_registry(cwd, registry)
+        append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "harness", "id": record["id"], "path": psafe(harness_registry_path(cwd))})
+        state.setdefault("counters", {})["harnesses"] = int(state.get("counters", {}).get("harnesses", 0)) + 1
+        save_state(cwd, state)
+        payload = harness_registry_payload(args, cwd, state)
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(harness_registry_markdown(payload)).rstrip() + "\n")
+    return 0
+
+
+def candidate_score(text: str, problem: str) -> dict[str, float]:
+    lowered = text.lower()
+    problem_tokens = {token for token in re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{2,}", problem.lower())}
+    text_tokens = {token for token in re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{2,}", lowered)}
+    overlap = len(problem_tokens & text_tokens) / max(1, len(problem_tokens))
+    falsifiability = 0.45 + (0.15 if any(token in lowered for token in ["test", "validate", "falsif", "check", "measure"]) else 0.0)
+    plausibility = 0.45 + min(0.25, overlap)
+    novelty = 0.45 + (0.15 if any(token in lowered for token in ["alternative", "hidden", "mechanism", "counter", "novel"]) else 0.0)
+    risk = 0.35 + (0.2 if len(text.strip()) < 40 else 0.0)
+    tournament = (plausibility + falsifiability + novelty) / 3.0 - risk * 0.15
+    return {
+        "plausibility": round(max(0.0, min(1.0, plausibility)), 3),
+        "falsifiability": round(max(0.0, min(1.0, falsifiability)), 3),
+        "novelty": round(max(0.0, min(1.0, novelty)), 3),
+        "risk": round(max(0.0, min(1.0, risk)), 3),
+        "tournament": round(max(0.0, min(1.0, tournament)), 3),
+    }
+
+
+def default_portfolio_hypotheses(problem: str) -> list[str]:
+    return [
+        f"The apparent blocker is an evidence-grounding problem: the current conclusion is ahead of verified sources for `{problem}`.",
+        f"The apparent blocker is a method-objective mismatch: the selected validation surface does not test the core claim in `{problem}`.",
+        f"The apparent blocker is an analysis or abstraction gap: hidden assumptions, uncertainty, or missing counterfactuals explain the failure in `{problem}`.",
+        f"The apparent blocker is an execution artifact: dependency, data layout, or harness coverage causes misleading pass/fail signals for `{problem}`.",
+    ]
+
+
+def build_hypothesis_portfolio_payload(args: argparse.Namespace, cwd: Path, state: dict[str, Any], passport: dict[str, Any]) -> dict[str, Any]:
+    problem = str(getattr(args, "problem", "") or "").strip()
+    if not problem:
+        raise ValueError("Hypothesis portfolio requires --problem.")
+    texts: list[str] = []
+    for value in list(getattr(args, "seed_hypothesis", None) or []) + list(getattr(args, "candidate", None) or []):
+        append_unique(texts, str(value).strip())
+    for value in default_portfolio_hypotheses(problem):
+        if len(texts) >= int(getattr(args, "min_candidates", 3) or 3):
+            break
+        append_unique(texts, value)
+    candidates: list[dict[str, Any]] = []
+    for index, text in enumerate(texts, start=1):
+        scores = candidate_score(text, problem)
+        candidate = {
+            "id": f"hypcand-{index}-{short_digest(problem + text)}",
+            "hypothesis": text,
+            "assumptions": ["The problem signal is reproducible.", "The available artifacts are sufficient to discriminate this candidate."],
+            "predictions": [f"If true, targeted validation should expose this candidate's signature failure mode in `{problem}`."],
+            "falsifiers": ["A direct validation check shows no difference from rival hypotheses.", "Evidence contradicts the assumed mechanism."],
+            "required_evidence": ["relevant source or artifact readback", "registered harness or explicit validation surface", "counterfactual comparison against a rival hypothesis"],
+            "validation_surface": "Use the cheapest discriminating check: source audit, artifact readback, harness replay, or focused experiment.",
+            "scores": scores,
+            "status": "candidate",
+        }
+        candidates.append(candidate)
+    candidates.sort(key=lambda item: item["scores"]["tournament"], reverse=True)
+    for rank, candidate in enumerate(candidates, start=1):
+        candidate["rank"] = rank
+    portfolio_id = getattr(args, "id", None) or record_id("portfolio", problem + json.dumps(texts, ensure_ascii=True))
+    top = candidates[0] if candidates else None
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "timestamp": utc_now(),
+        "id": portfolio_id,
+        "type": "hypothesis_portfolio",
+        "project_root": psafe(cwd),
+        "stage": state.get("current_stage", "INTAKE"),
+        "subchain": getattr(args, "subchain", None),
+        "problem": problem,
+        "project_context": project_context_payload(cwd, state, passport),
+        "process": ["generate", "critique", "rank", "evolve", "validate"],
+        "candidate_count": len(candidates),
+        "top_candidate": top["id"] if top else None,
+        "candidates": candidates,
+        "next_validation": top["validation_surface"] if top else "Create at least one candidate hypothesis.",
+        "safety": {"core_files_mutable": False, "requires_evidence_before_convergence": True},
+    }
+
+
+def hypothesis_portfolio_markdown(payload: dict[str, Any]) -> list[str]:
+    lines = [
+        "# Hypothesis Portfolio",
+        "",
+        f"- ID: `{payload['id']}`",
+        f"- Generated at UTC: {payload['timestamp']}",
+        f"- Problem: {payload['problem']}",
+        f"- Candidates: {payload['candidate_count']}",
+        "",
+        "## Ranked Candidates",
+        "",
+    ]
+    for item in payload.get("candidates") or []:
+        scores = item.get("scores") or {}
+        lines.append(f"- {item.get('rank')}. `{item.get('id')}` score=`{scores.get('tournament')}` {item.get('hypothesis')}")
+        lines.append(f"  - Validation: {item.get('validation_surface')}")
+    return lines
+
+
+def persist_hypothesis_portfolio(cwd: Path, state: dict[str, Any], passport: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    path = hypothesis_portfolios_root(cwd) / f"{payload['id']}-portfolio.json"
+    payload["path"] = psafe(path)
+    write_json(path, payload)
+    append_jsonl(hypothesis_portfolio_ledger_path(cwd), slim_advanced_record(payload))
+    append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "hypothesis_portfolio", "id": payload["id"], "path": psafe(path)})
+    update_list_item(
+        passport["next_actions"],
+        {
+            "id": record_id("next", payload["id"]),
+            "text": f"Validate top hypothesis portfolio candidate {payload.get('top_candidate')}.",
+            "stage": state.get("current_stage", "INTAKE"),
+            "status": "todo",
+            "owner": "agent",
+            "created_at": utc_now(),
+            "note": psafe(path),
+        },
+    )
+    state.setdefault("counters", {})["hypothesis_portfolios"] = int(state.get("counters", {}).get("hypothesis_portfolios", 0)) + 1
+    save_passport(cwd, passport)
+    save_state(cwd, state)
+    return payload
+
+
+def command_hypothesis_portfolio(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd, args.stage)
+    state = load_state(cwd)
+    passport = load_passport(cwd, state)
+    payload = build_hypothesis_portfolio_payload(args, cwd, state, passport)
+    if args.write:
+        payload = persist_hypothesis_portfolio(cwd, state, passport, payload)
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(hypothesis_portfolio_markdown(payload)).rstrip() + "\n")
+    return 0
+
+
+def selected_harnesses(cwd: Path, harness_ids: list[str], subchain: str | None, stage: str | None) -> tuple[list[dict[str, Any]], list[str]]:
+    registry = load_harness_registry(cwd)
+    harnesses_by_id = {str(item.get("id")): item for item in registry_harnesses(registry)}
+    missing: list[str] = []
+    selected: list[dict[str, Any]] = []
+    if harness_ids:
+        for harness_id in harness_ids:
+            item = harnesses_by_id.get(str(harness_id))
+            if item:
+                selected.append(item)
+            else:
+                missing.append(str(harness_id))
+    else:
+        selected = [item for item in harnesses_by_id.values() if record_scope_matches(item, subchain or "", stage)]
+    return selected, missing
+
+
+def build_code_builder_payload(args: argparse.Namespace, cwd: Path, state: dict[str, Any], passport: dict[str, Any]) -> dict[str, Any]:
+    goal = str(getattr(args, "goal", "") or "").strip()
+    if not goal:
+        raise ValueError("Code builder requires --goal.")
+    builder_id = getattr(args, "id", None) or record_id("code-builder", goal)
+    subchain = getattr(args, "subchain", None) or "P5"
+    harnesses, missing = selected_harnesses(cwd, list(getattr(args, "harness_id", None) or []), subchain, state.get("current_stage"))
+    variant_texts = list(getattr(args, "candidate", None) or [])
+    if not variant_texts:
+        variant_texts = [
+            "minimal targeted patch with regression test first",
+            "adapter or boundary-layer patch that preserves existing APIs",
+            "alternative implementation variant optimized for clarity and failure isolation",
+        ]
+    max_variants = max(1, int(getattr(args, "max_variants", None) or len(variant_texts)))
+    scratch_dir = storage_bucket_path(cwd, "scratch") / "research-loop-code-builder" / builder_id
+    variants = []
+    for index, text in enumerate(variant_texts[:max_variants], start=1):
+        variants.append(
+            {
+                "id": f"variant-{index}-{short_digest(goal + text)}",
+                "summary": text,
+                "workspace": psafe(scratch_dir / f"variant-{index}"),
+                "expected_delta": "Small scoped implementation change plus focused verification.",
+                "required_evaluators": [item.get("id") for item in harnesses],
+                "status": "planned",
+            }
+        )
+    thresholds = [normalize_fraction(item.get("promotion_threshold"), 0.8) for item in harnesses]
+    threshold = max(thresholds) if thresholds else 0.8
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "timestamp": utc_now(),
+        "id": builder_id,
+        "type": "evolutionary_code_builder",
+        "project_root": psafe(cwd),
+        "stage": state.get("current_stage", "INTAKE"),
+        "subchain": subchain,
+        "goal": goal,
+        "project_context": project_context_payload(cwd, state, passport),
+        "scratch_dir": psafe(scratch_dir),
+        "harness_ids": [str(item.get("id")) for item in harnesses],
+        "missing_harness_ids": missing,
+        "variants": variants,
+        "selection_policy": {
+            "inspiration": "evaluator-backed evolutionary code search",
+            "champion_rule": "Only a scratch variant with passing registered harness evidence can be proposed for promotion.",
+            "archive_failures": True,
+            "diversity_required": len(variants) > 1,
+        },
+        "promotion_gate": {
+            "threshold": threshold,
+            "must_pass_all_registered_harnesses": bool(harnesses),
+            "requires_artifact_readback": True,
+            "requires_problem_promote_or_handoff": True,
+            "core_files_mutable": False,
+        },
+        "status": "planned",
+    }
+
+
+def code_builder_markdown(payload: dict[str, Any]) -> list[str]:
+    lines = [
+        "# Evolutionary Code Builder Plan",
+        "",
+        f"- ID: `{payload['id']}`",
+        f"- Goal: {payload['goal']}",
+        f"- Scratch: `{payload['scratch_dir']}`",
+        f"- Harnesses: {', '.join(payload.get('harness_ids') or []) or '(none registered)'}",
+        f"- Promotion threshold: `{payload.get('promotion_gate', {}).get('threshold')}`",
+        "",
+        "## Variants",
+        "",
+    ]
+    for item in payload.get("variants") or []:
+        lines.append(f"- `{item.get('id')}` {item.get('summary')} -> `{item.get('workspace')}`")
+    if payload.get("missing_harness_ids"):
+        lines.extend(["", "## Missing Harness IDs", ""])
+        lines.extend(f"- `{item}`" for item in payload.get("missing_harness_ids") or [])
+    return lines
+
+
+def persist_code_builder(cwd: Path, state: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    ensure_dir(Path(payload["scratch_dir"]))
+    path = code_builders_root(cwd) / f"{payload['id']}-code-builder.json"
+    payload["path"] = psafe(path)
+    write_json(path, payload)
+    append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "evolutionary_code_builder", "id": payload["id"], "path": psafe(path), "scratch_dir": payload["scratch_dir"]})
+    state.setdefault("counters", {})["code_builders"] = int(state.get("counters", {}).get("code_builders", 0)) + 1
+    save_state(cwd, state)
+    return payload
+
+
+def command_code_builder(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd, args.stage)
+    state = load_state(cwd)
+    passport = load_passport(cwd, state)
+    payload = build_code_builder_payload(args, cwd, state, passport)
+    if args.write:
+        payload = persist_code_builder(cwd, state, payload)
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(code_builder_markdown(payload)).rstrip() + "\n")
+    return 0
+
+
+def infer_math_objects(problem: str, definitions: list[str]) -> list[str]:
+    text = problem + "\n" + "\n".join(definitions)
+    tokens = re.findall(r"[A-Za-z][A-Za-z0-9_]{1,}|\\[A-Za-z]+", text)
+    objects: list[str] = []
+    for token in tokens:
+        if token.lower() in {"the", "and", "for", "with", "that", "this", "from", "into", "problem"}:
+            continue
+        append_unique(objects, token)
+        if len(objects) >= 12:
+            break
+    return objects or ["objective", "assumption", "observable", "validation_metric"]
+
+
+def build_math_abstraction_payload(args: argparse.Namespace, cwd: Path, state: dict[str, Any], passport: dict[str, Any]) -> dict[str, Any]:
+    problem = str(getattr(args, "problem", "") or "").strip()
+    if not problem:
+        raise ValueError("Math abstraction requires --problem.")
+    definitions = list(getattr(args, "definition", None) or [])
+    assumptions = list(getattr(args, "assumption", None) or [])
+    targets = list(getattr(args, "target", None) or []) or [problem]
+    abstraction_id = getattr(args, "id", None) or record_id("math", problem + json.dumps(targets, ensure_ascii=True))
+    objects = infer_math_objects(problem, definitions)
+    lemma_graph = [
+        {"id": "L1", "claim": "Definitions cover every object used by the target.", "depends_on": [], "status": "draft"},
+        {"id": "L2", "claim": "Assumptions are sufficient and non-contradictory.", "depends_on": ["L1"], "status": "draft"},
+        {"id": "L3", "claim": "The target decomposes into falsifiable or provable subgoals.", "depends_on": ["L1", "L2"], "status": "draft"},
+        {"id": "L4", "claim": "A verifier, counterexample search, or proof assistant attempt can check the decisive subgoal.", "depends_on": ["L3"], "status": "draft"},
+    ]
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "timestamp": utc_now(),
+        "id": abstraction_id,
+        "type": "math_abstraction",
+        "project_root": psafe(cwd),
+        "stage": state.get("current_stage", "INTAKE"),
+        "subchain": getattr(args, "subchain", None) or "P6",
+        "problem": problem,
+        "project_context": project_context_payload(cwd, state, passport),
+        "objects": objects,
+        "definitions": definitions,
+        "assumptions": assumptions,
+        "targets": targets,
+        "subgoal_decomposition": [
+            "Translate natural-language target into explicit objects and relations.",
+            "List assumptions and check for contradictions or missing boundary cases.",
+            "Split the target into lemmas that can be attacked independently.",
+            "Choose a verifier surface for each lemma before using the result downstream.",
+        ],
+        "lemma_graph": lemma_graph,
+        "verifier_plan": {
+            "symbolic_algebra": "Use SymPy or direct algebra for simplification, identities, and boundary cases when expressions are explicit.",
+            "constraint_solver": "Use Z3 or equivalent for finite/discrete constraint counterexamples when variables and domains are explicit.",
+            "property_tests": "Use randomized or grid checks for numerical invariants, monotonicity, conservation, or regression surfaces.",
+            "proof_assistant": "Use Lean 4 or another proof assistant only when the formal statement is precise enough; otherwise record the formalization gap.",
+        },
+        "failure_policy": "If definitions, assumptions, or verifier surfaces are missing, route to P4/P6 retry or P10 expert diagnosis before promoting quantitative conclusions.",
+        "status": "draft",
+    }
+
+
+def math_abstraction_markdown(payload: dict[str, Any]) -> list[str]:
+    lines = [
+        "# Math Abstraction Chain",
+        "",
+        f"- ID: `{payload['id']}`",
+        f"- Problem: {payload['problem']}",
+        f"- Subchain: `{payload.get('subchain')}`",
+        "",
+        "## Objects",
+        "",
+        "- " + ", ".join(str(item) for item in payload.get("objects") or []),
+        "",
+        "## Lemma Graph",
+        "",
+    ]
+    for item in payload.get("lemma_graph") or []:
+        lines.append(f"- `{item.get('id')}` depends_on={item.get('depends_on')}: {item.get('claim')}")
+    lines.extend(["", "## Verifier Plan", ""])
+    for key, value in (payload.get("verifier_plan") or {}).items():
+        lines.append(f"- `{key}`: {value}")
+    return lines
+
+
+def persist_math_abstraction(cwd: Path, state: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    path = math_abstractions_root(cwd) / f"{payload['id']}-math-abstraction.json"
+    payload["path"] = psafe(path)
+    write_json(path, payload)
+    append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "math_abstraction", "id": payload["id"], "path": psafe(path)})
+    state.setdefault("counters", {})["math_abstractions"] = int(state.get("counters", {}).get("math_abstractions", 0)) + 1
+    save_state(cwd, state)
+    return payload
+
+
+def command_math_abstraction(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd, args.stage)
+    state = load_state(cwd)
+    passport = load_passport(cwd, state)
+    payload = build_math_abstraction_payload(args, cwd, state, passport)
+    if args.write:
+        payload = persist_math_abstraction(cwd, state, payload)
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(math_abstraction_markdown(payload)).rstrip() + "\n")
+    return 0
+
+
+def command_output_fingerprint(command: list[str], cwd: Path, timeout_seconds: float = 15.0) -> dict[str, Any]:
+    try:
+        proc = subprocess.run(
+            command,
+            cwd=str(cwd),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            timeout=timeout_seconds if timeout_seconds > 0 else None,
+            check=False,
+        )
+        output = (proc.stdout or "") + (proc.stderr or "")
+        return {
+            "command": command,
+            "exit_code": proc.returncode,
+            "line_count": len(output.splitlines()),
+            "sha256": hashlib.sha256(output.encode("utf-8", "replace")).hexdigest(),
+            "timed_out": False,
+        }
+    except subprocess.TimeoutExpired:
+        return {"command": command, "exit_code": TIMEOUT_EXIT_CODE, "line_count": 0, "sha256": None, "timed_out": True}
+    except Exception as exc:
+        return {"command": command, "exit_code": None, "line_count": 0, "sha256": None, "error": repr(exc), "timed_out": False}
+
+
+def experiment_environment_snapshot(cwd: Path, include_pip_freeze: bool = False) -> dict[str, Any]:
+    snapshot: dict[str, Any] = {
+        "captured_at": utc_now(),
+        "cwd": psafe(cwd),
+        "platform": platform.platform(),
+        "python": {
+            "executable": sys.executable,
+            "version": sys.version,
+            "implementation": platform.python_implementation(),
+        },
+        "git": git_info(cwd),
+        "tracked_env": {
+            key: {"present": key in os.environ}
+            for key in [
+                "PYTHONPATH",
+                "VIRTUAL_ENV",
+                "CONDA_PREFIX",
+                "CUDA_VISIBLE_DEVICES",
+                "OMP_NUM_THREADS",
+                "MKL_NUM_THREADS",
+                "CODEX_RESEARCH_LOOP_HOME",
+            ]
+        },
+    }
+    if include_pip_freeze:
+        snapshot["pip_freeze_fingerprint"] = command_output_fingerprint([sys.executable, "-m", "pip", "freeze"], cwd)
+    return snapshot
+
+
+def experiment_artifact_statuses(cwd: Path, artifacts: list[str]) -> list[dict[str, Any]]:
+    statuses: list[dict[str, Any]] = []
+    for value in artifacts:
+        raw = str(value)
+        path = Path(raw).expanduser()
+        if not path.is_absolute():
+            path = cwd / path
+        resolved = path.resolve()
+        exists = resolved.exists()
+        statuses.append(
+            {
+                "artifact": raw,
+                "path": psafe(resolved),
+                "exists": exists,
+                "sha256": hash_file(resolved) if exists and resolved.is_file() else None,
+            }
+        )
+    return statuses
+
+
+def build_experiment_runner_payload(args: argparse.Namespace, cwd: Path, state: dict[str, Any], passport: dict[str, Any]) -> dict[str, Any]:
+    commands = list(getattr(args, "command", None) or [])
+    name = getattr(args, "name", None) or (commands[0] if commands else "research experiment")
+    subchain = getattr(args, "subchain", None) or "P5"
+    run_id = getattr(args, "id", None) or record_id("experiment", name + "\n".join(commands))
+    run_dir = experiment_runs_root(cwd) / run_id
+    harnesses, missing = selected_harnesses(cwd, list(getattr(args, "harness_id", None) or []), subchain, state.get("current_stage"))
+    artifacts = list(getattr(args, "artifact", None) or [])
+    metrics = list(getattr(args, "metric", None) or []) or ["pass_rate", "weighted_score", "failures_by_tag", "runtime_seconds"]
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "timestamp": utc_now(),
+        "id": run_id,
+        "type": "experiment_runner_plus",
+        "project_root": psafe(cwd),
+        "stage": state.get("current_stage", "INTAKE"),
+        "subchain": subchain,
+        "name": name,
+        "goal": getattr(args, "goal", None) or name,
+        "run_directory": psafe(run_dir),
+        "commands": commands,
+        "expected_artifacts": artifacts,
+        "artifact_statuses": experiment_artifact_statuses(cwd, artifacts),
+        "metrics": metrics,
+        "harness_ids": [str(item.get("id")) for item in harnesses],
+        "missing_harness_ids": missing,
+        "resource_ceiling": list(getattr(args, "resource_ceiling", None) or []),
+        "retry": max(0, int(getattr(args, "retry", 0) or 0)),
+        "timeout_seconds": float(getattr(args, "timeout_seconds", 0.0) or 0.0),
+        "idle_timeout_seconds": float(getattr(args, "idle_timeout_seconds", 0.0) or 0.0),
+        "environment": experiment_environment_snapshot(cwd, bool(getattr(args, "include_pip_freeze", False))),
+        "execution_policy": {
+            "execute_requested": bool(getattr(args, "execute", False)),
+            "readback_required": True,
+            "retries_apply_per_command": True,
+            "deep_loop_gate_report": True,
+        },
+        "status": "planned",
+    }
+
+
+def execute_experiment_runner_payload(args: argparse.Namespace, cwd: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    commands = list(payload.get("commands") or [])
+    if not commands:
+        raise ValueError("experiment-runner --execute requires at least one --command.")
+    run_dir = Path(payload["run_directory"])
+    ensure_dir(run_dir)
+    logs_dir = run_dir / "logs"
+    ensure_dir(logs_dir)
+    command_results: list[dict[str, Any]] = []
+    for command_index, command in enumerate(commands, start=1):
+        attempts: list[dict[str, Any]] = []
+        for attempt_index in range(1, int(payload.get("retry", 0)) + 2):
+            result = run_monitored_process(
+                cwd,
+                logs_dir,
+                f"experiment-{command_index:02d}",
+                command,
+                attempt_index,
+                idle_timeout_seconds=float(payload.get("idle_timeout_seconds") or 0.0),
+                wall_timeout_seconds=float(payload.get("timeout_seconds") or 0.0),
+                poll_interval_seconds=DEFAULT_ROUTE_AGENT_POLL_SECONDS,
+            )
+            attempts.append(result)
+            exit_code = result.get("exit_code")
+            if isinstance(exit_code, int) and exit_code == 0:
+                break
+        final = attempts[-1]
+        final_exit_code = final.get("exit_code")
+        final_passed = isinstance(final_exit_code, int) and final_exit_code == 0
+        command_results.append(
+            {
+                "id": f"cmd-{command_index:02d}",
+                "command": command,
+                "attempts": attempts,
+                "passed": final_passed,
+                "exit_code": final_exit_code,
+                "elapsed_seconds": final.get("elapsed_seconds"),
+                "stdout_log": final.get("stdout_log"),
+                "stderr_log": final.get("stderr_log"),
+                "signature": final.get("signature"),
+                "tags": [str(payload.get("subchain") or "P5"), "experiment"],
+                "error": final.get("stderr_excerpt") if not final_passed else None,
+            }
+        )
+    artifact_statuses = experiment_artifact_statuses(cwd, list(payload.get("expected_artifacts") or []))
+    missing_artifacts = [item for item in artifact_statuses if not item.get("exists")]
+    passed_commands = [item for item in command_results if item.get("passed")]
+    command_count = len(command_results)
+    pass_rate = len(passed_commands) / max(1, command_count)
+    artifact_penalty = 0.0 if not missing_artifacts else min(0.35, 0.1 * len(missing_artifacts))
+    weighted_score = max(0.0, min(1.0, pass_rate - artifact_penalty))
+    failures_by_tag: dict[str, int] = {}
+    failed_cases: list[dict[str, Any]] = []
+    for item in command_results:
+        if item.get("passed"):
+            continue
+        for tag in item.get("tags") or ["experiment"]:
+            failures_by_tag[str(tag)] = failures_by_tag.get(str(tag), 0) + 1
+        failed_cases.append(
+            {
+                "case_id": item.get("id"),
+                "tags": item.get("tags"),
+                "score": 0.0,
+                "error": item.get("error"),
+                "output": item.get("stdout_log"),
+            }
+        )
+    if missing_artifacts:
+        failures_by_tag["artifact_readback"] = failures_by_tag.get("artifact_readback", 0) + len(missing_artifacts)
+        for item in missing_artifacts:
+            failed_cases.append({"case_id": item.get("artifact"), "tags": ["artifact_readback"], "score": 0.0, "error": "Expected artifact is missing."})
+    summary = {
+        "passed": weighted_score >= 1.0 and not missing_artifacts,
+        "pass_rate": round(pass_rate, 4),
+        "weighted_score": round(weighted_score, 4),
+        "failures_by_tag": failures_by_tag,
+        "failed_cases": failed_cases,
+        "runtime_seconds": round(sum(float(item.get("elapsed_seconds") or 0.0) for item in command_results), 3),
+        "reports": [psafe(run_dir / "experiment-runner-report.json")],
+    }
+    payload.update(
+        {
+            "status": "passed" if summary["passed"] else "failed",
+            "command_results": command_results,
+            "artifact_statuses": artifact_statuses,
+            "summary": summary,
+            "harness_report": {
+                "schema_version": SCHEMA_VERSION,
+                "type": "experiment_runner_plus_harness_report",
+                "id": payload.get("id"),
+                "summary": summary,
+                "results": command_results,
+                "environment": payload.get("environment"),
+                "artifacts": artifact_statuses,
+            },
+        }
+    )
+    return payload
+
+
+def experiment_runner_markdown(payload: dict[str, Any]) -> list[str]:
+    lines = [
+        "# Experiment Runner Plus",
+        "",
+        f"- ID: `{payload['id']}`",
+        f"- Name: {payload.get('name')}",
+        f"- Status: `{payload.get('status')}`",
+        f"- Subchain: `{payload.get('subchain')}`",
+        f"- Run directory: `{payload.get('run_directory')}`",
+        f"- Commands: {len(payload.get('commands') or [])}",
+        f"- Retry: `{payload.get('retry')}`",
+        f"- Timeout seconds: `{payload.get('timeout_seconds')}`",
+        "",
+        "## Metrics",
+        "",
+    ]
+    summary = payload.get("summary") or {}
+    if summary:
+        for key in ["pass_rate", "weighted_score", "runtime_seconds"]:
+            lines.append(f"- `{key}`: {summary.get(key)}")
+        failures = summary.get("failures_by_tag") or {}
+        lines.append(f"- `failures_by_tag`: {json.dumps(failures, ensure_ascii=True)}")
+    else:
+        lines.append("- No command execution yet. Use `--execute` to run commands.")
+    if payload.get("artifact_statuses"):
+        lines.extend(["", "## Artifact Readback", ""])
+        for item in payload.get("artifact_statuses") or []:
+            lines.append(f"- `{item.get('artifact')}` exists=`{item.get('exists')}` sha256=`{item.get('sha256') or '(none)'}`")
+    return lines
+
+
+def persist_experiment_runner(cwd: Path, state: dict[str, Any], passport: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    run_dir = Path(payload["run_directory"])
+    ensure_dir(run_dir)
+    path = run_dir / "experiment-runner-report.json"
+    payload["path"] = psafe(path)
+    harness_report = payload.get("harness_report")
+    if isinstance(harness_report, dict):
+        write_json(run_dir / "harness-report.json", harness_report)
+        payload["harness_report_path"] = psafe(run_dir / "harness-report.json")
+    write_json(path, payload)
+    write_lines(run_dir / "experiment-runner-report.md", experiment_runner_markdown(payload))
+    append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "experiment_runner_plus", "id": payload["id"], "status": payload.get("status"), "path": psafe(path), "run_directory": psafe(run_dir)})
+    update_list_item(
+        passport["experiments"],
+        {
+            "id": str(payload["id"]),
+            "kind": "experiment_runner_plus",
+            "name": payload.get("name"),
+            "commands": list(payload.get("commands") or []),
+            "status": payload.get("status"),
+            "run_directory": psafe(run_dir),
+            "harness_report": payload.get("harness_report_path"),
+            "created_at": payload.get("timestamp") or utc_now(),
+        },
+    )
+    state.setdefault("counters", {})["experiment_runs"] = int(state.get("counters", {}).get("experiment_runs", 0)) + 1
+    if payload.get("status") == "failed":
+        state.setdefault("counters", {})["failures"] = int(state.get("counters", {}).get("failures", 0)) + 1
+    save_passport(cwd, passport)
+    save_state(cwd, state)
+    return payload
+
+
+def command_experiment_runner(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd, args.stage)
+    state = load_state(cwd)
+    passport = load_passport(cwd, state)
+    payload = build_experiment_runner_payload(args, cwd, state, passport)
+    if args.execute:
+        payload = execute_experiment_runner_payload(args, cwd, payload)
+    if args.write or args.execute:
+        payload = persist_experiment_runner(cwd, state, passport, payload)
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(experiment_runner_markdown(payload)).rstrip() + "\n")
+    return 0 if payload.get("status") in {"planned", "passed"} else 1
+
+
+def autopilot_default_harness(subchain: str, goal: str, test_commands: list[str]) -> dict[str, Any]:
+    command = test_commands if subchain in {"P5", "P6"} and test_commands else []
+    defaults = {
+        "P4": ("method design gate", "method_validity", "method"),
+        "P5": ("execution gate", "pass_rate", "execution"),
+        "P6": ("analysis gate", "analysis_validity", "analysis"),
+        "P8": ("review integrity gate", "review_integrity", "review"),
+        "P10": ("problem resolution gate", "promotion_score", "problem"),
+    }
+    name, metric, failure_tag = defaults.get(subchain, ("research-loop gate", "weighted_score", "route"))
+    return {
+        "id": f"auto-harness-{subchain.lower()}-{short_digest(goal)}",
+        "name": name,
+        "command": command,
+        "metric": [metric, "weighted_score", "failures_by_tag"],
+        "failure_tag": [failure_tag],
+        "promotion_threshold": 0.85 if subchain != "P6" else 0.9,
+    }
+
+
+def prime_autopilot_records(
+    cwd: Path,
+    state: dict[str, Any],
+    passport: dict[str, Any],
+    *,
+    goal: str,
+    sequence: list[str],
+    test_commands: list[str],
+    execute_experiments: bool,
+) -> list[dict[str, Any]]:
+    primed: list[dict[str, Any]] = []
+    registry = load_harness_registry(cwd)
+    harness_ids: dict[str, str] = {}
+    for subchain in sequence:
+        if subchain not in {"P4", "P5", "P6", "P8", "P10"}:
+            continue
+        spec = autopilot_default_harness(subchain, goal, test_commands)
+        harness_args = argparse.Namespace(
+            id=spec["id"],
+            name=spec["name"],
+            command=spec["command"],
+            artifact=[],
+            rubric=[],
+            metric=spec["metric"],
+            failure_tag=spec["failure_tag"],
+            timeout_seconds=None,
+            resource_ceiling=[],
+            promotion_threshold=spec["promotion_threshold"],
+            subchain=subchain,
+            status="active",
+        )
+        record = build_harness_record(harness_args, cwd, state, registry.get("harnesses", {}).get(spec["id"]))
+        registry.setdefault("harnesses", {})[str(record["id"])] = record
+        harness_ids[subchain] = str(record["id"])
+        primed.append({"type": "harness", "subchain": subchain, "id": record["id"]})
+    if harness_ids:
+        save_harness_registry(cwd, registry)
+        append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "autopilot_harness_registry", "harness_ids": list(harness_ids.values()), "path": psafe(harness_registry_path(cwd))})
+
+    text = goal.lower()
+    needs_divergence = text_has_any(text, DIVERGENT_REASONING_KEYWORDS) or any(item in sequence for item in ["P3", "P8", "P10"])
+    if needs_divergence:
+        portfolio_subchain = "P10" if "P10" in sequence else "P3" if "P3" in sequence else sequence[0]
+        portfolio_args = argparse.Namespace(
+            id=f"auto-portfolio-{portfolio_subchain.lower()}-{short_digest(goal)}",
+            problem=goal,
+            stage=None,
+            subchain=portfolio_subchain,
+            seed_hypothesis=[],
+            candidate=[],
+            min_candidates=4,
+        )
+        portfolio = build_hypothesis_portfolio_payload(portfolio_args, cwd, state, passport)
+        persist_hypothesis_portfolio(cwd, state, passport, portfolio)
+        primed.append({"type": "hypothesis_portfolio", "subchain": portfolio_subchain, "id": portfolio["id"], "path": portfolio.get("path")})
+
+    needs_math = text_has_any(text, MATH_REASONING_KEYWORDS) or any(item in sequence for item in ["P4", "P6"])
+    if needs_math:
+        math_subchain = "P6" if "P6" in sequence else "P4" if "P4" in sequence else sequence[0]
+        math_args = argparse.Namespace(
+            id=f"auto-math-{math_subchain.lower()}-{short_digest(goal)}",
+            problem=goal,
+            stage=None,
+            subchain=math_subchain,
+            definition=[],
+            assumption=[],
+            target=[goal],
+        )
+        math_payload = build_math_abstraction_payload(math_args, cwd, state, passport)
+        persist_math_abstraction(cwd, state, math_payload)
+        primed.append({"type": "math_abstraction", "subchain": math_subchain, "id": math_payload["id"], "path": math_payload.get("path")})
+
+    needs_code = text_has_any(text, CODE_BUILDING_KEYWORDS) or "P5" in sequence
+    if needs_code and ("P5" in sequence or "P10" in sequence):
+        code_subchain = "P5" if "P5" in sequence else "P10"
+        code_args = argparse.Namespace(
+            id=f"auto-code-{code_subchain.lower()}-{short_digest(goal)}",
+            goal=goal,
+            stage=None,
+            subchain=code_subchain,
+            harness_id=[harness_ids[code_subchain]] if harness_ids.get(code_subchain) else [],
+            candidate=[],
+            max_variants=3,
+        )
+        code_payload = build_code_builder_payload(code_args, cwd, state, passport)
+        persist_code_builder(cwd, state, code_payload)
+        primed.append({"type": "code_builder", "subchain": code_subchain, "id": code_payload["id"], "path": code_payload.get("path")})
+
+    if "P5" in sequence or "P6" in sequence or test_commands:
+        exp_subchain = "P5" if "P5" in sequence else "P6"
+        exp_args = argparse.Namespace(
+            id=f"auto-experiment-{exp_subchain.lower()}-{short_digest(goal + ''.join(test_commands))}",
+            name="autopilot experiment runner",
+            goal=goal,
+            stage=None,
+            subchain=exp_subchain,
+            command=test_commands,
+            artifact=[],
+            metric=["pass_rate", "weighted_score", "failures_by_tag", "runtime_seconds"],
+            harness_id=[harness_ids[exp_subchain]] if harness_ids.get(exp_subchain) else [],
+            resource_ceiling=[],
+            retry=1,
+            timeout_seconds=0.0,
+            idle_timeout_seconds=0.0,
+            include_pip_freeze=False,
+            execute=execute_experiments,
+        )
+        exp_payload = build_experiment_runner_payload(exp_args, cwd, state, passport)
+        if execute_experiments:
+            exp_payload = execute_experiment_runner_payload(exp_args, cwd, exp_payload)
+        persist_experiment_runner(cwd, state, passport, exp_payload)
+        primed.append({"type": "experiment_runner_plus", "subchain": exp_subchain, "id": exp_payload["id"], "path": exp_payload.get("path"), "harness_report": exp_payload.get("harness_report_path")})
+
+    return primed
+
+
+def build_autopilot_payload(args: argparse.Namespace, cwd: Path, state: dict[str, Any], passport: dict[str, Any]) -> dict[str, Any]:
+    goal = str(args.goal or "").strip()
+    if not goal:
+        raise ValueError("autopilot requires --goal.")
+    normalized = normalize_task_input(cwd, state, passport, goal)
+    graph = build_route_graph(cwd, state, passport, goal)
+    trigger_plan = build_chain_trigger_plan(
+        cwd,
+        state,
+        passport,
+        intent=goal,
+        task_type=str(graph.get("task_type") or normalized.get("task_type") or "intake"),
+        depth=str(graph.get("depth_level") or normalized.get("depth_level") or "L2"),
+        subchains=list(graph.get("subchains") or []),
+        test_commands=list(args.test_command or []),
+    )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "timestamp": utc_now(),
+        "id": args.id or record_id("autopilot", goal),
+        "type": "autopilot_goal_runner",
+        "project_root": psafe(cwd),
+        "goal": goal,
+        "normalized_input": normalized,
+        "route_graph": graph,
+        "trigger_plan": trigger_plan,
+        "test_commands": list(args.test_command or []),
+        "start_watchdog_requested": bool(args.start_watchdog),
+        "prime_requested": bool(args.prime),
+        "execute_experiments_requested": bool(args.execute_experiments),
+        "status": "planned",
+    }
+
+
+def autopilot_markdown(payload: dict[str, Any]) -> list[str]:
+    trigger_plan = payload.get("trigger_plan") or {}
+    lines = [
+        "# Research Loop Autopilot",
+        "",
+        f"- ID: `{payload['id']}`",
+        f"- Status: `{payload.get('status')}`",
+        f"- Goal: {payload.get('goal')}",
+        f"- Task type: `{(payload.get('route_graph') or {}).get('task_type')}`",
+        f"- Depth: `{(payload.get('route_graph') or {}).get('depth_level')}`",
+        f"- Sequence: {' -> '.join(trigger_plan.get('sequence') or []) or '(not set)'}",
+        f"- No user confirmation needed: `{bool(trigger_plan.get('no_user_confirmation_needed'))}`",
+        "",
+        "## Watchdog Command",
+        "",
+        f"`{json.dumps(trigger_plan.get('watchdog_command') or [], ensure_ascii=True)}`",
+        "",
+        "## Auto Trigger Nodes",
+        "",
+    ]
+    for item in trigger_plan.get("actions") or []:
+        lines.append(f"- `{item.get('subchain')}` {item.get('action')} via `{item.get('mcp_tool') or 'domain-skill'}`")
+        lines.append(f"  - Reason: {item.get('reason')}")
+    if payload.get("primed_records"):
+        lines.extend(["", "## Primed Records", ""])
+        for item in payload.get("primed_records") or []:
+            lines.append(f"- `{item.get('type')}` subchain=`{item.get('subchain')}` id=`{item.get('id')}`")
+    if payload.get("watchdog_result"):
+        result = payload["watchdog_result"]
+        lines.extend(["", "## Watchdog Result", ""])
+        lines.append(f"- Exit code: `{result.get('exit_code')}`")
+        lines.append(f"- Timed out: `{result.get('timed_out')}`")
+        lines.append(f"- stdout: `{result.get('stdout_log')}`")
+        lines.append(f"- stderr: `{result.get('stderr_log')}`")
+    return lines
+
+
+def persist_autopilot_payload(cwd: Path, state: dict[str, Any], passport: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    path = autopilot_root(cwd) / f"{payload['id']}-autopilot.json"
+    payload["path"] = psafe(path)
+    write_json(path, payload)
+    write_lines(autopilot_root(cwd) / f"{payload['id']}-autopilot.md", autopilot_markdown(payload))
+    append_jsonl(artifacts_path(cwd), {"timestamp": utc_now(), "type": "autopilot_goal_runner", "id": payload["id"], "path": psafe(path), "status": payload.get("status")})
+    update_list_item(
+        passport["next_actions"],
+        {
+            "id": f"next-autopilot-{payload['id']}",
+            "text": f"Run autopilot chain for goal: {payload.get('goal')}",
+            "stage": state.get("current_stage", "INTAKE"),
+            "status": "todo" if payload.get("status") == "planned" else "in-progress",
+            "owner": "agent",
+            "created_at": utc_now(),
+            "note": psafe(path),
+        },
+    )
+    state.setdefault("counters", {})["autopilot_runs"] = int(state.get("counters", {}).get("autopilot_runs", 0)) + 1
+    save_passport(cwd, passport)
+    save_state(cwd, state)
+    return payload
+
+
+def command_autopilot(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd, args.stage, storage_style=args.storage_style, init_storage=args.init_storage)
+    state = load_state(cwd)
+    passport = load_passport(cwd, state)
+    payload = build_autopilot_payload(args, cwd, state, passport)
+    if args.prime or args.start_watchdog:
+        payload["primed_records"] = prime_autopilot_records(
+            cwd,
+            state,
+            passport,
+            goal=payload["goal"],
+            sequence=list((payload.get("trigger_plan") or {}).get("sequence") or []),
+            test_commands=list(args.test_command or []),
+            execute_experiments=bool(args.execute_experiments),
+        )
+        state = load_state(cwd)
+        passport = load_passport(cwd, state)
+        payload["route_graph_after_prime"] = build_route_graph(cwd, state, passport, payload["goal"])
+    if args.start_watchdog:
+        watchdog_dir = autopilot_root(cwd) / f"{payload['id']}-watchdog"
+        ensure_dir(watchdog_dir)
+        command = list((payload.get("trigger_plan") or {}).get("watchdog_command") or [])
+        if args.external_supervisor != "none":
+            command.extend(["--external-supervisor", args.external_supervisor])
+        result = run_monitored_process(
+            cwd,
+            watchdog_dir,
+            "autopilot-watchdog",
+            command,
+            1,
+            shell=False,
+            idle_timeout_seconds=float(args.child_idle_timeout or 0.0),
+            wall_timeout_seconds=float(args.child_wall_timeout or 0.0),
+            poll_interval_seconds=DEFAULT_WATCHDOG_POLL_SECONDS,
+        )
+        payload["watchdog_result"] = result
+        payload["status"] = "watchdog-started" if result.get("exit_code") == 0 else "watchdog-failed"
+    if args.write or args.prime or args.start_watchdog:
+        payload = persist_autopilot_payload(cwd, state, passport, payload)
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(autopilot_markdown(payload)).rstrip() + "\n")
+    return 0 if payload.get("status") in {"planned", "watchdog-started"} else 1
 
 
 def command_normalize(args: argparse.Namespace) -> int:
@@ -11821,6 +13679,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_route.add_argument("--write", action="store_true", help="Write the route plan under .research-loop/reports.")
     p_route.set_defaults(func=command_route)
 
+    p_autopilot = sub.add_parser("autopilot", help="Convert a rough one-shot goal into an executable routed chain, optional priming records, and watchdog-supervised unattended execution.")
+    p_autopilot.add_argument("--goal", required=True, help="Natural-language project goal, even if rough or incomplete.")
+    p_autopilot.add_argument("--id", help="Optional stable autopilot run id.")
+    p_autopilot.add_argument("--stage", help=f"Set current stage before planning. Allowed: {', '.join(STAGES)}")
+    p_autopilot.add_argument("--storage-style", choices=["adaptive", "canonical", "minimal", "loop-local"], default="adaptive", help="Storage policy style used when initializing project structure.")
+    p_autopilot.add_argument("--init-storage", action="store_true", help="Materialize storage policy directories before priming or running.")
+    p_autopilot.add_argument("--test-command", action="append", help="Validation command to bind into execution/analysis harnesses and watchdog runs. Repeat for multiple commands.")
+    p_autopilot.add_argument("--prime", action="store_true", help="Create default harnesses and advanced planning records for the selected chain before running.")
+    p_autopilot.add_argument("--execute-experiments", action="store_true", help="When priming, execute experiment-runner commands instead of only planning them.")
+    p_autopilot.add_argument("--start-watchdog", action="store_true", help="Immediately start auto-loop-watchdog from the generated plan.")
+    p_autopilot.add_argument("--external-supervisor", choices=sorted(EXTERNAL_SUPERVISOR_CHOICES), default="none", help="Optional fail-open external supervisor for watchdog decisions.")
+    p_autopilot.add_argument("--child-idle-timeout", type=float, default=DEFAULT_WATCHDOG_CHILD_IDLE_TIMEOUT_SECONDS, help="Kill child watchdog process after this many silent seconds. 0 disables idle timeout.")
+    p_autopilot.add_argument("--child-wall-timeout", type=float, default=DEFAULT_WATCHDOG_CHILD_WALL_TIMEOUT_SECONDS, help="Kill child watchdog process after this many wall-clock seconds. 0 disables wall timeout.")
+    p_autopilot.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output autopilot plan format.")
+    p_autopilot.add_argument("--write", action="store_true", help="Persist the autopilot plan under .research-loop/autopilot.")
+    p_autopilot.set_defaults(func=command_autopilot)
+
     p_deep_loop = sub.add_parser("deep-loop", help="Evaluate a subchain gate, run review routing semantics, and produce the next deep-loop directive.")
     p_deep_loop.add_argument("--stage", help=f"Set current stage before evaluating the gate. Allowed: {', '.join(STAGES)}")
     p_deep_loop.add_argument("--intent", help="Current user goal or task intent used for route graph construction.")
@@ -11921,6 +13796,80 @@ def build_parser() -> argparse.ArgumentParser:
     p_ophi_cycle.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output OPHIS cycle format.")
     p_ophi_cycle.add_argument("--write", action="store_true", help="Persist all generated OPHIS records under .research-loop control ledgers.")
     p_ophi_cycle.set_defaults(func=command_ophi_cycle)
+
+    p_harness = sub.add_parser("harness-registry", help="Register or list reusable validation surfaces for deep-loop and problem-loop gates.")
+    p_harness.add_argument("--id", help="Harness id to update or inspect.")
+    p_harness.add_argument("--name", help="Human-readable harness name.")
+    p_harness.add_argument("--stage", help=f"Set current stage before registering. Allowed: {', '.join(STAGES)}")
+    p_harness.add_argument("--subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="P1-P10 subchain this harness validates.")
+    p_harness.add_argument("--status", choices=["active", "draft", "retired"], default="active", help="Harness lifecycle status.")
+    p_harness.add_argument("--command", action="append", help="Validation or test command. Repeat for multiple commands.")
+    p_harness.add_argument("--artifact", action="append", help="Expected artifact path or id. Repeat for multiple artifacts.")
+    p_harness.add_argument("--rubric", action="append", help="Rubric criterion used for pass/fail or weighted scoring.")
+    p_harness.add_argument("--metric", action="append", help="Metric to extract from reports, e.g. pass_rate or weighted_score.")
+    p_harness.add_argument("--failure-tag", action="append", help="Failure tag that should route retry/P10 decisions.")
+    p_harness.add_argument("--timeout-seconds", type=float, help="Expected timeout for this harness.")
+    p_harness.add_argument("--resource-ceiling", action="append", help="Resource limit note, e.g. memory<=8GB or cpu<=4.")
+    p_harness.add_argument("--promotion-threshold", type=float, help="Minimum score required for promotion. Accepts 0-1 or 0-100.")
+    p_harness.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output harness registry format.")
+    p_harness.add_argument("--write", action="store_true", help="Persist the harness under .research-loop/harnesses/harness-registry.json.")
+    p_harness.set_defaults(func=command_harness_registry)
+
+    p_portfolio = sub.add_parser("hypothesis-portfolio", help="Build a divergent, ranked, falsifiable hypothesis portfolio for a blocker or research question.")
+    p_portfolio.add_argument("--id", help="Optional portfolio id.")
+    p_portfolio.add_argument("--problem", required=True, help="Problem, blocker, research question, or unresolved phenomenon.")
+    p_portfolio.add_argument("--stage", help=f"Set current stage before creating the portfolio. Allowed: {', '.join(STAGES)}")
+    p_portfolio.add_argument("--subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), help="P1-P10 subchain this portfolio supports.")
+    p_portfolio.add_argument("--seed-hypothesis", action="append", help="Seed hypothesis. Repeat for multiple seeds.")
+    p_portfolio.add_argument("--candidate", action="append", help="Explicit candidate hypothesis. Repeat for multiple candidates.")
+    p_portfolio.add_argument("--min-candidates", type=int, default=3, help="Minimum candidate count after deterministic expansion.")
+    p_portfolio.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output portfolio format.")
+    p_portfolio.add_argument("--write", action="store_true", help="Persist portfolio JSON and ledger records.")
+    p_portfolio.set_defaults(func=command_hypothesis_portfolio)
+
+    p_code_builder = sub.add_parser("code-builder", help="Create a scratch-only evaluator-backed code variant plan before core-file promotion.")
+    p_code_builder.add_argument("--id", help="Optional builder id.")
+    p_code_builder.add_argument("--goal", required=True, help="Implementation or repair goal.")
+    p_code_builder.add_argument("--stage", help=f"Set current stage before planning. Allowed: {', '.join(STAGES)}")
+    p_code_builder.add_argument("--subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), default="P5", help="P1-P10 subchain this builder supports.")
+    p_code_builder.add_argument("--harness-id", action="append", help="Registered harness id required for champion selection.")
+    p_code_builder.add_argument("--candidate", action="append", help="Variant strategy or candidate implementation idea.")
+    p_code_builder.add_argument("--max-variants", type=int, help="Maximum number of variants to plan.")
+    p_code_builder.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output code-builder format.")
+    p_code_builder.add_argument("--write", action="store_true", help="Persist code-builder plan and create scratch directories.")
+    p_code_builder.set_defaults(func=command_code_builder)
+
+    p_math = sub.add_parser("math-abstraction", help="Create a definition-assumption-subgoal-verifier chain for quantitative or mathematical blockers.")
+    p_math.add_argument("--id", help="Optional abstraction id.")
+    p_math.add_argument("--problem", required=True, help="Natural-language quantitative, proof, or mathematical problem.")
+    p_math.add_argument("--stage", help=f"Set current stage before abstraction. Allowed: {', '.join(STAGES)}")
+    p_math.add_argument("--subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), default="P6", help="P1-P10 subchain this abstraction supports.")
+    p_math.add_argument("--definition", action="append", help="Definition to include in the abstraction.")
+    p_math.add_argument("--assumption", action="append", help="Assumption or boundary condition.")
+    p_math.add_argument("--target", action="append", help="Target theorem, equation, invariant, or quantitative claim.")
+    p_math.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output math abstraction format.")
+    p_math.add_argument("--write", action="store_true", help="Persist abstraction JSON under .research-loop/math-abstractions.")
+    p_math.set_defaults(func=command_math_abstraction)
+
+    p_experiment = sub.add_parser("experiment-runner", help="Plan or execute monitored experiment commands with environment fingerprints, retries, artifact readback, and harness-compatible reports.")
+    p_experiment.add_argument("--id", help="Optional stable experiment run id.")
+    p_experiment.add_argument("--name", help="Human-readable experiment name.")
+    p_experiment.add_argument("--goal", help="Research or engineering goal this experiment validates.")
+    p_experiment.add_argument("--stage", help=f"Set current stage before planning. Allowed: {', '.join(STAGES)}")
+    p_experiment.add_argument("--subchain", choices=sorted(DEEP_LOOP_SUBCHAIN_BY_ID), default="P5", help="P1-P10 subchain this experiment validates.")
+    p_experiment.add_argument("--command", action="append", help="Shell command to run. Repeat for multiple commands.")
+    p_experiment.add_argument("--artifact", action="append", help="Expected artifact path to read back after execution. Repeat for multiple artifacts.")
+    p_experiment.add_argument("--metric", action="append", help="Metric expected in the report, e.g. pass_rate or weighted_score.")
+    p_experiment.add_argument("--harness-id", action="append", help="Registered harness id this experiment serves.")
+    p_experiment.add_argument("--resource-ceiling", action="append", help="Resource limit note, e.g. memory<=8GB or cpu<=4.")
+    p_experiment.add_argument("--retry", type=int, default=0, help="Retry count per command after the first attempt.")
+    p_experiment.add_argument("--timeout-seconds", type=float, default=0.0, help="Per-command wall timeout. 0 disables timeout.")
+    p_experiment.add_argument("--idle-timeout-seconds", type=float, default=0.0, help="Per-command idle timeout. 0 disables timeout.")
+    p_experiment.add_argument("--include-pip-freeze", action="store_true", help="Include a hashed pip freeze fingerprint in the environment snapshot.")
+    p_experiment.add_argument("--execute", action="store_true", help="Execute commands and capture logs instead of only planning.")
+    p_experiment.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output experiment report format.")
+    p_experiment.add_argument("--write", action="store_true", help="Persist the experiment report under .research-loop/experiment-runs.")
+    p_experiment.set_defaults(func=command_experiment_runner)
 
     p_capabilities = sub.add_parser("capabilities", help="Print the research loop capability matrix and missing tool gaps.")
     p_capabilities.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output capability matrix format.")

@@ -16,7 +16,7 @@ from typing import Any
 
 SCRIPT = Path(__file__).resolve().parent / "research_loop.py"
 SERVER_NAME = "codex-research-loop"
-SERVER_VERSION = "0.9.6"
+SERVER_VERSION = "0.9.8"
 
 
 def schema(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -62,6 +62,30 @@ TOOLS: list[dict[str, Any]] = [
                 "write": {"type": "boolean", "description": "Write route plan to reports."},
             },
             ["cwd"],
+        ),
+    },
+    {
+        "name": "research_goal_autopilot",
+        "description": "Convert a rough one-shot research goal into an executable chain plan, optional priming records, and watchdog-supervised unattended execution.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "goal": {"type": "string", "description": "Natural-language project goal, even if rough or incomplete."},
+                "id": {"type": "string", "description": "Optional stable autopilot run id."},
+                "stage": {"type": "string", "description": "Optional stage override."},
+                "storage_style": {"type": "string", "description": "adaptive, canonical, minimal, or loop-local."},
+                "init_storage": {"type": "boolean", "description": "Materialize storage policy directories before priming or running."},
+                "test_commands": {"type": "array", "items": {"type": "string"}, "description": "Validation commands to bind into harnesses and watchdog runs."},
+                "prime": {"type": "boolean", "description": "Create default harnesses and advanced planning records before running."},
+                "execute_experiments": {"type": "boolean", "description": "Execute experiment-runner commands while priming."},
+                "start_watchdog": {"type": "boolean", "description": "Immediately start auto-loop-watchdog from the generated plan."},
+                "external_supervisor": {"type": "string", "description": "Optional fail-open external supervisor provider, such as deepseek."},
+                "child_idle_timeout": {"type": "number", "description": "Kill child watchdog process after this many silent seconds. 0 disables idle timeout."},
+                "child_wall_timeout": {"type": "number", "description": "Kill child watchdog process after this many wall-clock seconds. 0 disables wall timeout."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "write": {"type": "boolean", "description": "Persist the autopilot plan."},
+            },
+            ["cwd", "goal"],
         ),
     },
     {
@@ -205,6 +229,115 @@ TOOLS: list[dict[str, Any]] = [
                 "write": {"type": "boolean", "description": "Append to the mechanism library."},
             },
             ["cwd", "mechanism"],
+        ),
+    },
+    {
+        "name": "research_harness_registry",
+        "description": "Register or list reusable validation surfaces for deep-loop and problem-loop gates.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "id": {"type": "string", "description": "Harness id to update or inspect."},
+                "name": {"type": "string", "description": "Human-readable harness name."},
+                "stage": {"type": "string", "description": "Optional stage override."},
+                "subchain": {"type": "string", "description": "P1-P10 subchain this harness validates."},
+                "status": {"type": "string", "description": "active, draft, or retired."},
+                "commands": {"type": "array", "items": {"type": "string"}, "description": "Validation or test commands."},
+                "artifacts": {"type": "array", "items": {"type": "string"}, "description": "Expected artifact paths or ids."},
+                "rubrics": {"type": "array", "items": {"type": "string"}, "description": "Rubric criteria."},
+                "metrics": {"type": "array", "items": {"type": "string"}, "description": "Metrics to extract from reports."},
+                "failure_tags": {"type": "array", "items": {"type": "string"}, "description": "Failure tags that route retry/P10 decisions."},
+                "timeout_seconds": {"type": "number", "description": "Expected timeout for this harness."},
+                "resource_ceiling": {"type": "array", "items": {"type": "string"}, "description": "Resource ceiling notes."},
+                "promotion_threshold": {"type": "number", "description": "Minimum score required for promotion, 0-1 or 0-100."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "write": {"type": "boolean", "description": "Persist the harness registry record."},
+            },
+            ["cwd"],
+        ),
+    },
+    {
+        "name": "research_hypothesis_portfolio",
+        "description": "Build a divergent, ranked, falsifiable hypothesis portfolio for a blocker or research question.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "id": {"type": "string", "description": "Optional portfolio id."},
+                "problem": {"type": "string", "description": "Problem, blocker, or unresolved phenomenon."},
+                "stage": {"type": "string", "description": "Optional stage override."},
+                "subchain": {"type": "string", "description": "P1-P10 subchain this portfolio supports."},
+                "seed_hypotheses": {"type": "array", "items": {"type": "string"}, "description": "Seed hypotheses."},
+                "candidates": {"type": "array", "items": {"type": "string"}, "description": "Explicit candidate hypotheses."},
+                "min_candidates": {"type": "integer", "description": "Minimum candidate count after expansion."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "write": {"type": "boolean", "description": "Persist portfolio records."},
+            },
+            ["cwd", "problem"],
+        ),
+    },
+    {
+        "name": "research_code_builder",
+        "description": "Create a scratch-only evaluator-backed code variant plan before core-file promotion.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "id": {"type": "string", "description": "Optional builder id."},
+                "goal": {"type": "string", "description": "Implementation or repair goal."},
+                "stage": {"type": "string", "description": "Optional stage override."},
+                "subchain": {"type": "string", "description": "P1-P10 subchain this builder supports."},
+                "harness_ids": {"type": "array", "items": {"type": "string"}, "description": "Registered harness ids."},
+                "candidates": {"type": "array", "items": {"type": "string"}, "description": "Variant strategies or candidate implementation ideas."},
+                "max_variants": {"type": "integer", "description": "Maximum number of variants to plan."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "write": {"type": "boolean", "description": "Persist code-builder plan and create scratch dirs."},
+            },
+            ["cwd", "goal"],
+        ),
+    },
+    {
+        "name": "research_math_abstraction",
+        "description": "Create a definition-assumption-subgoal-verifier chain for quantitative or mathematical blockers.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "id": {"type": "string", "description": "Optional abstraction id."},
+                "problem": {"type": "string", "description": "Natural-language quantitative, proof, or mathematical problem."},
+                "stage": {"type": "string", "description": "Optional stage override."},
+                "subchain": {"type": "string", "description": "P1-P10 subchain this abstraction supports."},
+                "definitions": {"type": "array", "items": {"type": "string"}, "description": "Definitions to include."},
+                "assumptions": {"type": "array", "items": {"type": "string"}, "description": "Assumptions or boundary conditions."},
+                "targets": {"type": "array", "items": {"type": "string"}, "description": "Target theorem, equation, invariant, or quantitative claim."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "write": {"type": "boolean", "description": "Persist abstraction JSON."},
+            },
+            ["cwd", "problem"],
+        ),
+    },
+    {
+        "name": "research_experiment_runner",
+        "description": "Plan or execute monitored experiment commands with environment fingerprints, retries, artifact readback, and harness-compatible reports.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "id": {"type": "string", "description": "Optional stable experiment run id."},
+                "name": {"type": "string", "description": "Human-readable experiment name."},
+                "goal": {"type": "string", "description": "Research or engineering goal this experiment validates."},
+                "stage": {"type": "string", "description": "Optional stage override."},
+                "subchain": {"type": "string", "description": "P1-P10 subchain this experiment validates."},
+                "commands": {"type": "array", "items": {"type": "string"}, "description": "Shell commands to run."},
+                "artifacts": {"type": "array", "items": {"type": "string"}, "description": "Expected artifact paths to read back."},
+                "metrics": {"type": "array", "items": {"type": "string"}, "description": "Expected metrics, e.g. pass_rate or weighted_score."},
+                "harness_ids": {"type": "array", "items": {"type": "string"}, "description": "Registered harness ids this experiment serves."},
+                "resource_ceiling": {"type": "array", "items": {"type": "string"}, "description": "Resource limit notes."},
+                "retry": {"type": "integer", "description": "Retry count per command after the first attempt."},
+                "timeout_seconds": {"type": "number", "description": "Per-command wall timeout. 0 disables timeout."},
+                "idle_timeout_seconds": {"type": "number", "description": "Per-command idle timeout. 0 disables timeout."},
+                "include_pip_freeze": {"type": "boolean", "description": "Include a hashed pip freeze fingerprint."},
+                "execute": {"type": "boolean", "description": "Execute commands and capture logs instead of only planning."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "write": {"type": "boolean", "description": "Persist the experiment report."},
+            },
+            ["cwd"],
         ),
     },
     {
@@ -760,6 +893,29 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
         if as_bool(args.get("write")):
             command.append("--write")
         return command
+    if name == "research_goal_autopilot":
+        command.append("autopilot")
+        add_option(command, "--goal", args.get("goal"))
+        add_option(command, "--id", args.get("id"))
+        add_option(command, "--stage", args.get("stage"))
+        add_option(command, "--storage-style", args.get("storage_style"))
+        if as_bool(args.get("init_storage")):
+            command.append("--init-storage")
+        for test_command in args.get("test_commands") or []:
+            add_option(command, "--test-command", test_command)
+        if as_bool(args.get("prime")):
+            command.append("--prime")
+        if as_bool(args.get("execute_experiments")):
+            command.append("--execute-experiments")
+        if as_bool(args.get("start_watchdog")):
+            command.append("--start-watchdog")
+        add_option(command, "--external-supervisor", args.get("external_supervisor"))
+        add_option(command, "--child-idle-timeout", args.get("child_idle_timeout"))
+        add_option(command, "--child-wall-timeout", args.get("child_wall_timeout"))
+        add_option(command, "--format", args.get("format"))
+        if as_bool(args.get("write")):
+            command.append("--write")
+        return command
     if name == "research_loop_deep_loop":
         command.append("deep-loop")
         add_option(command, "--stage", args.get("stage"))
@@ -885,6 +1041,105 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
             add_option(command, "--reuse-condition", reuse_condition)
         if as_bool(args.get("negative_result")):
             command.append("--negative-result")
+        add_option(command, "--format", args.get("format"))
+        if as_bool(args.get("write")):
+            command.append("--write")
+        return command
+    if name == "research_harness_registry":
+        command.append("harness-registry")
+        add_option(command, "--id", args.get("id"))
+        add_option(command, "--name", args.get("name"))
+        add_option(command, "--stage", args.get("stage"))
+        add_option(command, "--subchain", args.get("subchain"))
+        add_option(command, "--status", args.get("status"))
+        for value in args.get("commands") or []:
+            add_option(command, "--command", value)
+        for value in args.get("artifacts") or []:
+            add_option(command, "--artifact", value)
+        for value in args.get("rubrics") or []:
+            add_option(command, "--rubric", value)
+        for value in args.get("metrics") or []:
+            add_option(command, "--metric", value)
+        for value in args.get("failure_tags") or []:
+            add_option(command, "--failure-tag", value)
+        add_option(command, "--timeout-seconds", args.get("timeout_seconds"))
+        for value in args.get("resource_ceiling") or []:
+            add_option(command, "--resource-ceiling", value)
+        add_option(command, "--promotion-threshold", args.get("promotion_threshold"))
+        add_option(command, "--format", args.get("format"))
+        if as_bool(args.get("write")):
+            command.append("--write")
+        return command
+    if name == "research_hypothesis_portfolio":
+        command.append("hypothesis-portfolio")
+        add_option(command, "--id", args.get("id"))
+        add_option(command, "--problem", args.get("problem"))
+        add_option(command, "--stage", args.get("stage"))
+        add_option(command, "--subchain", args.get("subchain"))
+        for value in args.get("seed_hypotheses") or []:
+            add_option(command, "--seed-hypothesis", value)
+        for value in args.get("candidates") or []:
+            add_option(command, "--candidate", value)
+        add_option(command, "--min-candidates", args.get("min_candidates"))
+        add_option(command, "--format", args.get("format"))
+        if as_bool(args.get("write")):
+            command.append("--write")
+        return command
+    if name == "research_code_builder":
+        command.append("code-builder")
+        add_option(command, "--id", args.get("id"))
+        add_option(command, "--goal", args.get("goal"))
+        add_option(command, "--stage", args.get("stage"))
+        add_option(command, "--subchain", args.get("subchain"))
+        for value in args.get("harness_ids") or []:
+            add_option(command, "--harness-id", value)
+        for value in args.get("candidates") or []:
+            add_option(command, "--candidate", value)
+        add_option(command, "--max-variants", args.get("max_variants"))
+        add_option(command, "--format", args.get("format"))
+        if as_bool(args.get("write")):
+            command.append("--write")
+        return command
+    if name == "research_math_abstraction":
+        command.append("math-abstraction")
+        add_option(command, "--id", args.get("id"))
+        add_option(command, "--problem", args.get("problem"))
+        add_option(command, "--stage", args.get("stage"))
+        add_option(command, "--subchain", args.get("subchain"))
+        for value in args.get("definitions") or []:
+            add_option(command, "--definition", value)
+        for value in args.get("assumptions") or []:
+            add_option(command, "--assumption", value)
+        for value in args.get("targets") or []:
+            add_option(command, "--target", value)
+        add_option(command, "--format", args.get("format"))
+        if as_bool(args.get("write")):
+            command.append("--write")
+        return command
+    if name == "research_experiment_runner":
+        command.append("experiment-runner")
+        add_option(command, "--id", args.get("id"))
+        add_option(command, "--name", args.get("name"))
+        add_option(command, "--goal", args.get("goal"))
+        add_option(command, "--stage", args.get("stage"))
+        add_option(command, "--subchain", args.get("subchain"))
+        for value in args.get("commands") or []:
+            add_option(command, "--command", value)
+        for value in args.get("artifacts") or []:
+            add_option(command, "--artifact", value)
+        for value in args.get("metrics") or []:
+            add_option(command, "--metric", value)
+        for value in args.get("harness_ids") or []:
+            add_option(command, "--harness-id", value)
+        for value in args.get("resource_ceiling") or []:
+            add_option(command, "--resource-ceiling", value)
+        add_option(command, "--retry", args.get("retry"))
+        add_option(command, "--timeout-seconds", args.get("timeout_seconds"))
+        add_option(command, "--idle-timeout-seconds", args.get("idle_timeout_seconds"))
+        if as_bool(args.get("include_pip_freeze")):
+            command.append("--include-pip-freeze")
+        if as_bool(args.get("execute")):
+            command.append("--execute")
         add_option(command, "--format", args.get("format"))
         if as_bool(args.get("write")):
             command.append("--write")

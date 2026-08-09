@@ -7,12 +7,14 @@ description: >
   and unattended test feedback loops. Trigger on research loop, loop,
   checkpoint, handoff, resume, project state, material passport, evidence
   ledger, decision log, experiment run log, rough natural-language research
-  input needing normalization, Crossref/OpenAlex/arXiv lookup, content ingest
+  input needing normalization, one-shot autopilot goal execution,
+  Crossref/OpenAlex/arXiv lookup, content ingest
   from URLs or local files, adaptive project storage policies, standardized
   data packages, Zotero
   BibTeX/CSL-JSON/PDF attachment/dedupe exports, llm-wiki-compatible pages,
   claim-evidence verification, isolated problem diagnosis, expert-panel
   evaluation, gated adjustment promotion, deep-loop gate/review/tree routing,
+  experiment-runner-plus monitored experiments,
   auto-loop test repair, fail-open external supervisor review, or multi-path
   routing to academic, Nature-style, PDF, Word, presentation, and research
   production skills.
@@ -89,6 +91,7 @@ as `cwd` for every tool call. Available tool names mirror the CLI surface:
 `research_loop_claim`, `research_loop_evidence`, `research_loop_decision`,
 `research_loop_risk`, `research_loop_next`, `research_loop_update`,
 `research_loop_capabilities`, `research_loop_normalize`,
+`research_goal_autopilot`,
 `research_storage_policy`, `research_loop_deep_loop`,
 `research_source_hub`, `research_content_ingest`, `research_zotero_bridge`,
 `research_problem_loop`, `research_problem_promote`,
@@ -97,6 +100,9 @@ as `cwd` for every tool call. Available tool names mirror the CLI surface:
 `research_loop_observe`, `research_loop_hypothesis`,
 `research_loop_intervention`, `research_loop_ophi_cycle`,
 `research_loop_mechanism`,
+`research_harness_registry`, `research_hypothesis_portfolio`,
+`research_code_builder`, `research_math_abstraction`,
+`research_experiment_runner`,
 `research_loop_checkpoint`,
 `research_loop_handoff`, `research_loop_resume`, `research_loop_validate`, and
 `research_loop_run`.
@@ -121,6 +127,8 @@ python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\t
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" normalize --input "rough user request"
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" route --intent "write the paper"
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" route --intent "write the paper" --format json
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" autopilot --goal "complete this research question and produce a reliable final report" --prime --write --format json
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" autopilot --goal "repair the analysis code, validate the math, and write the final report" --test-command "python -m pytest -q" --prime --start-watchdog --format json
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "write the paper" --current-subchain P7 --gate-result pass --write
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "verify evidence" --current-subchain P3 --gate-result fail --gate-issue "unsupported claim remains" --write
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "verify harness report" --current-subchain P6 --gate-result auto --harness-report "reports\harness.json" --write
@@ -129,6 +137,11 @@ python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\t
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" hypothesis --mechanism "missing locator checks cause unsupported final claims" --phenomenon-id phen-id --prediction "claim-evidence fails before writing" --write
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" intervention --plan "run claim-evidence before P7 promotion" --hypothesis-id hyp-id --expected-effect "unsupported claims stop before writing" --validation "claim-evidence --fail-on-issue" --write
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" mechanism --mechanism "pre-writing claim-evidence gates prevent fabricated citation drift" --status supported --scope "P3 to P7 transitions" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" harness-registry --name "analysis harness" --subchain P6 --command "python -m pytest tests/test_analysis.py" --metric weighted_score --failure-tag analysis --promotion-threshold 0.85 --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" hypothesis-portfolio --problem "analysis passes smoke tests but fails robustness review" --subchain P6 --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" code-builder --goal "repair the failing parser" --subchain P5 --harness-id harness-id --candidate "minimal regression-tested patch" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" math-abstraction --problem "prove the reported metric is invariant under target normalization" --subchain P6 --definition "metric m is computed after normalization n" --assumption "n is monotone" --write
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" experiment-runner --name "analysis smoke" --subchain P6 --command "python -m pytest tests/test_analysis.py -q" --retry 1 --execute --write --format json
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" capabilities
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" source-hub --query "10.1038/s41586-020-2649-2" --provider auto
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" content-ingest --source "paper.html" --mode article --record-materials --write
@@ -178,6 +191,12 @@ The project-local directory is:
   interventions/
   effect-gates/
   mechanisms/
+  harnesses/
+  hypothesis-portfolios/
+  code-builders/
+  math-abstractions/
+  experiment-runs/
+  autopilot/
   reports/
   storage-reports/
   experts/
@@ -243,6 +262,26 @@ python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\t
 
 Record IDs printed by `claim`, `evidence`, `material`, and `decision` should be
 used when connecting evidence to claims. Do not invent IDs.
+
+## One-Shot Autopilot
+
+Use `autopilot` when the user gives a broad, rough, or incomplete goal and
+expects a direct result. It performs the entry translation that users often omit:
+normalize the goal, read existing project state, choose the P1-P10 route,
+assign depth, create auto-start trigger actions, and optionally prime default
+harness, hypothesis, code-builder, math, and experiment-runner records.
+
+```powershell
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" autopilot --goal "complete this research question and produce a reliable final report" --prime --write --format json
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" autopilot --goal "repair the analysis code, validate the math, and write the final report" --test-command "python -m pytest -q" --prime --start-watchdog --format json
+```
+
+The generated plan includes a `watchdog_command`, chain sequence, trigger
+actions, and a human confirmation policy. In unattended mode, do not ask for a
+next-step confirmation when the plan already has an executable next action.
+Pause only for credentials, restricted/private data, payment or purchasing,
+explicit human approval boundaries, destructive external side effects, or
+irreversible publication/release.
 
 ## Prompt Normalization
 
@@ -575,6 +614,13 @@ a semantic reason such as `evidence_gap_route`, `method_gap_route`,
 `analysis_gap_route`, `expand_hypothesis_portfolio`, `delivery_gap_route`, or
 `systemic_blocker`.
 
+In unattended mode, the Arbiter may upgrade `retry_same_route` to
+`escalate_problem_loop` before the retry budget is exhausted when the Research
+Council or Adversarial Gate explicitly requests P10 and the gate vector shows
+high diagnostic risk, fatal objections, repeated failure, or an unknown root
+cause. Local retry remains the default for narrow, low-risk failures that can
+be fixed inside the current subchain.
+
 Reports are written under `.research-loop/deep-loops/`. With `--write`, the
 command records a `deep_loop_gate` decision, a `deep_loop_report` artifact, and
 a next action containing the generated review/handoff prompt. Supplemental
@@ -636,6 +682,39 @@ continuation contract, required reads, and the next-work prompt under
 failure-mode warnings. Research Council adds `mechanism_memory_auditor` for
 these cases, and Adversarial Gate adds killer tests for pending effect gates.
 
+## Advanced Research Nodes
+
+Use these nodes when the task needs stronger construction, deeper analysis,
+divergent reasoning, or mathematical rigor before a gate can pass:
+
+- `harness-registry`: register the validation surface that a subchain must use:
+  commands, expected artifacts, rubric criteria, metrics, failure tags, resource
+  ceilings, and promotion threshold. Deep-loop reads this registry and injects
+  harness context into gate vectors, Research Council, Adversarial Gate, and
+  continuation prompts.
+- `hypothesis-portfolio`: build a portfolio of rival, falsifiable hypotheses
+  for a blocker or research question. It follows
+  `generate -> critique -> rank -> evolve -> validate`, records assumptions,
+  predictions, falsifiers, required evidence, and the next discriminating
+  validation surface.
+- `code-builder`: create scratch-only implementation variants before core
+  edits. Variants are bound to registered harness ids, scored by evaluator
+  evidence, and can only be promoted after a champion passes the promotion gate.
+- `math-abstraction`: turn quantitative or proof-like blockers into explicit
+  objects, definitions, assumptions, subgoals, lemma dependencies, and verifier
+  plans. Use it before advancing quantitative claims that depend on hidden
+  assumptions, symbolic consistency, or proof-like reasoning.
+- `experiment-runner`: plan or execute monitored experiment commands with
+  environment fingerprints, retry history, resource ceilings, stdout/stderr
+  logs, expected-artifact readback, and a harness-compatible summary for
+  deep-loop gates.
+
+These nodes write under `.research-loop/` control directories and storage-policy
+scratch paths. They do not mutate project core files. Deep-loop automatically
+adds dynamic experts for harness design, hypothesis tournaments, evolutionary
+code building, mathematical abstraction, and experiment-runner reproducibility
+when the corresponding records are present.
+
 ## Multi-Path Subchains
 
 Use these canonical subchains when interpreting route output:
@@ -687,17 +766,19 @@ linearly.
 Run `capabilities` when a task asks which tools are already available or what
 needs to be added. The matrix separates available skills/apps from missing tool
 gaps. Built-in local tools now include `prompt-normalizer`,
-`storage-policy`, `research-source-hub`, `content-ingest`, `zotero-bridge`,
+`autopilot-goal-runner`, `storage-policy`, `research-source-hub`,
+`content-ingest`, `zotero-bridge`,
 `claim-evidence-verifier`, `deep-loop-router`,
 `research-council-reviewer`, `adversarial-gate-reviewer`,
 `mechanistic-observer`, `phenomenon-miner`, `hypothesis-portfolio`,
-`intervention-planner`, `mechanism-library`, `problem-loop`, and
-`auto-loop-runner` with `auto-loop-watchdog`. Current missing tool gaps are
+`intervention-planner`, `mechanism-library`, `harness-registry`,
+`experiment-runner-plus`, `evolutionary-code-builder`,
+`math-abstraction-chain`, `problem-loop`, and `auto-loop-runner` with
+`auto-loop-watchdog`. Current missing tool gaps are
 advisory until implemented:
 
 - `repository-publisher` for Zenodo/OSF release and DOI/provenance backfill.
 - `research-kg-builder` for project knowledge graphs.
-- `experiment-runner-plus` for environment hashes, resource logging, retries, and batch jobs.
 - `ethics-compliance-gate` for IRB/privacy/reporting/disclosure checks.
 - `literature-monitor` for scheduled new-paper and citation monitoring.
 
