@@ -7,6 +7,14 @@ It provides:
 
 - Project-local research state under `.research-loop/`.
 - Natural-language prompt normalization and multi-path task routing.
+- `prompt-architect` Head Agent that turns rough requests such as "deep
+  analysis" or "unattended" into chain-forcing prompts for deep-loop,
+  mathematical abstraction, divergent hypotheses, adversarial review, P10
+  escalation readiness, and watchdog continuation.
+- Stable hard-problem shortcut: `开始困难问题推进` expands into unattended
+  low-sample sampling-strategy advancement with deep analysis, expert/P10
+  escalation readiness, math abstraction, harness registration, and
+  experiment-runner validation.
 - One-shot `autopilot` that turns a rough goal into a P1-P10 execution chain,
   primes control-plane records, and can start watchdog-supervised unattended
   execution without repeated confirmation.
@@ -105,7 +113,47 @@ configuration still complete.
 
 ```powershell
 python scripts/research_loop.py --cwd "D:\Loop\scratch\research-loop-smoke" auto-loop-watchdog --goal "smoke test" --skip-validate --skip-deep-loop --test-command "cmd /c exit /b 0" --format json
+python scripts/research_loop.py --cwd "D:\Loop\scratch\prompt-architect-smoke" prompt-architect --input "Deep analysis with mathematical modeling, divergent hypotheses, adversarial review, and unattended continuation" --write --format json
+python scripts/research_loop.py --cwd "D:\Loop\scratch\hard-problem-smoke" prompt-architect --input "开始困难问题推进" --write --format json
 python scripts/research_loop.py --cwd "D:\Loop\scratch\autopilot-smoke" autopilot --goal "Complete this research task end-to-end and produce the final report" --prime --write --format json
+python scripts/research_loop.py --cwd "D:\Loop\scratch\hard-problem-autopilot" autopilot --goal "开始困难问题推进" --prime --write --format json
+```
+
+## Prompt Architect Head Agent
+
+Use `prompt-architect` as the first entry component when a user gives a vague
+or overloaded request. It reads the project state, classifies the task, and
+writes a chain-forcing prompt contract under `.research-loop/prompt-architect/`.
+
+When the input says "deep analysis", it forces the strongest analysis route:
+`P3` hypothesis portfolio, `P4/P6` math abstraction, `P8` Research Council and
+Adversarial Gate, and `P10` problem-loop readiness. When the input says
+"unattended", it adds autopilot/watchdog continuation rules and the human pause
+boundary.
+
+When the input is exactly or includes `开始困难问题推进`, the Prompt Architect
+treats it as a stable preset for the user's recurring difficult-research task:
+continue a matched-precision, lower-sample-count sampling scheme; run
+unattended; force deep analysis, divergent hypotheses, adversarial review,
+Research Council, Arbiter, P10/problem-loop readiness, math abstraction, harness
+registration, and experiment-runner validation; and do not ask for manual
+continuation while an executable next action exists.
+
+```powershell
+python scripts/research_loop.py --cwd "D:\Project" prompt-architect `
+  --input "Deep analysis: build a full problem frame, mathematical model, adversarial critique, divergent hypotheses, and solution plan" `
+  --write `
+  --format json
+
+python scripts/research_loop.py --cwd "D:\Project" prompt-architect `
+  --input "Run unattended until the project is complete; do not ask me to continue while a next action exists" `
+  --write `
+  --format markdown
+
+python scripts/research_loop.py --cwd "D:\Project" prompt-architect `
+  --input "开始困难问题推进" `
+  --write `
+  --format json
 ```
 
 ## One-Shot Autopilot
@@ -126,6 +174,13 @@ python scripts/research_loop.py --cwd "D:\Project" autopilot `
 python scripts/research_loop.py --cwd "D:\Project" autopilot `
   --goal "Repair the analysis code, validate the math, and write the final report" `
   --test-command "python -m pytest -q" `
+  --prime `
+  --start-watchdog `
+  --external-supervisor none `
+  --format json
+
+python scripts/research_loop.py --cwd "D:\Project" autopilot `
+  --goal "开始困难问题推进" `
   --prime `
   --start-watchdog `
   --external-supervisor none `

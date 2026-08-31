@@ -23,6 +23,7 @@ import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -105,6 +106,17 @@ SPECIAL_TRIGGERS = {
         "\u8c03\u5ea6",
         "\u5339\u914d",
         "\u8c03\u5ea6\u8868",
+    ),
+    "skill:grill-me": (
+        "grill me",
+        "grill-me",
+        "$grill-me",
+        "\u9010\u9879\u8ffd\u95ee",
+        "\u4e00\u95ee\u4e00\u7b54",
+        "\u62f7\u95ee\u65b9\u6848",
+        "\u63a8\u6572\u65b9\u6848",
+        "\u5148\u95ee\u6211\u4e00\u4e2a\u95ee\u9898",
+        "\u5c16\u9510\u95ee\u9898",
     ),
     "system-skill:skill-creator": (
         "create skill",
@@ -203,6 +215,9 @@ SPECIAL_TRIGGERS = {
         "auto loop",
         "auto-loop-watchdog",
         "auto loop watchdog",
+        "prompt-architect",
+        "prompt architect",
+        "prompt head agent",
         "autopilot",
         "goal runner",
         "one shot research",
@@ -236,11 +251,23 @@ SPECIAL_TRIGGERS = {
         "mathematical abstraction",
         "evolutionary code",
         "frontier grader",
+        "deep analysis",
+        "mathematical modeling",
+        "divergent thinking",
+        "adversarial analysis",
         "\u79d1\u7814\u5de5\u4f5c\u6d41",
+        "\u63d0\u793a\u8bcd\u67b6\u6784",
+        "\u63d0\u793a\u8bcd\u8bbe\u8ba1",
+        "\u63d0\u793a\u8bcd\u7ec4\u4ef6",
+        "\u5165\u53e3 agent",
         "\u6df1\u5faa\u73af",
         "\u6df1\u94fe\u8def",
+        "\u6df1\u5ea6\u5206\u6790",
+        "\u5168\u9762\u5206\u6790",
+        "\u5b8c\u6574\u5206\u6790\u6846\u67b6",
         "\u81ea\u52a8\u7eed\u8dd1",
         "\u65e0\u4eba\u503c\u5b88",
+        "\u65e0\u4eba\u76d1\u7ba1",
         "\u65e0\u4eba\u76d1\u7763",
         "\u4e00\u53e5\u8bdd\u76ee\u6807",
         "\u76f4\u63a5\u7ed9\u51fa\u7ed3\u679c",
@@ -260,10 +287,20 @@ SPECIAL_TRIGGERS = {
         "\u5047\u8bbe\u7ec4\u5408",
         "\u5047\u8bbe\u9526\u6807\u8d5b",
         "\u53d1\u6563\u5047\u8bbe",
+        "\u53d1\u6563\u601d\u7ef4",
         "\u4ee3\u7801\u6784\u5efa",
         "\u6f14\u5316\u5f0f\u4ee3\u7801",
+        "\u6570\u5b66\u5efa\u6a21",
         "\u6570\u5b66\u62bd\u8c61",
         "\u6570\u5b66\u63a8\u7406",
+        "\u5bf9\u6297\u6027\u5206\u6790",
+        "\u5f00\u59cb\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+        "\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+        "\u540c\u7cbe\u5ea6",
+        "\u4f4e\u6837\u672c",
+        "\u4f4e\u6837\u672c\u6570",
+        "\u91c7\u6837\u65b9\u6848",
+        "\u91c7\u6837\u7b56\u7565",
     ),
     "skill:nature-reader": (
         "paper reader",
@@ -387,6 +424,42 @@ def codex_home() -> Path:
     if configured:
         return Path(configured).expanduser()
     return Path.home() / ".codex"
+
+
+def skill_name_from_file(skill_file: Path) -> str:
+    """Return the frontmatter name, falling back to the containing directory."""
+    try:
+        text = skill_file.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return skill_file.parent.name
+
+    lines = text.splitlines()
+    if lines and lines[0].strip() == "---":
+        for line in lines[1:]:
+            if line.strip() == "---":
+                break
+            match = re.match(r"^\s*name\s*:\s*(.+?)\s*$", line, flags=re.I)
+            if match:
+                return match.group(1).strip().strip("\"'")
+    return skill_file.parent.name
+
+
+@lru_cache(maxsize=256)
+def resolve_local_skill_path(home: Path, kind: str, name: str) -> Path:
+    skills_root = home / "skills"
+    direct = skills_root / (".system" if kind == "system-skill" else "") / name
+    if direct.is_dir():
+        return direct
+
+    if skills_root.is_dir():
+        for skill_file in sorted(skills_root.rglob("SKILL.md")):
+            relative_parts = skill_file.relative_to(skills_root).parts
+            if any(part in {"_shared", "codex-primary-runtime"} for part in relative_parts):
+                continue
+            candidate_kind = "system-skill" if relative_parts[0] == ".system" else "skill"
+            if candidate_kind == kind and skill_name_from_file(skill_file) == name:
+                return skill_file.parent
+    return direct
 
 
 def router_root() -> Path:
@@ -526,9 +599,9 @@ def path_for(capability: Capability) -> str:
     home = codex_home()
     rid = capability.registry_id
     if rid.startswith("skill:"):
-        return str(home / "skills" / capability.name)
+        return str(resolve_local_skill_path(home, "skill", capability.name))
     if rid.startswith("system-skill:"):
-        return str(home / "skills" / ".system" / capability.name)
+        return str(resolve_local_skill_path(home, "system-skill", capability.name))
     if rid.startswith("plugin:prompt-submit-skill-router"):
         return str(home / "plugins" / "prompt-submit-skill-router")
     if rid.startswith("plugin:"):
@@ -711,6 +784,7 @@ def score_capability(
         capability.registry_id.casefold(),
         capability.name.casefold(),
         f"${capability.name}".casefold(),
+        capability.name.replace("-", " ").replace("_", " ").casefold(),
     }
     for term in explicit_terms:
         if term and term in prompt_norm:
@@ -784,7 +858,6 @@ def score_capability(
                 "academic",
                 "manuscript",
                 "paper",
-                "\u82f1\u6587",
                 "\u5b66\u672f",
                 "\u8bba\u6587",
                 "\u7a3f\u4ef6",

@@ -1,14 +1,14 @@
 # Codex 能力调度清单 2026-07-02
 
-状态: 草案 v0.3。范围: 统一整理本机与本项目可用的 skill、插件、MCP/app connector 与 hooks 调度链，先确定功能与状态，不调整迁移进程，不删除或停用任何组件。
+状态: v0.4（2026-09-01 已完成本地 skill 全量注册与回归）。范围: 统一整理本机与本项目可用的 skill、插件、MCP/app connector 与 hooks 调度链，先确定功能与状态，不调整迁移进程，不删除或停用任何组件。
 
 ## 1. 总览
 
 | 组件层 | 当前状态 | 结论 |
 |---|---|---|
-| 本地 skills | 能力扫描识别 250 个 skill；`C:\Users\ASUS\.codex\skills` 下有 39 个用户级顶层目录（不含 `.system` 与 `_shared`）；磁盘实测总计 249 个 `SKILL.md`（含插件缓存） | OK。实际使用时仍需按触发规则读取对应 `SKILL.md` |
-| 插件 | 能力扫描识别 38 个插件 manifest；`config.toml` 当前启用 11 个插件 | OK。以后以 `config.toml` 中启用项为准，不把缓存副本等同于已启用插件 |
-| classic MCP servers | `codex doctor` 报告 `MCP servers 0` | 注意。当前没有传统 `[mcp_servers]` 配置，但 Codex app connector 工具可通过 `tool_search` 按需暴露 |
+| 本地 skills | 本机 `C:\Users\ASUS\.codex\skills` 实测 47 个唯一 skill：41 个用户级（含嵌套伴随入口）和 6 个 `.system` skill；全部纳入注册检查 | OK。实际使用时仍需按触发规则读取对应 `SKILL.md` |
+| 插件 | 能力扫描识别 38 个插件 manifest；`config.toml` 当前启用 18 个插件 | OK。以 `config.toml` 中启用项为准，不把缓存副本等同于已启用插件 |
+| classic MCP servers | `config.toml` 当前启用 `readwise`、`paper`、`node_repl`；`cua_repl` 显式禁用 | OK。注册检查器忽略显式禁用项 |
 | Codex app connector MCP tools | GitHub、Google Drive、Figma、Linear、Hugging Face、Codex app automation/list_projects 已可发现 | 按需可用。调用前先用 `tool_search` 暴露工具，并遵守对应 skill 前置要求 |
 | 用户级 hooks | `UserPromptSubmit`、`SessionStart`、`PostToolUse`、`Stop` 已配置 | OK。`UserPromptSubmit` 已升级为调度表驱动的 pre-run dispatcher；local-task-hooks 生命周期记录通过基础烟测 |
 | 项目级 Codex hook | `.codex/hooks.json` 配置 `Stop` hook 到 `scripts\codex_stop_quijote_change_hook.py` | OK。包装器会把日志写入 `.hook/`，stdout 仅输出合法 hook JSON |
@@ -71,6 +71,13 @@ python C:\Users\ASUS\.codex\skills\skill-plugin-router\scripts\scan_codex_capabi
 | `pdf@openai-primary-runtime` | PDF 读取、渲染、检查、生成 | OK |
 | `template-creator@openai-primary-runtime` | artifact template skill 创建 | OK |
 | `chrome@openai-bundled` | 用户 Chrome 自动化，需要用户登录态时使用 | 按需可用 |
+| `computer-use@openai-bundled` | Windows 桌面应用控制 | 按需可用 |
+| `visualize@openai-bundled` | 对话内可视化和交互工具 | 按需可用 |
+| `latex@openai-bundled` | LaTeX 编译与运行时检查 | OK |
+| `codex-research-loop@personal` | Research Loop 技能、生命周期和研究工具 | OK |
+| `prompt-submit-skill-router@personal` | 每轮提交前能力调度 | OK |
+| `codex-app-tools@openai-bundled` | Codex 桌面 app 工具 | OK |
+| `sites@openai-bundled` | Sites 网站构建与托管 | 按需可用 |
 
 插件缓存根目录:
 
@@ -92,7 +99,7 @@ python C:\Users\ASUS\.codex\skills\skill-plugin-router\scripts\scan_codex_capabi
 
 ## 4. MCP 与 app connector
 
-`codex doctor` 结果显示 classic MCP servers 为 0。因此本机当前没有传统 MCP server 配置需要维护。
+当前 classic MCP server 配置包括 `readwise`、`paper` 与 `node_repl`；`cua_repl` 显式禁用，不纳入活动能力注册。
 
 但 Codex app connector 工具可通过 `tool_search` 按需发现。本轮已发现的工具族:
 
@@ -284,7 +291,8 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 | Registry ID | 调用方式 | 功能 | 状态 |
 |---|---|---|---|
 | `skill:academic-research-suite` | `$academic-research-suite` 或 ARS 别名 | 深度研究、文献综述、论文草稿、审稿与研究流程 | OK |
-| `skill:research-loop` | `$research-loop`；research loop、loop、autopilot、goal runner、one-shot research、direct result、deep-loop、auto-loop、auto-loop-watchdog、problem-loop、experiment-runner、experiment-runner-plus、OPHIS、harness-registry、hypothesis-portfolio、code-builder、math-abstraction、一句话目标、直接给出结果、不反复确认、自动完成、实验运行器、机制观察、机制假设、机制干预、机制库、验证面、假设池、发散假设、代码构建、数学抽象、无人值守、专家委员会、对抗 gate、阀门、科研工作流请求 | 项目级科研 loop 控制面：状态、材料、证据、存储、一句话目标 autopilot、机制账本、harness 注册、假设组合、experiment-runner-plus、scratch-only 代码构建、数学抽象链、深循环、专家委员会、对抗 gate、仲裁与无人值守续跑 | OK |
+| `skill:research-loop` | `$research-loop`；research loop、loop、prompt-architect、prompt architect、autopilot、goal runner、one-shot research、direct result、deep analysis、mathematical modeling、divergent thinking、adversarial analysis、deep-loop、auto-loop、auto-loop-watchdog、problem-loop、experiment-runner、experiment-runner-plus、OPHIS、harness-registry、hypothesis-portfolio、code-builder、math-abstraction、一句话目标、直接给出结果、不反复确认、自动完成、开始困难问题推进、困难问题推进、同精度、低样本、低样本数、采样方案、采样策略、提示词架构、提示词设计、入口 agent、深度分析、全面分析、完整分析框架、无人值守、无人监管、数学建模、发散思维、对抗性分析、实验运行器、机制观察、机制假设、机制干预、机制库、验证面、假设池、发散假设、代码构建、数学抽象、专家委员会、对抗 gate、阀门、科研工作流请求 | 项目级科研 loop 控制面：状态、材料、证据、存储、Prompt Architect Head Agent、一句话目标 autopilot、困难问题推进预设、机制账本、harness 注册、假设组合、experiment-runner-plus、scratch-only 代码构建、数学抽象链、深循环、专家委员会、对抗 gate、仲裁与无人值守续跑 | OK |
+| `skill:baoyu-url-to-markdown` | `$baoyu-url-to-markdown`；保存网页为 Markdown | 通过 Chrome CDP 抓取网页并转换为 Markdown | OK；嵌套于 `llm-wiki\deps` |
 | `skill:cleanshot` | `$cleanshot`；截图、OCR、录屏类请求 | CleanShot X 截图、OCR、标注 | 平台注意: macOS 工具，Windows 下仅登记不作为主路径 |
 | `skill:diagnose` | `$diagnose`；debug/诊断/排查请求 | 复现、最小化、假设、插桩、修复、回归测试 | OK |
 | `skill:electron-dev` | `$electron-dev`；Electron/桌面应用请求 | Electron、React、Vite、IPC、打包 | OK |
@@ -294,7 +302,9 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 | `skill:grill-me` | `$grill-me`；要求拷问/推敲方案 | 一问一答压实方案、边界与取舍 | OK |
 | `skill:grill-with-docs` | `$grill-with-docs`；结合项目文档拷问方案 | 先读项目文档，再质询计划与术语 | OK |
 | `skill:handoff` | `$handoff`；交接/续接/压缩上下文请求 | 生成工作交接文档 | OK |
+| `skill:hatch-pet` | `$hatch-pet`；创建或修复 Codex 动画宠物 | 生成、验证、视觉 QA 并打包 v2 animated pet | OK |
 | `skill:llm-wiki` | `$llm-wiki`；知识库/wiki/llm-wiki/知识图谱/消化素材/查询或维护个人知识库请求 | 构建和维护本地 Markdown wiki，支持素材消化、页面互链、知识图谱数据与离线 HTML 图谱生成 | OK |
+| `skill:llm-wiki-upgrade` | `$llm-wiki-upgrade`；升级或更新 llm-wiki | 使用官方安装流程升级 llm-wiki 核心主线 | OK；嵌套于 `llm-wiki\platforms` |
 | `skill:local-task-hooks` | `$local-task-hooks`；hook task/快照/日志请求 | PowerShell 任务包装与 Codex 生命周期 hook | OK |
 | `skill:mobile-codex-inbox` | `$mobile-codex-inbox`；移动端任务桥接请求 | 处理移动渠道提交的 Codex 任务 | 按需可用 |
 | `skill:nature-academic-search` | `$nature-academic-search` | 多源文献检索、引文校验、MeSH/引用文件 | OK |
@@ -319,6 +329,7 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 | `skill:triage` | `$triage`；分拣/标注/优先级请求 | issue triage 与状态标签 | OK |
 | `skill:wispr-analytics` | `$wispr-analytics`；Wispr/口述历史请求 | Wispr Flow 历史分析与词典管理 | 按需可用 |
 | `skill:word` | `$word`；Word/DOCX 请求 | Word 文档创建、编辑、转换、验证 | OK |
+| `skill:youtube-transcript` | `$youtube-transcript`；YouTube 字幕或转录请求 | 提取 YouTube 视频字幕，可选时间戳 | OK；嵌套于 `llm-wiki\deps` |
 | `skill:z2-harness-loop` | `$z2-harness-loop`；z2/z2quijote/Quijote manuscript/project 请求 | z2quijote 长线工作、论文、harness loop、验证规划 | OK |
 
 说明: `C:\Users\ASUS\.codex\skills\codex-primary-runtime` 是运行时目录，不含 `SKILL.md`，不按 skill 注册。
@@ -330,6 +341,7 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 | `system-skill:imagegen` | `$imagegen` 或图像生成/编辑请求 | 生成或编辑位图图像 | OK |
 | `system-skill:openai-docs` | `$openai-docs`；OpenAI API/Codex 文档请求 | 查询官方 OpenAI 文档并引用 | OK |
 | `system-skill:plugin-creator` | `$plugin-creator`；创建/更新 Codex 插件 | 脚手架与维护个人插件 | OK |
+| `system-skill:review-agent` | `$review-agent`；只读代码变更审查 | 对指定代码变更执行缺陷优先的只读审查 | OK |
 | `system-skill:skill-creator` | `$skill-creator`；创建/更新 skill | 设计、初始化、验证 skill | OK |
 | `system-skill:skill-installer` | `$skill-installer`；安装 skill 请求 | 安装 curated 或 GitHub skill | OK |
 
@@ -339,29 +351,38 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 |---|---|---|---|
 | `plugin:browser@openai-bundled` | `tool_search` 暴露 browser 工具；或 `$browser` skill | Codex 内置浏览器自动化 | 按需可用 |
 | `plugin:chrome@openai-bundled` | `tool_search` 暴露 chrome 工具；或 `$chrome` skill | 用户 Chrome、登录态页面、已有标签页 | 按需可用 |
+| `plugin:codex-app-tools@openai-bundled` | Codex 桌面任务自动暴露 | Codex 桌面 app 工具集合 | OK |
+| `plugin:codex-research-loop@personal` | Research Loop 请求自动触发 | Research Loop skill、MCP 和生命周期集成 | OK |
+| `plugin:computer-use@openai-bundled` | `$computer-use` 或 Windows 应用控制请求 | Windows 桌面应用控制 | 按需可用 |
 | `plugin:documents@openai-primary-runtime` | `$documents` 或文档类 runtime 工具 | DOCX/Docs 文档处理 | OK |
 | `plugin:figma@openai-curated` | Figma 请求先加载对应 Figma skill，再 `tool_search` | Figma 文件、变量、截图、设计生成 | 按需可用 |
 | `plugin:github@openai-curated` | GitHub 请求先用 GitHub skill 或 `tool_search` | GitHub repo、issue、PR、CI | 按需可用 |
 | `plugin:google-drive@openai-curated` | Google Drive/Docs/Sheets/Slides 请求触发 | Drive 文件与 Google 办公套件 | 按需可用 |
 | `plugin:linear@openai-curated` | Linear issue/project 请求触发 | Linear 项目、issue、状态更新 | 按需可用 |
+| `plugin:latex@openai-bundled` | LaTeX 编译、诊断或运行时安装请求 | LaTeX 编译与环境治理 | OK |
 | `plugin:pdf@openai-primary-runtime` | `$pdf` 或 PDF runtime 工具 | PDF 读取、渲染、生成、验证 | OK |
 | `plugin:presentations@openai-primary-runtime` | `$presentations` 或 PPT/Slides 请求 | PPTX/Slides 创建、编辑、导出 | OK |
 | `plugin:prompt-submit-skill-router` | 用户提交 prompt 时由 `UserPromptSubmit` 自动调用 | 基于当前输入、上文 payload、近期 router 日志和调度注册表注入 skill/plugin/MCP/hook 调用建议 | OK |
+| `plugin:prompt-submit-skill-router@personal` | `UserPromptSubmit` 配置入口 | 启用个人 prompt-submit router 插件 | OK |
+| `plugin:sites@openai-bundled` | 网站构建或托管请求 | Sites 网站构建与托管 | 按需可用 |
 | `plugin:spreadsheets@openai-primary-runtime` | `$spreadsheets` 或表格请求 | XLSX/CSV/Sheets 分析与编辑 | OK |
 | `plugin:template-creator@openai-primary-runtime` | `$template-creator` 或模板 skill 请求 | artifact template skill 创建与更新 | OK |
+| `plugin:visualize@openai-bundled` | 可视化、交互工具或数据探索请求 | 对话内可视化与交互工具 | 按需可用 |
 
 ### 9.4 MCP 与 hooks
 
 | Registry ID | 调用方式 | 功能 | 状态 |
 |---|---|---|---|
-| `mcp:classic:none` | 不调用；由 `codex doctor` 和注册检查器确认 | 当前没有 classic MCP server 配置 | OK |
+| `mcp:node_repl` | 按需由 Codex runtime 调用 | Node REPL 与浏览器服务桥接 | OK |
+| `mcp:paper` | Paper Design 请求按需调用 | 本地 Paper Design MCP | 按需可用 |
+| `mcp:readwise` | Readwise/Reader 请求按需调用 | Readwise 云端 MCP | 需登录态 |
 | `hook:user:UserPromptSubmit:prompt-submit-skill-router` | 提交用户 prompt 时自动触发 | 运行调度表驱动 pre-run dispatcher，向本轮注入推荐调用顺序 | OK |
 | `hook:user:SessionStart:local-task-hooks` | Codex session start 自动触发 | 记录本地 hook 快照 | OK |
 | `hook:user:PostToolUse:local-task-hooks` | 工具调用后自动触发 | 收集 hook 失败上下文 | OK |
-| `hook:user:PostToolUse:powershell-noprofile-executionpolicy-bypass-command-c-users-asus-cache-codex-runtimes-codex-primary-runtime-dependencies-python-python-exe-c-users-asus-plugins-codex-research-loop-scripts-codex-research-lifecycle-hook-py-posttooluse` | 工具调用后自动触发 | 记录 research-loop 工具事件 | OK |
+| `hook:user:PostToolUse:research-loop` | 工具调用后自动触发 | 记录 research-loop 工具事件 | OK |
 | `hook:user:Stop:local-task-hooks` | Codex stop 自动触发 | 写入生命周期摘要 | OK |
-| `hook:user:SessionStart:powershell-noprofile-executionpolicy-bypass-command-c-users-asus-cache-codex-runtimes-codex-primary-runtime-dependencies-python-python-exe-c-users-asus-plugins-codex-research-loop-scripts-codex-research-lifecycle-hook-py-sessionstart` | Codex session start 自动触发 | 启动 research-loop 快照 | OK |
-| `hook:user:Stop:powershell-noprofile-executionpolicy-bypass-command-c-users-asus-cache-codex-runtimes-codex-primary-runtime-dependencies-python-python-exe-c-users-asus-plugins-codex-research-loop-scripts-codex-research-lifecycle-hook-py-stop` | Codex stop 自动触发 | 写入 research-loop checkpoint | OK |
+| `hook:user:SessionStart:research-loop` | Codex session start 自动触发 | 启动 research-loop 快照 | OK |
+| `hook:user:Stop:research-loop` | Codex stop 自动触发 | 写入 research-loop checkpoint | OK |
 | `hook:project:Stop:codex-stop-quijote-change` | 项目级 Codex Stop 自动触发 | 调用 Quijote change-log wrapper，stdout 输出合法 JSON | OK |
 | `hook:project:Stop:powershell-noprofile-executionpolicy-bypass-command-set-location-literalpath-d-work-pr-due-upload-files-20260317-220257-d-work-tools-uv-python-cpython-3-10-windows-x86-64-none-python-exe-scripts-z2-codex-autocontinue-hook-py` | 项目级 Codex Stop 自动触发 | 调用 Z2 auto-continuation hook，按状态决定是否唤醒后续循环 | OK |
 | `hook:git:pre-commit:quijote-change-log` | `git commit` 前自动触发 | 先检查调度注册表，再记录 Quijote change log | OK |
@@ -374,27 +395,37 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 <!-- capability-registry-id: hook:project:Stop:codex-stop-quijote-change -->
 <!-- capability-registry-id: hook:project:Stop:powershell-noprofile-executionpolicy-bypass-command-set-location-literalpath-d-work-pr-due-upload-files-20260317-220257-d-work-tools-uv-python-cpython-3-10-windows-x86-64-none-python-exe-scripts-z2-codex-autocontinue-hook-py -->
 <!-- capability-registry-id: hook:user:PostToolUse:local-task-hooks -->
-<!-- capability-registry-id: hook:user:PostToolUse:powershell-noprofile-executionpolicy-bypass-command-c-users-asus-cache-codex-runtimes-codex-primary-runtime-dependencies-python-python-exe-c-users-asus-plugins-codex-research-loop-scripts-codex-research-lifecycle-hook-py-posttooluse -->
+<!-- capability-registry-id: hook:user:PostToolUse:research-loop -->
 <!-- capability-registry-id: hook:user:SessionStart:local-task-hooks -->
-<!-- capability-registry-id: hook:user:SessionStart:powershell-noprofile-executionpolicy-bypass-command-c-users-asus-cache-codex-runtimes-codex-primary-runtime-dependencies-python-python-exe-c-users-asus-plugins-codex-research-loop-scripts-codex-research-lifecycle-hook-py-sessionstart -->
+<!-- capability-registry-id: hook:user:SessionStart:research-loop -->
 <!-- capability-registry-id: hook:user:Stop:local-task-hooks -->
-<!-- capability-registry-id: hook:user:Stop:powershell-noprofile-executionpolicy-bypass-command-c-users-asus-cache-codex-runtimes-codex-primary-runtime-dependencies-python-python-exe-c-users-asus-plugins-codex-research-loop-scripts-codex-research-lifecycle-hook-py-stop -->
+<!-- capability-registry-id: hook:user:Stop:research-loop -->
 <!-- capability-registry-id: hook:user:UserPromptSubmit:prompt-submit-skill-router -->
-<!-- capability-registry-id: mcp:classic:none -->
+<!-- capability-registry-id: mcp:node_repl -->
+<!-- capability-registry-id: mcp:paper -->
+<!-- capability-registry-id: mcp:readwise -->
 <!-- capability-registry-id: plugin:browser@openai-bundled -->
 <!-- capability-registry-id: plugin:chrome@openai-bundled -->
+<!-- capability-registry-id: plugin:codex-app-tools@openai-bundled -->
+<!-- capability-registry-id: plugin:codex-research-loop@personal -->
+<!-- capability-registry-id: plugin:computer-use@openai-bundled -->
 <!-- capability-registry-id: plugin:documents@openai-primary-runtime -->
 <!-- capability-registry-id: plugin:figma@openai-curated -->
 <!-- capability-registry-id: plugin:github@openai-curated -->
 <!-- capability-registry-id: plugin:google-drive@openai-curated -->
 <!-- capability-registry-id: plugin:linear@openai-curated -->
+<!-- capability-registry-id: plugin:latex@openai-bundled -->
 <!-- capability-registry-id: plugin:pdf@openai-primary-runtime -->
 <!-- capability-registry-id: plugin:presentations@openai-primary-runtime -->
 <!-- capability-registry-id: plugin:prompt-submit-skill-router -->
+<!-- capability-registry-id: plugin:prompt-submit-skill-router@personal -->
+<!-- capability-registry-id: plugin:sites@openai-bundled -->
 <!-- capability-registry-id: plugin:spreadsheets@openai-primary-runtime -->
 <!-- capability-registry-id: plugin:template-creator@openai-primary-runtime -->
+<!-- capability-registry-id: plugin:visualize@openai-bundled -->
 <!-- capability-registry-id: skill:academic-research-suite -->
 <!-- capability-registry-id: skill:research-loop -->
+<!-- capability-registry-id: skill:baoyu-url-to-markdown -->
 <!-- capability-registry-id: skill:cleanshot -->
 <!-- capability-registry-id: skill:diagnose -->
 <!-- capability-registry-id: skill:electron-dev -->
@@ -404,7 +435,9 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 <!-- capability-registry-id: skill:grill-me -->
 <!-- capability-registry-id: skill:grill-with-docs -->
 <!-- capability-registry-id: skill:handoff -->
+<!-- capability-registry-id: skill:hatch-pet -->
 <!-- capability-registry-id: skill:llm-wiki -->
+<!-- capability-registry-id: skill:llm-wiki-upgrade -->
 <!-- capability-registry-id: skill:local-task-hooks -->
 <!-- capability-registry-id: skill:mobile-codex-inbox -->
 <!-- capability-registry-id: skill:nature-academic-search -->
@@ -429,10 +462,12 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 <!-- capability-registry-id: skill:triage -->
 <!-- capability-registry-id: skill:wispr-analytics -->
 <!-- capability-registry-id: skill:word -->
+<!-- capability-registry-id: skill:youtube-transcript -->
 <!-- capability-registry-id: skill:z2-harness-loop -->
 <!-- capability-registry-id: system-skill:imagegen -->
 <!-- capability-registry-id: system-skill:openai-docs -->
 <!-- capability-registry-id: system-skill:plugin-creator -->
+<!-- capability-registry-id: system-skill:review-agent -->
 <!-- capability-registry-id: system-skill:skill-creator -->
 <!-- capability-registry-id: system-skill:skill-installer -->
 
@@ -443,7 +478,7 @@ python scripts\maintenance\check_codex_capability_registry.py --dump-current
 - 已安装到 `C:\Users\ASUS\.codex\skills\llm-wiki`，并在本文件注册 `skill:llm-wiki` 与机器校验标记。
 - 已补齐 `jq` 到 `D:\work\.tools\PortableGit\usr\bin\jq.exe`，并构建 `packages\graph-engine\dist\engine.iife.js`。
 - 已按 `llm-wiki` 官方 `MANAGED_ITEMS` 收敛安装内容，清理直接整仓安装带入的 `node_modules`、`workbench`、`tests`、`assets`、`designs`；保留 graph HTML 所需的 `packages\graph-engine\dist`。
-- `llm-wiki` 内部 `deps` 与 `platforms` 中的伴随入口，例如 `baoyu-url-to-markdown`、`youtube-transcript`、`llm-wiki-upgrade`，归属 `skill:llm-wiki`，不作为本表主调度入口单独登记。
+- `llm-wiki` 内部 `deps` 与 `platforms` 中的伴随入口归属 `skill:llm-wiki`，同时自 2026-09-01 起按其独立 `SKILL.md` 名称登记，以支持显式路由和完整性检查。
 - 已修复本机 `C:\Users\ASUS\.codex\skills\.system\skill-creator\scripts\quick_validate.py` 的 UTF-8 读取与 frontmatter 兼容字段校验。
 - 已执行 `python scripts\maintenance\check_codex_capability_registry.py --codex-home C:\Users\ASUS\.codex`，结果为 `Capability registry OK: 49 entries registered.`
 - 已执行 `python C:\Users\ASUS\.codex\skills\.system\skill-creator\scripts\quick_validate.py C:\Users\ASUS\.codex\skills\llm-wiki`，结果为 `Skill is valid!`
@@ -489,3 +524,11 @@ git check-attr text eol -- .githooks\pre-commit
 - 已执行 `python -m py_compile C:\Users\ASUS\.codex\plugins\prompt-submit-skill-router\scripts\user_prompt_submit_router.py`，结果通过。
 - 已执行 `python C:\Users\ASUS\.codex\skills\.system\skill-creator\scripts\quick_validate.py C:\Users\ASUS\.codex\skills\explain-complex-concepts`，结果为 `Skill is valid!`
 - 已执行 `UserPromptSubmit` router smoke：residual-space learning、红移/距离、注意力机制、FITS/WCS 请求均路由到 `skill:explain-complex-concepts`；纯论文英文润色请求仍路由到 `skill:nature-polishing`，未被新 skill 误抢。
+
+2026-09-01 全量本地 skill 注册与路由回归：
+
+- 递归发现并登记 `C:\Users\ASUS\.codex\skills` 下全部 47 个本地 skill（41 个用户 skill、6 个 system skill），包括嵌套 skill。
+- 补登记 `baoyu-url-to-markdown`、`hatch-pet`、`llm-wiki-upgrade`、`youtube-transcript`、`review-agent`，并同步 portable/live/source 三份注册表。
+- 注册表检查器已支持 UTF-8 BOM、Python 3.10 配置解析、嵌套 skill、禁用插件/MCP 过滤及 portable hook 包装器归一化。
+- portable/live/source 全量检查均通过：`Capability registry OK: 79 entries registered.`；三份注册表的 47 个本地 skill 标记完全一致。
+- 单元测试通过：注册表检查器 5 项、路由器 6 项；真实 `UserPromptSubmit` PowerShell 包装器 13 个代表性场景全部通过。

@@ -16,7 +16,7 @@ from typing import Any
 
 SCRIPT = Path(__file__).resolve().parent / "research_loop.py"
 SERVER_NAME = "codex-research-loop"
-SERVER_VERSION = "0.9.8"
+SERVER_VERSION = "0.9.9"
 
 
 def schema(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -361,6 +361,20 @@ TOOLS: list[dict[str, Any]] = [
                 "stage": {"type": "string", "description": "Optional stage override."},
                 "format": {"type": "string", "description": "markdown or json."},
                 "write": {"type": "boolean", "description": "Write normalized prompt to reports."},
+            },
+            ["cwd", "input"],
+        ),
+    },
+    {
+        "name": "research_prompt_architect",
+        "description": "Build the entry Prompt Architect Head Agent contract and chain-forcing downstream prompt for deep analysis, math modeling, divergent reasoning, adversarial review, P10 escalation, and unattended execution.",
+        "inputSchema": schema(
+            {
+                "cwd": {"type": "string", "description": "Active project directory."},
+                "input": {"type": "string", "description": "Raw user request or rough task."},
+                "stage": {"type": "string", "description": "Optional stage override."},
+                "format": {"type": "string", "description": "markdown or json."},
+                "write": {"type": "boolean", "description": "Write prompt architect record under .research-loop/prompt-architect."},
             },
             ["cwd", "input"],
         ),
@@ -1150,6 +1164,14 @@ def tool_to_cli(name: str, args: dict[str, Any]) -> list[str]:
         return command
     if name == "research_loop_normalize":
         command.append("normalize")
+        add_option(command, "--stage", args.get("stage"))
+        add_option(command, "--input", args.get("input"))
+        add_option(command, "--format", args.get("format"))
+        if as_bool(args.get("write")):
+            command.append("--write")
+        return command
+    if name == "research_prompt_architect":
+        command.append("prompt-architect")
         add_option(command, "--stage", args.get("stage"))
         add_option(command, "--input", args.get("input"))
         add_option(command, "--format", args.get("format"))

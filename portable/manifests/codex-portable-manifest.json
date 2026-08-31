@@ -1,7 +1,7 @@
 ﻿{
     "schema_version":  1,
-    "generated_at":  "2026-08-10T00:00:00Z",
-    "plugin_version":  "0.9.8+codex.20260810",
+    "generated_at":  "2026-08-11T00:00:00Z",
+    "plugin_version":  "0.9.9+codex.20260811",
     "source_codex_home":  "C:\\Users\\ASUS\\.codex",
     "package_root":  "portable",
     "includes_secrets":  false,

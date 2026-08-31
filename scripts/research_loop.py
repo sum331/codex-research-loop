@@ -35,7 +35,7 @@ from typing import Any
 
 
 LOOP_DIR = ".research-loop"
-SCHEMA_VERSION = "0.9.8"
+SCHEMA_VERSION = "0.9.9"
 PAYLOAD_LIMIT = 24000
 INVENTORY_LIMIT = int(os.environ.get("RESEARCH_LOOP_INVENTORY_LIMIT", "1200"))
 INVENTORY_SECONDS = float(os.environ.get("RESEARCH_LOOP_INVENTORY_SECONDS", "2.0"))
@@ -568,6 +568,12 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "name": "prompt-normalizer",
         "use_for": "Convert incomplete natural-language requests into project-grounded downstream prompts before routing.",
     },
+    "tool:prompt-architect-head-agent": {
+        "kind": "built-in-tool",
+        "status": "available",
+        "name": "prompt-architect-head-agent",
+        "use_for": "Convert rough user intent into a chain-forcing execution prompt that reliably activates deep-loop, Research Council, Adversarial Gate, hypothesis portfolios, math abstraction, experiment runners, problem-loop, and unattended continuation when requested.",
+    },
     "tool:research-source-hub": {
         "kind": "built-in-tool",
         "status": "available",
@@ -727,7 +733,7 @@ SUBCHAIN_RULES: list[dict[str, Any]] = [
         "required_inputs": ["project direction or broad topic"],
         "outputs": ["research question brief", "scope boundaries", "open questions"],
         "gates": ["active research question exists before later-stage routing"],
-        "capability_ids": ["skill:research-loop", "tool:autopilot-goal-runner", "tool:prompt-normalizer", "tool:storage-policy", "skill:academic-research-suite", "skill:nature-academic-search"],
+        "capability_ids": ["skill:research-loop", "tool:prompt-architect-head-agent", "tool:autopilot-goal-runner", "tool:prompt-normalizer", "tool:storage-policy", "skill:academic-research-suite", "skill:nature-academic-search"],
         "missing_capability_ids": [],
         "default_depth": "L4",
         "feedback_on_fail": ["P1"],
@@ -951,6 +957,70 @@ ONE_SHOT_GOAL_KEYWORDS = [
     "\u76f4\u63a5\u7ed9\u51fa\u7ed3\u679c",
     "\u5b8c\u6210\u8bfe\u9898",
     "\u5b8c\u6210\u9879\u76ee",
+    "\u65e0\u4eba\u503c\u5b88",
+    "\u81ea\u52a8\u5b8c\u6210",
+    "\u5f00\u59cb\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+    "\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+]
+
+PROMPT_ARCHITECT_KEYWORDS = [
+    "prompt architect",
+    "prompt-architect",
+    "prompt head agent",
+    "entry agent",
+    "intake agent",
+    "rewrite prompt",
+    "strong prompt",
+    "\u63d0\u793a\u8bcd\u67b6\u6784",
+    "\u63d0\u793a\u8bcd\u8bbe\u8ba1",
+    "\u63d0\u793a\u8bcd\u7ec4\u4ef6",
+    "\u5165\u53e3 agent",
+    "\u5165\u53e3\u4ee3\u7406",
+    "\u5f00\u59cb\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+    "\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+]
+
+DEEP_ANALYSIS_KEYWORDS = [
+    "deep analysis",
+    "deep thinking",
+    "comprehensive analysis",
+    "full analysis framework",
+    "analyze deeply",
+    "root-cause analysis",
+    "find the essence",
+    "problem and solution",
+    "systems analysis",
+    "\u6df1\u5ea6\u5206\u6790",
+    "\u6df1\u5ea6\u601d\u8003",
+    "\u5168\u9762\u5206\u6790",
+    "\u5b8c\u6574\u5206\u6790\u6846\u67b6",
+    "\u672c\u8d28\u95ee\u9898",
+    "\u95ee\u9898\u4e0e\u89e3\u51b3\u65b9\u6848",
+    "\u627e\u51fa\u95ee\u9898",
+    "\u627e\u5230\u95ee\u9898",
+    "\u89e3\u51b3\u65b9\u6848",
+    "\u5f00\u59cb\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+    "\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+]
+
+UNATTENDED_EXECUTION_KEYWORDS = [
+    "unattended",
+    "autonomous",
+    "without supervision",
+    "do not ask me to continue",
+    "no repeated confirmation",
+    "run until done",
+    "watchdog",
+    "\u65e0\u4eba\u503c\u5b88",
+    "\u65e0\u4eba\u76d1\u7ba1",
+    "\u65e0\u4eba\u76d1\u7763",
+    "\u4e0d\u8981\u95ee\u6211\u7ee7\u7eed",
+    "\u4e0d\u8981\u53cd\u590d\u786e\u8ba4",
+    "\u81ea\u52a8\u7eed\u8dd1",
+    "\u4e00\u76f4\u8fd0\u884c",
+    "\u8fd0\u884c\u5230\u5b8c\u6210",
+    "\u5f00\u59cb\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+    "\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
 ]
 
 CODE_BUILDING_KEYWORDS = [
@@ -976,6 +1046,9 @@ MATH_REASONING_KEYWORDS = [
     "mathematical",
     "proof",
     "prove",
+    "model",
+    "modeling",
+    "mathematical model",
     "derive",
     "equation",
     "formula",
@@ -986,23 +1059,39 @@ MATH_REASONING_KEYWORDS = [
     "statistical",
     "uncertainty",
     "\u6570\u5b66",
+    "\u6570\u5b66\u5efa\u6a21",
+    "\u5efa\u6a21",
     "\u8bc1\u660e",
     "\u63a8\u5bfc",
     "\u516c\u5f0f",
     "\u7edf\u8ba1",
     "\u4e0d\u786e\u5b9a\u6027",
+    "\u540c\u7cbe\u5ea6",
+    "\u4f4e\u6837\u672c",
+    "\u4f4e\u6837\u672c\u6570",
+    "\u91c7\u6837",
+    "\u91c7\u6837\u65b9\u6848",
+    "\u91c7\u6837\u7b56\u7565",
+    "\u5e95\u5c42\u95ee\u9898",
+    "\u62bd\u8c61\u7684\u5e95\u5c42\u95ee\u9898",
 ]
 
 DIVERGENT_REASONING_KEYWORDS = [
     "hypothesis",
     "alternative",
     "counterfactual",
+    "divergent",
+    "brainstorm",
+    "portfolio",
     "root cause",
     "mechanism",
     "why",
     "novelty",
     "\u5047\u8bbe",
     "\u53d1\u6563",
+    "\u53d1\u6563\u601d\u7ef4",
+    "\u591a\u8def\u7ebf",
+    "\u591a\u79cd\u89e3\u91ca",
     "\u53cd\u4f8b",
     "\u672c\u8d28",
     "\u673a\u5236",
@@ -1020,12 +1109,69 @@ EXPERT_ESCALATION_KEYWORDS = [
     "expert",
     "gate",
     "adversarial",
+    "critique",
+    "red team",
+    "attack",
     "\u56f0\u96be",
     "\u5361\u4f4f",
     "\u5ba1\u67e5",
     "\u4e13\u5bb6",
     "\u9600\u95e8",
     "\u5bf9\u6297",
+    "\u5bf9\u6297\u6027\u5206\u6790",
+    "\u53cd\u65b9\u5ba1\u67e5",
+    "\u5f00\u59cb\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+    "\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+]
+
+PROMPT_ARCHITECT_PRESETS: list[dict[str, Any]] = [
+    {
+        "id": "hard_problem_advancement",
+        "name": "Start Difficult Problem Advancement",
+        "triggers": [
+            "start hard problem advancement",
+            "hard problem advancement",
+            "difficult problem advancement",
+            "\u5f00\u59cb\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+            "\u56f0\u96be\u95ee\u9898\u63a8\u8fdb",
+        ],
+        "expanded_prompt": (
+            "Continue advancing the construction of a lower-sample-count sampling scheme under matched precision. "
+            "Run unattended and automatically execute the next available step. Perform deep analysis before convergence. "
+            "When blockers, unclear root causes, weak evidence, repeated failures, or high-risk assumptions appear, open the Research Council, "
+            "Adversarial Gate, Arbiter, and P10 problem-loop to summarize, diagnose, and push the work forward. "
+            "For abstract underlying problems, first create a math-abstraction record with objects, definitions, assumptions, subgoals, "
+            "lemma/dependency graph, and verifier plan before continuing discussion or implementation. "
+            "Use harness-registry and experiment-runner-plus for reproducible validation, and do not ask for manual continuation while an executable next action exists."
+        ),
+        "modes": [
+            "prompt_architecture",
+            "hard_problem_advancement",
+            "sampling_strategy_optimization",
+            "deep_analysis",
+            "mathematical_modeling",
+            "divergent_reasoning",
+            "adversarial_review",
+            "expert_escalation",
+            "solution_synthesis",
+            "one_shot_autopilot",
+            "unattended_execution",
+            "code_building",
+        ],
+        "required_chains": ["P10", "P5", "P6", "P8", "P4", "P3"],
+        "mandatory_nodes": [
+            "hypothesis-portfolio",
+            "math-abstraction",
+            "harness-registry",
+            "experiment-runner-plus",
+            "Research Council",
+            "Adversarial Gate",
+            "Arbiter",
+            "problem-loop/P10",
+            "auto-loop-watchdog",
+            "auto-loop-resume",
+        ],
+    },
 ]
 
 EXECUTION_PROFILE_DEFS: dict[str, dict[str, Any]] = {
@@ -1233,6 +1379,7 @@ SHORT_MUTATING_COMMANDS = {
     "math-abstraction",
     "experiment-runner",
     "autopilot",
+    "prompt-architect",
     "checkpoint",
     "handoff",
 }
@@ -1500,6 +1647,10 @@ def experiment_runs_root(cwd: Path) -> Path:
 
 def autopilot_root(cwd: Path) -> Path:
     return loop_root(cwd) / "autopilot"
+
+
+def prompt_architect_root(cwd: Path) -> Path:
+    return loop_root(cwd) / "prompt-architect"
 
 
 def observation_ledger_path(cwd: Path) -> Path:
@@ -2155,6 +2306,7 @@ def init_project(cwd: Path, stage: str | None = None, storage_style: str | None 
         "math-abstractions",
         "experiment-runs",
         "autopilot",
+        "prompt-architect",
         "watchdog",
     ]:
         ensure_dir(root / child)
@@ -3054,12 +3206,15 @@ def classify_execution_profile(task_type: str, passport: dict[str, Any], intent:
     text = task_signal_text(intent, passport)
     targets = target_values(passport)
     profile_id = "standard_loop"
-    if task_type in {"writing_formatting", "review_revision", "submission_release"} or targets & {"paper", "manuscript", "docx", "pdf"} or any(
+    preset = prompt_architect_preset(intent)
+    if (preset or {}).get("id") == "hard_problem_advancement":
+        profile_id = "research_experiment_loop"
+    elif task_type in {"design_compliance", "execution", "analysis_visualization"} or any(token in text for token in RESEARCH_EXPERIMENT_KEYWORDS):
+        profile_id = "research_experiment_loop"
+    elif task_type in {"writing_formatting", "review_revision", "submission_release"} or targets & {"paper", "manuscript", "docx", "pdf"} or any(
         token in text for token in MANUSCRIPT_ARTIFACT_KEYWORDS
     ):
         profile_id = "manuscript_artifact_loop"
-    elif task_type in {"design_compliance", "execution", "analysis_visualization"} or any(token in text for token in RESEARCH_EXPERIMENT_KEYWORDS):
-        profile_id = "research_experiment_loop"
     profile = dict(EXECUTION_PROFILE_DEFS[profile_id])
     profile["id"] = profile_id
     return profile
@@ -3209,6 +3364,12 @@ def assign_depth(
     text = task_signal_text(intent, passport)
     if any(token in text for token in ["full", "end-to-end", "pipeline", "systematic", "meta-analysis", "complete"]):
         base = merge_depth(base, "L5")
+    if text_has_any(text, DEEP_ANALYSIS_KEYWORDS):
+        base = merge_depth(base, "L6")
+    if text_has_any(text, UNATTENDED_EXECUTION_KEYWORDS):
+        base = merge_depth(base, "L5")
+    if text_has_any(text, PROMPT_ARCHITECT_KEYWORDS + MATH_REASONING_KEYWORDS + DIVERGENT_REASONING_KEYWORDS + EXPERT_ESCALATION_KEYWORDS):
+        base = merge_depth(base, "L5")
     if blockers or profile.get("verification_strictness") == "strict" or stage in {"REVIEW", "REVISION_FINALIZE"}:
         base = merge_depth(base, "L6" if task_type in {"review_revision", "submission_release"} else "L5")
     if profile.get("route_mode") == "quick" and DEPTH_ORDER.get(base, 0) > 4:
@@ -3320,6 +3481,28 @@ def text_has_any(text: str, tokens: list[str]) -> bool:
     return any(token.lower() in text for token in tokens)
 
 
+def prompt_architect_preset(raw_input: str | None) -> dict[str, Any] | None:
+    text = (raw_input or "").strip().lower()
+    if not text:
+        return None
+    for preset in PROMPT_ARCHITECT_PRESETS:
+        if text_has_any(text, list(preset.get("triggers") or [])):
+            return json.loads(json.dumps(preset, ensure_ascii=True))
+    return None
+
+
+def expand_prompt_architect_input(raw_input: str | None) -> tuple[str, dict[str, Any] | None]:
+    raw = (raw_input or "").strip()
+    preset = prompt_architect_preset(raw)
+    if not preset:
+        return raw, None
+    expansion = str(preset.get("expanded_prompt") or "").strip()
+    if not expansion:
+        return raw, preset
+    expanded = f"{raw}\n\nStable trigger preset expansion ({preset['id']}):\n{expansion}" if raw else expansion
+    return expanded, preset
+
+
 def one_shot_goal_requested(intent: str | None, task_type: str, passport: dict[str, Any]) -> bool:
     text = task_signal_text(intent, passport)
     targets = target_values(passport)
@@ -3387,6 +3570,7 @@ def autopilot_chain_sequence(
         append_unique(base, "P10")
     for item in selected_ids:
         append_unique(base, item)
+    base = prompt_architect_required_chains(prompt_architect_modes(intent, task_type, passport), task_type, base)
     if not base:
         base = selected_ids or ["P1"]
     return [item for item in base if item in DEEP_LOOP_SUBCHAIN_BY_ID or any(rule.get("id") == item for rule in SUBCHAIN_RULES)]
@@ -3439,10 +3623,15 @@ def build_chain_trigger_plan(
     needs_math = text_has_any(text, MATH_REASONING_KEYWORDS) or task_type in {"design_compliance", "analysis_visualization"}
     needs_code = text_has_any(text, CODE_BUILDING_KEYWORDS) or task_type == "execution"
     needs_divergence = text_has_any(text, DIVERGENT_REASONING_KEYWORDS) or depth in {"L5", "L6"} or task_type in {"claim_synthesis", "review_revision", "problem_resolution"}
-    high_autonomy = one_shot_goal_requested(intent, task_type, passport)
+    architect_modes = prompt_architect_modes(intent, task_type, passport)
+    deep_architect = "deep_analysis" in architect_modes
+    needs_math = needs_math or deep_architect or "mathematical_modeling" in architect_modes
+    needs_divergence = needs_divergence or deep_architect or "divergent_reasoning" in architect_modes
+    high_autonomy = one_shot_goal_requested(intent, task_type, passport) or "unattended_execution" in architect_modes
     for index, subchain_id in enumerate(sequence, start=1):
         prefix = f"auto-{index:02d}-{subchain_id.lower()}"
         if subchain_id == "P1":
+            actions.append(trigger_action(node_id=f"{prefix}-architect", subchain=subchain_id, action="build Prompt Architect Head Agent contract", reason="P1 must transform rough intent into a chain-forcing prompt before downstream routing.", mcp_tool="research_prompt_architect", command=command_args(cwd, "prompt-architect", "--input", intent or "continue current project", "--format", "json", "--write"), writes_control_plane=True))
             actions.append(trigger_action(node_id=f"{prefix}-normalize", subchain=subchain_id, action="normalize rough goal and fill missing project slots", reason="P1 must convert a natural-language goal into a project-grounded working prompt.", mcp_tool="research_loop_normalize", command=command_args(cwd, "normalize", "--input", intent or "continue current project", "--format", "json", "--write"), writes_control_plane=True))
             actions.append(trigger_action(node_id=f"{prefix}-storage", subchain=subchain_id, action="materialize storage policy", reason="A self-started project needs stable outer storage before ingest, experiments, or writing.", mcp_tool="research_storage_policy", command=command_args(cwd, "storage", "--style", "adaptive", "--init-dirs", "--write"), writes_control_plane=True))
         elif subchain_id == "P2":
@@ -3596,7 +3785,6 @@ DEEP_LOOP_HUMAN_REVIEW_KEYWORDS = [
     "consent",
     "irb",
     "human approval",
-    "manual",
     "copyright",
     "\u5bc6\u94a5",
     "\u9690\u79c1",
@@ -3806,11 +3994,223 @@ def project_context_payload(cwd: Path, state: dict[str, Any], passport: dict[str
     }
 
 
+def prompt_architect_modes(raw_input: str | None, task_type: str, passport: dict[str, Any]) -> list[str]:
+    text = task_signal_text(raw_input, passport)
+    modes: list[str] = []
+    preset = prompt_architect_preset(raw_input)
+    if preset:
+        for mode in preset.get("modes") or []:
+            append_unique(modes, str(mode))
+    if text_has_any(text, PROMPT_ARCHITECT_KEYWORDS):
+        append_unique(modes, "prompt_architecture")
+    if text_has_any(text, DEEP_ANALYSIS_KEYWORDS):
+        for mode in ["deep_analysis", "mathematical_modeling", "divergent_reasoning", "adversarial_review", "expert_escalation", "solution_synthesis"]:
+            append_unique(modes, mode)
+    if text_has_any(text, UNATTENDED_EXECUTION_KEYWORDS) or one_shot_goal_requested(raw_input, task_type, passport):
+        for mode in ["one_shot_autopilot", "unattended_execution"]:
+            append_unique(modes, mode)
+    if text_has_any(text, MATH_REASONING_KEYWORDS) or task_type in {"design_compliance", "analysis_visualization"}:
+        append_unique(modes, "mathematical_modeling")
+    if text_has_any(text, DIVERGENT_REASONING_KEYWORDS) or task_type in {"claim_synthesis", "problem_resolution", "review_revision"}:
+        append_unique(modes, "divergent_reasoning")
+    if text_has_any(text, EXPERT_ESCALATION_KEYWORDS) or task_type in {"problem_resolution", "review_revision"}:
+        append_unique(modes, "expert_escalation")
+    if text_has_any(text, CODE_BUILDING_KEYWORDS) or task_type == "execution":
+        append_unique(modes, "code_building")
+    if task_type in {"literature", "claim_synthesis", "writing_formatting", "review_revision", "submission_release"}:
+        append_unique(modes, "evidence_grounding")
+    if not modes:
+        append_unique(modes, "standard_prompt_normalization")
+    return modes
+
+
+def prompt_architect_required_chains(modes: list[str], task_type: str, base_sequence: list[str] | None = None) -> list[str]:
+    sequence = list(base_sequence or [])
+    for preset in PROMPT_ARCHITECT_PRESETS:
+        if any(mode in modes for mode in preset.get("modes") or []):
+            for item in preset.get("required_chains") or []:
+                append_unique(sequence, str(item))
+    if "one_shot_autopilot" in modes and not sequence:
+        sequence = ["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"]
+    if "deep_analysis" in modes:
+        for item in ["P3", "P4", "P6", "P8", "P10"]:
+            append_unique(sequence, item)
+    if "mathematical_modeling" in modes:
+        for item in ["P4", "P6"]:
+            append_unique(sequence, item)
+    if "divergent_reasoning" in modes:
+        append_unique(sequence, "P3")
+    if "code_building" in modes:
+        for item in ["P5", "P6"]:
+            append_unique(sequence, item)
+    if "evidence_grounding" in modes:
+        for item in ["P2", "P3"]:
+            append_unique(sequence, item)
+    if "expert_escalation" in modes or "adversarial_review" in modes:
+        for item in ["P8", "P10"]:
+            append_unique(sequence, item)
+    if task_type == "writing_formatting":
+        for item in ["P7", "P8"]:
+            append_unique(sequence, item)
+    if task_type == "submission_release":
+        append_unique(sequence, "P9")
+    return [item for item in sequence if item in DEEP_LOOP_SUBCHAIN_BY_ID or any(rule.get("id") == item for rule in SUBCHAIN_RULES)]
+
+
+def prompt_architect_nodes(modes: list[str]) -> list[str]:
+    nodes = ["normalize", "route", "gate_vector", "deep-loop", "Research Council", "Adversarial Gate", "Arbiter"]
+    for preset in PROMPT_ARCHITECT_PRESETS:
+        if any(mode in modes for mode in preset.get("modes") or []):
+            nodes.extend(str(item) for item in preset.get("mandatory_nodes") or [])
+    if "divergent_reasoning" in modes or "deep_analysis" in modes:
+        nodes.append("hypothesis-portfolio")
+    if "mathematical_modeling" in modes or "deep_analysis" in modes:
+        nodes.append("math-abstraction")
+    if "code_building" in modes:
+        nodes.extend(["harness-registry", "code-builder", "experiment-runner-plus"])
+    if "deep_analysis" in modes:
+        nodes.extend(["harness-registry", "experiment-runner-plus", "problem-loop/P10"])
+    if "unattended_execution" in modes:
+        nodes.extend(["autopilot", "auto-loop-watchdog", "auto-loop-resume"])
+    return list(dict.fromkeys(nodes))
+
+
+def architected_prompt_text(
+    *,
+    raw_input: str,
+    task_type: str,
+    depth: str,
+    context: dict[str, Any],
+    modes: list[str],
+    required_chains: list[str],
+    mandatory_nodes: list[str],
+    no_user_confirmation_needed: bool,
+    source_input: str | None = None,
+    stable_trigger_preset: dict[str, Any] | None = None,
+) -> str:
+    target_hint = ", ".join(context.get("output_targets") or []) or "research artifact"
+    question_hint = context.get("research_question") or "recover or define the active research question from project state before substantive work"
+    lines = [
+        "@codex-research-loop",
+        "",
+        "Use the Prompt Architect Head Agent contract before acting.",
+        "",
+        "Original user request:",
+        source_input or raw_input or "(continue from project state)",
+        "",
+    ]
+    if stable_trigger_preset:
+        lines.extend(
+            [
+                f"Stable trigger preset: {stable_trigger_preset.get('id')}",
+                "Expanded trigger meaning:",
+                str(stable_trigger_preset.get("expanded_prompt") or raw_input or "").strip(),
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "Architected execution intent:",
+            f"- Task type: {task_type}",
+            f"- Required depth: {depth}",
+            f"- Operating modes: {', '.join(modes)}",
+            f"- Required P-chain sequence: {' -> '.join(required_chains) if required_chains else '(derive from route)'}",
+            f"- Target output: {target_hint}",
+            f"- Active question handling: {question_hint}",
+            "",
+            "Mandatory internal triggers:",
+        ]
+    )
+    lines.extend(f"- {node}" for node in mandatory_nodes)
+    lines.extend(
+        [
+            "",
+            "Deep analysis contract:",
+            "- Build a complete problem frame: objective, constraints, unknowns, evidence, assumptions, failure modes, and candidate solution paths.",
+            "- If deep_analysis is active, force mathematical_modeling, divergent_reasoning, adversarial_review, Research Council, Adversarial Gate, Arbiter, and P10 readiness.",
+            "- Use hypothesis-portfolio to produce rival explanations, predictions, falsifiers, and the next discriminating test.",
+            "- Use math-abstraction for quantitative or proof-like parts: objects, definitions, assumptions, subgoals, lemma/dependency graph, and verifier plan.",
+            "- Use adversarial review to attack premature convergence, hidden assumptions, unsupported evidence, invalid metrics, and non-reproducible claims.",
+            "- For hard problem advancement, keep the core objective, low-sample sampling scheme, matched-precision gate, unresolved assumptions, and next discriminating validation test explicit.",
+            "- For sampling strategy optimization, compare sample efficiency, precision parity, variance, robustness, cost, and failure modes before accepting a candidate scheme.",
+            "",
+            "Execution and gate contract:",
+            "- Run normalize/route before domain work, then follow the generated P1-P10 Head Agent contract.",
+            "- After each subchain round, decide through deep-loop: route_next, retry_same_route, escalate_problem_loop, or pause_for_human.",
+            "- If root cause is unclear, failures repeat, evidence is weak, or method/analysis risk is high, escalate into P10/problem-loop before core edits.",
+            "- If code, data, experiments, metrics, figures, or tests are involved, register a harness and use experiment-runner-plus or a wrapped run log.",
+            f"- No repeated confirmation needed: {str(no_user_confirmation_needed).lower()}",
+            "- Pause only for credentials, restricted/private data, payment, explicit human approval, destructive external side effects, or irreversible publication.",
+            "",
+            "Final answer contract:",
+            "- Return the analysis frame, essential contradiction/root problem, competing explanations, mathematical abstraction when relevant, adversarial objections, tests/evidence, solution plan, executed results, residual risks, and next action.",
+        ]
+    )
+    return "\n".join(lines).rstrip()
+
+
+def build_prompt_architect_agent(
+    cwd: Path,
+    state: dict[str, Any],
+    passport: dict[str, Any],
+    *,
+    raw_input: str | None,
+    task_type: str,
+    depth: str,
+    context: dict[str, Any],
+    base_sequence: list[str] | None = None,
+    source_input: str | None = None,
+    stable_trigger_preset: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    raw = (raw_input or "").strip()
+    stable_trigger_preset = stable_trigger_preset or prompt_architect_preset(source_input or raw)
+    modes = prompt_architect_modes(raw, task_type, passport)
+    required_chains = prompt_architect_required_chains(modes, task_type, base_sequence)
+    mandatory_nodes = prompt_architect_nodes(modes)
+    no_confirmation = "unattended_execution" in modes or one_shot_goal_requested(raw, task_type, passport)
+    agent = {
+        "id": "prompt-architect-head-agent",
+        "type": "entry_prompt_architect",
+        "schema_version": SCHEMA_VERSION,
+        "project_root": psafe(cwd),
+        "mission": "Translate rough natural language into a chain-forcing research-loop execution prompt before downstream work starts.",
+        "modes": modes,
+        "required_chains": required_chains,
+        "mandatory_internal_nodes": mandatory_nodes,
+        "no_user_confirmation_needed": bool(no_confirmation),
+        "source_user_input": (source_input or raw).strip(),
+        "stable_trigger_preset": stable_trigger_preset,
+        "human_pause_policy": "Pause only for credentials, restricted/private data, payment, explicit human approval, destructive external side effects, or irreversible publication.",
+        "required_reads": [
+            ".research-loop/state.json",
+            ".research-loop/material-passport.json",
+            "latest .research-loop/handoffs/* when present",
+            "latest .research-loop/checkpoints/* when present",
+            ".research-loop/storage-policy.json when present",
+        ],
+    }
+    agent["architected_prompt"] = architected_prompt_text(
+        raw_input=raw,
+        task_type=task_type,
+        depth=depth,
+        context=context,
+        modes=modes,
+        required_chains=required_chains,
+        mandatory_nodes=mandatory_nodes,
+        no_user_confirmation_needed=bool(no_confirmation),
+        source_input=source_input,
+        stable_trigger_preset=stable_trigger_preset,
+    )
+    return agent
+
+
 def downstream_prompt_from_payload(payload: dict[str, Any]) -> str:
     context = payload["project_context"]
     missing = payload["missing_slots"]
     execution_profile = payload.get("execution_profile") or {}
     harness = payload.get("harness_protocol") or {}
+    architect = payload.get("prompt_architect_agent") if isinstance(payload.get("prompt_architect_agent"), dict) else {}
+    task_prompt = architect.get("architected_prompt") or payload.get("working_prompt") or payload.get("routing_intent") or payload.get("raw_input") or "(derive the task from loop state)"
     prompt_lines = [
         "Use the project-local research loop before acting.",
         "",
@@ -3834,7 +4234,7 @@ def downstream_prompt_from_payload(payload: dict[str, Any]) -> str:
         f"- Record counts: materials={context['counts']['materials']}, claims={context['counts']['claims']}, evidence={context['counts']['evidence']}, open_risks={context['counts']['open_risks']}",
         "",
         "Task prompt for the next agent/tool:",
-        payload.get("working_prompt") or payload.get("routing_intent") or payload.get("raw_input") or "(derive the task from loop state)",
+        task_prompt,
         "",
         "Missing or weak inputs to handle explicitly:",
     ]
@@ -3870,29 +4270,44 @@ def downstream_prompt_from_payload(payload: dict[str, Any]) -> str:
 
 def normalize_task_input(cwd: Path, state: dict[str, Any], passport: dict[str, Any], user_input: str | None = None) -> dict[str, Any]:
     raw = (user_input or "").strip()
-    task_type = classify_task_type(state, passport, raw or None)
+    effective_raw, stable_trigger_preset = expand_prompt_architect_input(raw)
+    task_type = classify_task_type(state, passport, effective_raw or raw or None)
     issues = route_blockers(cwd, state, passport)
     blockers = [item for item in issues if item["severity"] == "blocking"]
-    depth = assign_depth(task_type, state, passport, blockers, raw or None)
-    execution_profile = classify_execution_profile(task_type, passport, raw or None)
+    depth = assign_depth(task_type, state, passport, blockers, effective_raw or raw or None)
+    execution_profile = classify_execution_profile(task_type, passport, effective_raw or raw or None)
     harness_protocol = harness_protocol_for_profile(execution_profile, task_type, depth)
     context = project_context_payload(cwd, state, passport)
     target_hint = ", ".join(context.get("output_targets") or []) or "research artifact"
     question_hint = context.get("research_question") or "the active research question is missing; first recover or define it"
-    if raw:
-        working_prompt = f"{raw}\n\nFrame this as {TASK_TYPE_LABELS.get(task_type, task_type)} for the current project. Ground the work in the active question: {question_hint}. Expected output target: {target_hint}."
+    if effective_raw:
+        working_prompt = f"{effective_raw}\n\nFrame this as {TASK_TYPE_LABELS.get(task_type, task_type)} for the current project. Ground the work in the active question: {question_hint}. Expected output target: {target_hint}."
     else:
         working_prompt = f"Continue {TASK_TYPE_LABELS.get(task_type, task_type)} for the current project. Ground the work in the active question: {question_hint}. Expected output target: {target_hint}."
+    architect = build_prompt_architect_agent(
+        cwd,
+        state,
+        passport,
+        raw_input=effective_raw,
+        task_type=task_type,
+        depth=depth,
+        context=context,
+        source_input=raw,
+        stable_trigger_preset=stable_trigger_preset,
+    )
     payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "timestamp": utc_now(),
         "raw_input": raw,
-        "routing_intent": raw or TASK_TYPE_LABELS.get(task_type, task_type),
+        "expanded_input": effective_raw if effective_raw != raw else "",
+        "stable_trigger_preset": stable_trigger_preset,
+        "routing_intent": effective_raw or raw or TASK_TYPE_LABELS.get(task_type, task_type),
         "working_prompt": working_prompt,
         "task_type": task_type,
         "depth_level": depth,
         "execution_profile": execution_profile,
         "harness_protocol": harness_protocol,
+        "prompt_architect_agent": architect,
         "project_context": context,
         "missing_slots": prompt_missing_slots(task_type, state, passport, cwd),
         "blockers": blockers,
@@ -3933,6 +4348,21 @@ def normalized_prompt_markdown(payload: dict[str, Any]) -> list[str]:
         lines.extend(f"- [{item['severity']}] `{item['slot']}`: {item['why']}" for item in payload["missing_slots"])
     else:
         lines.append("- None detected.")
+    architect = payload.get("prompt_architect_agent") if isinstance(payload.get("prompt_architect_agent"), dict) else {}
+    if architect:
+        lines.extend(
+            [
+                "",
+                "## Prompt Architect Head Agent",
+                "",
+                f"- Modes: {', '.join(architect.get('modes') or []) or '(not set)'}",
+                f"- Required chains: {' -> '.join(architect.get('required_chains') or []) or '(derive from route)'}",
+                f"- No user confirmation needed: `{bool(architect.get('no_user_confirmation_needed'))}`",
+                f"- Human pause policy: {architect.get('human_pause_policy')}",
+                "- Mandatory nodes:",
+            ]
+        )
+        lines.extend(f"  - {item}" for item in architect.get("mandatory_internal_nodes") or [])
     harness = payload.get("harness_protocol") or {}
     lines.extend(["", "## Harness Protocol", ""])
     lines.append("- Validation surfaces:")
@@ -4792,10 +5222,77 @@ def deep_loop_next_subchains(route_graph: dict[str, Any], current_subchain: dict
 
 
 def deep_loop_human_pause_needed(text: str, profile: dict[str, Any]) -> bool:
-    lowered = text.lower()
     if profile.get("data_sensitivity") == "restricted":
         return True
-    return any(token in lowered for token in DEEP_LOOP_HUMAN_REVIEW_KEYWORDS)
+    lowered = text.lower()
+    policy_markers = [
+        "pause only for",
+        "only pause for",
+        "pause_for_human only when",
+        "human confirmation policy",
+        "human pause policy",
+        "stop_conditions",
+        "should trigger retry",
+        "do not recommend pausing unless",
+        "no repeated confirmation needed",
+    ]
+    lines = [line.strip() for line in lowered.splitlines() if line.strip()]
+    actionable_lines = [line for line in lines if not any(marker in line for marker in policy_markers)]
+    hard_phrases = [
+        "requires human",
+        "require human",
+        "human checkpoint required",
+        "human decision required",
+        "manual approval required",
+        "manual checkpoint required",
+        "manual decision required",
+        "manual input required",
+        "manual review required",
+        "approval required",
+        "requires approval",
+        "owner-only",
+        "credential required",
+        "credentials required",
+        "missing credential",
+        "missing credentials",
+        "restricted data",
+        "private data",
+        "privacy blocker",
+        "payment required",
+        "irb required",
+        "ethics approval required",
+        "\u9700\u8981\u4eba\u5de5",
+        "\u4eba\u5de5\u5ba1\u6279",
+        "\u4eba\u5de5\u786e\u8ba4",
+        "\u9700\u8981\u6388\u6743",
+        "\u9700\u8981\u5bc6\u94a5",
+        "\u9700\u8981\u4ed8\u6b3e",
+        "\u9690\u79c1\u963b\u65ad",
+        "\u53d7\u9650\u6570\u636e",
+    ]
+    qualifier_terms = [
+        "required",
+        "requires",
+        "needed",
+        "need ",
+        "missing",
+        "blocked",
+        "blocker",
+        "cannot continue",
+        "awaiting",
+        "must ask",
+        "\u9700\u8981",
+        "\u7f3a\u5c11",
+        "\u963b\u65ad",
+        "\u65e0\u6cd5\u7ee7\u7eed",
+        "\u5f85\u6388\u6743",
+    ]
+    for line in actionable_lines:
+        if any(phrase in line for phrase in hard_phrases):
+            return True
+        if any(token in line for token in DEEP_LOOP_HUMAN_REVIEW_KEYWORDS) and any(term in line for term in qualifier_terms):
+            return True
+    return False
 
 
 def subchain_agent_spec(subchain_id: str) -> dict[str, Any]:
@@ -8556,12 +9053,15 @@ def build_autopilot_payload(args: argparse.Namespace, cwd: Path, state: dict[str
     if not goal:
         raise ValueError("autopilot requires --goal.")
     normalized = normalize_task_input(cwd, state, passport, goal)
+    routing_goal = str(normalized.get("routing_intent") or goal)
     graph = build_route_graph(cwd, state, passport, goal)
+    graph_normalized = graph.get("normalized_input") if isinstance(graph.get("normalized_input"), dict) else {}
+    trigger_goal = str(graph_normalized.get("routing_intent") or routing_goal or goal)
     trigger_plan = build_chain_trigger_plan(
         cwd,
         state,
         passport,
-        intent=goal,
+        intent=trigger_goal,
         task_type=str(graph.get("task_type") or normalized.get("task_type") or "intake"),
         depth=str(graph.get("depth_level") or normalized.get("depth_level") or "L2"),
         subchains=list(graph.get("subchains") or []),
@@ -8574,7 +9074,10 @@ def build_autopilot_payload(args: argparse.Namespace, cwd: Path, state: dict[str
         "type": "autopilot_goal_runner",
         "project_root": psafe(cwd),
         "goal": goal,
+        "routing_goal": trigger_goal,
+        "expanded_goal": trigger_goal if trigger_goal != goal else "",
         "normalized_input": normalized,
+        "prompt_architect_agent": normalized.get("prompt_architect_agent"),
         "route_graph": graph,
         "trigger_plan": trigger_plan,
         "test_commands": list(args.test_command or []),
@@ -8587,6 +9090,7 @@ def build_autopilot_payload(args: argparse.Namespace, cwd: Path, state: dict[str
 
 def autopilot_markdown(payload: dict[str, Any]) -> list[str]:
     trigger_plan = payload.get("trigger_plan") or {}
+    architect = payload.get("prompt_architect_agent") if isinstance(payload.get("prompt_architect_agent"), dict) else {}
     lines = [
         "# Research Loop Autopilot",
         "",
@@ -8602,9 +9106,24 @@ def autopilot_markdown(payload: dict[str, Any]) -> list[str]:
         "",
         f"`{json.dumps(trigger_plan.get('watchdog_command') or [], ensure_ascii=True)}`",
         "",
+    ]
+    if architect:
+        lines.extend(
+            [
+                "## Prompt Architect Head Agent",
+                "",
+                f"- Modes: {', '.join(architect.get('modes') or []) or '(not set)'}",
+                f"- Required chains: {' -> '.join(architect.get('required_chains') or []) or '(derive from route)'}",
+                f"- No user confirmation needed: `{bool(architect.get('no_user_confirmation_needed'))}`",
+                "",
+            ]
+        )
+    lines.extend(
+        [
         "## Auto Trigger Nodes",
         "",
-    ]
+        ]
+    )
     for item in trigger_plan.get("actions") or []:
         lines.append(f"- `{item.get('subchain')}` {item.get('action')} via `{item.get('mcp_tool') or 'domain-skill'}`")
         lines.append(f"  - Reason: {item.get('reason')}")
@@ -8653,11 +9172,12 @@ def command_autopilot(args: argparse.Namespace) -> int:
     passport = load_passport(cwd, state)
     payload = build_autopilot_payload(args, cwd, state, passport)
     if args.prime or args.start_watchdog:
+        prime_goal = str(payload.get("routing_goal") or payload["goal"])
         payload["primed_records"] = prime_autopilot_records(
             cwd,
             state,
             passport,
-            goal=payload["goal"],
+            goal=prime_goal,
             sequence=list((payload.get("trigger_plan") or {}).get("sequence") or []),
             test_commands=list(args.test_command or []),
             execute_experiments=bool(args.execute_experiments),
@@ -8691,6 +9211,61 @@ def command_autopilot(args: argparse.Namespace) -> int:
     else:
         print("\n".join(autopilot_markdown(payload)).rstrip() + "\n")
     return 0 if payload.get("status") in {"planned", "watchdog-started"} else 1
+
+
+def prompt_architect_markdown(payload: dict[str, Any]) -> list[str]:
+    agent = payload.get("prompt_architect_agent") or {}
+    lines = [
+        "# Research Loop Prompt Architect",
+        "",
+        f"- Generated at UTC: {payload.get('timestamp')}",
+        f"- Agent: `{agent.get('id', 'prompt-architect-head-agent')}`",
+        f"- Task type: `{payload.get('task_type')}`",
+        f"- Depth: `{payload.get('depth_level')}`",
+        f"- Modes: {', '.join(agent.get('modes') or []) or '(not set)'}",
+        f"- Required chains: {' -> '.join(agent.get('required_chains') or []) or '(derive from route)'}",
+        f"- No user confirmation needed: `{bool(agent.get('no_user_confirmation_needed'))}`",
+        "",
+        "## Mandatory Internal Nodes",
+        "",
+    ]
+    lines.extend(f"- {item}" for item in agent.get("mandatory_internal_nodes") or [])
+    lines.extend(["", "## Architected Prompt", "", agent.get("architected_prompt") or payload.get("downstream_prompt") or ""])
+    return lines
+
+
+def persist_prompt_architect_payload(cwd: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    agent = payload.get("prompt_architect_agent") or {}
+    path = prompt_architect_root(cwd) / f"{timestamp()}-prompt-architect.json"
+    payload["path"] = psafe(path)
+    write_json(path, payload)
+    write_lines(path.with_suffix(".md"), prompt_architect_markdown(payload))
+    append_jsonl(
+        artifacts_path(cwd),
+        {
+            "timestamp": utc_now(),
+            "type": "prompt_architect_head_agent",
+            "path": psafe(path),
+            "modes": list(agent.get("modes") or []),
+            "required_chains": list(agent.get("required_chains") or []),
+        },
+    )
+    return payload
+
+
+def command_prompt_architect(args: argparse.Namespace) -> int:
+    cwd = resolve_workspace(args.cwd)
+    init_project(cwd, args.stage)
+    state = load_state(cwd)
+    passport = load_passport(cwd, state)
+    payload = normalize_task_input(cwd, state, passport, args.input)
+    if args.write:
+        payload = persist_prompt_architect_payload(cwd, payload)
+    if args.format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=True, default=str))
+    else:
+        print("\n".join(prompt_architect_markdown(payload)).rstrip() + "\n")
+    return 0
 
 
 def command_normalize(args: argparse.Namespace) -> int:
@@ -13664,6 +14239,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_update.add_argument("--locator", help="Evidence locator.")
     p_update.add_argument("--evidence-id", action="append", help="Claim evidence id; can be repeated.")
     p_update.set_defaults(func=command_update)
+
+    p_architect = sub.add_parser("prompt-architect", help="Build the entry Prompt Architect Head Agent contract and chain-forcing downstream prompt.")
+    p_architect.add_argument("--stage", help=f"Set current stage before prompt architecture. Allowed: {', '.join(STAGES)}")
+    p_architect.add_argument("--input", required=True, help="Raw user request or messy natural-language task.")
+    p_architect.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output prompt architect format.")
+    p_architect.add_argument("--write", action="store_true", help="Write the prompt architect record under .research-loop/prompt-architect.")
+    p_architect.set_defaults(func=command_prompt_architect)
 
     p_normalize = sub.add_parser("normalize", help="Convert rough natural-language input into a project-grounded downstream prompt.")
     p_normalize.add_argument("--stage", help=f"Set current stage before normalization. Allowed: {', '.join(STAGES)}")

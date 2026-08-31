@@ -7,14 +7,16 @@ description: >
   and unattended test feedback loops. Trigger on research loop, loop,
   checkpoint, handoff, resume, project state, material passport, evidence
   ledger, decision log, experiment run log, rough natural-language research
-  input needing normalization, one-shot autopilot goal execution,
+  input needing Prompt Architect Head Agent rewriting, normalization,
+  one-shot autopilot goal execution,
   Crossref/OpenAlex/arXiv lookup, content ingest
   from URLs or local files, adaptive project storage policies, standardized
   data packages, Zotero
   BibTeX/CSL-JSON/PDF attachment/dedupe exports, llm-wiki-compatible pages,
   claim-evidence verification, isolated problem diagnosis, expert-panel
   evaluation, gated adjustment promotion, deep-loop gate/review/tree routing,
-  experiment-runner-plus monitored experiments,
+  prompt-architect, deep analysis, mathematical modeling, divergent reasoning,
+  adversarial review, experiment-runner-plus monitored experiments,
   auto-loop test repair, fail-open external supervisor review, or multi-path
   routing to academic, Nature-style, PDF, Word, presentation, and research
   production skills.
@@ -91,6 +93,7 @@ as `cwd` for every tool call. Available tool names mirror the CLI surface:
 `research_loop_claim`, `research_loop_evidence`, `research_loop_decision`,
 `research_loop_risk`, `research_loop_next`, `research_loop_update`,
 `research_loop_capabilities`, `research_loop_normalize`,
+`research_prompt_architect`,
 `research_goal_autopilot`,
 `research_storage_policy`, `research_loop_deep_loop`,
 `research_source_hub`, `research_content_ingest`, `research_zotero_bridge`,
@@ -124,10 +127,13 @@ python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\t
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" storage
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" storage --init-dirs --write
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" resume
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" prompt-architect --input "deep analysis with mathematical modeling, divergent hypotheses, adversarial review, and unattended continuation" --write --format json
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" prompt-architect --input "开始困难问题推进" --write --format json
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" normalize --input "rough user request"
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" route --intent "write the paper"
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" route --intent "write the paper" --format json
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" autopilot --goal "complete this research question and produce a reliable final report" --prime --write --format json
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" autopilot --goal "开始困难问题推进" --prime --start-watchdog --format json
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" autopilot --goal "repair the analysis code, validate the math, and write the final report" --test-command "python -m pytest -q" --prime --start-watchdog --format json
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "write the paper" --current-subchain P7 --gate-result pass --write
 python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" deep-loop --intent "verify evidence" --current-subchain P3 --gate-result fail --gate-issue "unsupported claim remains" --write
@@ -197,6 +203,7 @@ The project-local directory is:
   math-abstractions/
   experiment-runs/
   autopilot/
+  prompt-architect/
   reports/
   storage-reports/
   experts/
@@ -262,6 +269,49 @@ python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\t
 
 Record IDs printed by `claim`, `evidence`, `material`, and `decision` should be
 used when connecting evidence to claims. Do not invent IDs.
+
+## Prompt Architect Head Agent
+
+Use `prompt-architect` as the first entry component when the user gives rough,
+overloaded, or low-structure language and expects the loop to decide the
+strongest internal chain automatically:
+
+```powershell
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" prompt-architect --input "deep analysis with mathematical modeling, divergent hypotheses, adversarial review, and solution design" --write --format json
+python "$env:CODEX_RESEARCH_LOOP_HOME\scripts\research_loop.py" --cwd "C:\path\to\project" prompt-architect --input "run unattended until the task is complete and do not ask me to continue while a next action exists" --write --format json
+```
+
+The Prompt Architect Head Agent produces a contract with `modes`,
+`required_chains`, `mandatory_internal_nodes`, `no_user_confirmation_needed`,
+and an `architected_prompt`. `normalize`, `route`, and `autopilot` include this
+contract automatically.
+
+When the user says "deep analysis", "full analysis framework", "find the root
+problem", or equivalent Chinese requests such as deep/complete analysis, the
+agent must force the strongest internal route: `P3` hypothesis portfolio,
+`P4/P6` mathematical modeling and analysis, `P8` Research Council plus
+Adversarial Gate, and `P10` problem-loop readiness. It should also require
+`hypothesis-portfolio`, `math-abstraction`, `harness-registry`, and
+`experiment-runner-plus` whenever the task touches hypotheses, quantitative
+reasoning, data, code, experiments, metrics, or figures.
+
+When the user says "unattended", "run until done", "do not ask me to continue",
+or equivalent Chinese requests such as unattended/no repeated confirmation, the
+agent must write the continuation contract explicitly: use
+`autopilot`, `auto-loop-watchdog`, `auto-loop-resume`, and deep-loop decisions
+`route_next`, `retry_same_route`, `escalate_problem_loop`, or
+`pause_for_human`. Do not ask for another manual "continue" when an executable
+next action exists. Pause only for credentials, restricted/private data,
+payment, explicit human approval, destructive external side effects, or
+irreversible publication.
+
+When the user says `开始困难问题推进`, treat it as a stable preset rather than a
+short vague request. Expand it into: continue the matched-precision,
+lower-sample-count sampling scheme; run unattended; force deep analysis,
+divergent hypotheses, adversarial review, Research Council, Arbiter,
+P10/problem-loop readiness, math abstraction, harness registration, and
+experiment-runner validation; and do not ask for manual continuation while an
+executable next action exists.
 
 ## One-Shot Autopilot
 
@@ -766,7 +816,7 @@ linearly.
 Run `capabilities` when a task asks which tools are already available or what
 needs to be added. The matrix separates available skills/apps from missing tool
 gaps. Built-in local tools now include `prompt-normalizer`,
-`autopilot-goal-runner`, `storage-policy`, `research-source-hub`,
+`prompt-architect-head-agent`, `autopilot-goal-runner`, `storage-policy`, `research-source-hub`,
 `content-ingest`, `zotero-bridge`,
 `claim-evidence-verifier`, `deep-loop-router`,
 `research-council-reviewer`, `adversarial-gate-reviewer`,

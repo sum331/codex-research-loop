@@ -126,6 +126,7 @@ class DeepLoopSubagentTests(unittest.TestCase):
         registry = dispatch_path.read_text(encoding="utf-8")
         self.assertIn("skill:research-loop", registry)
         self.assertIn("capability-registry-id: skill:research-loop", registry)
+        self.assertIn("开始困难问题推进", registry)
 
         env = os.environ.copy()
         env["CODEX_CAPABILITY_REGISTRY"] = str(dispatch_path)
@@ -152,6 +153,18 @@ class DeepLoopSubagentTests(unittest.TestCase):
         )
 
         self.assertIn("skill:research-loop", advanced.stdout)
+
+        shortcut = subprocess.run(
+            [sys.executable, str(router_path)],
+            input=json.dumps({"prompt": "开始困难问题推进"}),
+            text=True,
+            capture_output=True,
+            encoding="utf-8",
+            env=env,
+            check=True,
+        )
+
+        self.assertIn("skill:research-loop", shortcut.stdout)
 
     def test_normalize_adds_standard_harness_protocol(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -197,7 +210,118 @@ class DeepLoopSubagentTests(unittest.TestCase):
 
         self.assertIn("tool:autopilot-goal-runner", available_ids)
         self.assertIn("tool:experiment-runner-plus", available_ids)
+        self.assertIn("tool:prompt-architect-head-agent", available_ids)
         self.assertNotIn("missing:experiment-runner-plus", missing_ids)
+
+    def test_prompt_architect_deep_analysis_forces_strong_internal_chain(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            research_loop.init_project(cwd)
+            state = research_loop.load_state(cwd)
+            passport = research_loop.load_passport(cwd, state)
+
+            payload = research_loop.normalize_task_input(
+                cwd,
+                state,
+                passport,
+                "Please do deep analysis, mathematical modeling, divergent thinking, adversarial review, and find the root problem with solutions.",
+            )
+
+        agent = payload["prompt_architect_agent"]
+        prompt = agent["architected_prompt"]
+
+        self.assertEqual(payload["depth_level"], "L6")
+        for mode in ["deep_analysis", "mathematical_modeling", "divergent_reasoning", "adversarial_review", "expert_escalation"]:
+            self.assertIn(mode, agent["modes"])
+        for chain in ["P3", "P4", "P6", "P8", "P10"]:
+            self.assertIn(chain, agent["required_chains"])
+        for node in ["hypothesis-portfolio", "math-abstraction", "Research Council", "Adversarial Gate", "problem-loop/P10"]:
+            self.assertIn(node, agent["mandatory_internal_nodes"])
+        self.assertIn("Prompt Architect Head Agent", payload["downstream_prompt"])
+        self.assertIn("math-abstraction", prompt)
+        self.assertIn("escalate_problem_loop", prompt)
+
+    def test_prompt_architect_unattended_contract_requires_watchdog(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            research_loop.init_project(cwd)
+            state = research_loop.load_state(cwd)
+            passport = research_loop.load_passport(cwd, state)
+
+            payload = research_loop.normalize_task_input(
+                cwd,
+                state,
+                passport,
+                "Run unattended until done and do not ask me to continue while a next action exists.",
+            )
+
+        agent = payload["prompt_architect_agent"]
+
+        self.assertIn("unattended_execution", agent["modes"])
+        self.assertTrue(agent["no_user_confirmation_needed"])
+        self.assertIn("auto-loop-watchdog", agent["mandatory_internal_nodes"])
+        self.assertIn("auto-loop-resume", agent["mandatory_internal_nodes"])
+        self.assertIn("route_next", agent["architected_prompt"])
+        self.assertIn("retry_same_route", agent["architected_prompt"])
+
+    def test_human_pause_detector_ignores_no_manual_continuation_policy(self):
+        text = (
+            "When blockers appear, open the expert chain and do not ask for manual "
+            "continuation while an executable next action exists."
+        )
+
+        self.assertFalse(research_loop.deep_loop_human_pause_needed(text, {}))
+        self.assertTrue(
+            research_loop.deep_loop_human_pause_needed(
+                "The task is blocked because manual approval required before publication.",
+                {},
+            )
+        )
+
+    def test_prompt_architect_hard_problem_shortcut_expands_full_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            research_loop.init_project(cwd)
+            state = research_loop.load_state(cwd)
+            passport = research_loop.load_passport(cwd, state)
+
+            payload = research_loop.normalize_task_input(cwd, state, passport, "开始困难问题推进")
+
+        agent = payload["prompt_architect_agent"]
+        prompt = agent["architected_prompt"]
+
+        self.assertEqual(payload["stable_trigger_preset"]["id"], "hard_problem_advancement")
+        self.assertEqual(payload["execution_profile"]["id"], "research_experiment_loop")
+        self.assertIn("lower-sample-count sampling scheme", payload["expanded_input"])
+        self.assertIn("matched precision", payload["expanded_input"])
+        for mode in [
+            "hard_problem_advancement",
+            "sampling_strategy_optimization",
+            "deep_analysis",
+            "mathematical_modeling",
+            "divergent_reasoning",
+            "adversarial_review",
+            "expert_escalation",
+            "unattended_execution",
+            "code_building",
+        ]:
+            self.assertIn(mode, agent["modes"])
+        for chain in ["P10", "P5", "P6", "P8", "P4", "P3"]:
+            self.assertIn(chain, agent["required_chains"])
+        for node in [
+            "math-abstraction",
+            "hypothesis-portfolio",
+            "Research Council",
+            "Adversarial Gate",
+            "Arbiter",
+            "auto-loop-watchdog",
+            "auto-loop-resume",
+        ]:
+            self.assertIn(node, agent["mandatory_internal_nodes"])
+        self.assertTrue(agent["no_user_confirmation_needed"])
+        self.assertIn("Stable trigger preset: hard_problem_advancement", prompt)
+        self.assertIn("low-sample sampling scheme", prompt)
+        self.assertIn("escalate_problem_loop", prompt)
 
     def test_route_builds_autopilot_trigger_plan_for_one_shot_goal(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -224,6 +348,83 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("research_claim_evidence_verify", tool_ids)
         self.assertIn("research_loop_deep_loop", tool_ids)
         self.assertIn("auto-loop-watchdog", watchdog)
+
+    def test_route_deep_analysis_adds_math_divergence_and_p10_actions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            research_loop.init_project(cwd)
+            state = research_loop.load_state(cwd)
+            passport = research_loop.load_passport(cwd, state)
+
+            graph = research_loop.build_route_graph(
+                cwd,
+                state,
+                passport,
+                "Deep analysis with mathematical modeling, divergent hypotheses, adversarial review, and solution design.",
+            )
+
+        plan = graph["autopilot_trigger_plan"]
+        tool_ids = {item.get("mcp_tool") for item in plan["actions"]}
+
+        for chain in ["P3", "P4", "P6", "P8", "P10"]:
+            self.assertIn(chain, plan["sequence"])
+        self.assertIn("research_hypothesis_portfolio", tool_ids)
+        self.assertIn("research_math_abstraction", tool_ids)
+        self.assertIn("research_loop_deep_loop", tool_ids)
+        self.assertIn("research_problem_loop", tool_ids)
+
+    def test_route_hard_problem_shortcut_starts_strong_autopilot_chain(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            research_loop.init_project(cwd)
+            state = research_loop.load_state(cwd)
+            passport = research_loop.load_passport(cwd, state)
+
+            graph = research_loop.build_route_graph(cwd, state, passport, "开始困难问题推进")
+
+        plan = graph["autopilot_trigger_plan"]
+        tool_ids = {item.get("mcp_tool") for item in plan["actions"]}
+        normalized = graph["normalized_input"]
+        architect = normalized["prompt_architect_agent"]
+        command_text = " ".join(str(part) for part in plan["watchdog_command"])
+
+        self.assertEqual(plan["mode"], "one_shot_autopilot")
+        self.assertTrue(plan["no_user_confirmation_needed"])
+        self.assertEqual(normalized["stable_trigger_preset"]["id"], "hard_problem_advancement")
+        for chain in ["P10", "P5", "P6", "P8", "P4", "P3"]:
+            self.assertIn(chain, plan["sequence"])
+        self.assertIn("research_problem_loop", tool_ids)
+        self.assertIn("research_hypothesis_portfolio", tool_ids)
+        self.assertIn("research_harness_registry", tool_ids)
+        self.assertIn("research_math_abstraction", tool_ids)
+        self.assertIn("research_experiment_runner", tool_ids)
+        self.assertIn("research_loop_deep_loop", tool_ids)
+        self.assertIn("开始困难问题推进", command_text)
+        self.assertEqual(architect["stable_trigger_preset"]["id"], "hard_problem_advancement")
+
+    def test_autopilot_hard_problem_shortcut_uses_expanded_routing_goal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp)
+            research_loop.init_project(cwd)
+            state = research_loop.load_state(cwd)
+            passport = research_loop.load_passport(cwd, state)
+            args = argparse.Namespace(
+                goal="开始困难问题推进",
+                id="hard-problem-auto",
+                test_command=[],
+                start_watchdog=False,
+                prime=False,
+                execute_experiments=False,
+            )
+
+            payload = research_loop.build_autopilot_payload(args, cwd, state, passport)
+
+        self.assertEqual(payload["goal"], "开始困难问题推进")
+        self.assertIn("lower-sample-count sampling scheme", payload["routing_goal"])
+        self.assertEqual(payload["expanded_goal"], payload["routing_goal"])
+        self.assertEqual(payload["normalized_input"]["stable_trigger_preset"]["id"], "hard_problem_advancement")
+        self.assertEqual(payload["trigger_plan"]["mode"], "one_shot_autopilot")
+        self.assertIn("P10", payload["trigger_plan"]["sequence"])
 
     def test_autopilot_primes_advanced_nodes_and_experiment_runner(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -350,6 +551,10 @@ class DeepLoopSubagentTests(unittest.TestCase):
                 "format": "json",
             },
         )
+        architect = mcp_server.tool_to_cli(
+            "research_prompt_architect",
+            {"cwd": "D:\\Project", "input": "deep analysis", "format": "json", "write": True},
+        )
 
         self.assertEqual(autopilot[:3], ["--cwd", "D:\\Project", "autopilot"])
         self.assertIn("--goal", autopilot)
@@ -357,6 +562,9 @@ class DeepLoopSubagentTests(unittest.TestCase):
         self.assertIn("--write", autopilot)
         self.assertEqual(experiment[:3], ["--cwd", "D:\\Project", "experiment-runner"])
         self.assertIn("--command", experiment)
+        self.assertEqual(architect[:3], ["--cwd", "D:\\Project", "prompt-architect"])
+        self.assertIn("--input", architect)
+        self.assertIn("--write", architect)
         self.assertIn("--harness-id", experiment)
         self.assertIn("--execute", experiment)
 
